@@ -1,3 +1,13 @@
+REVISÃO v0.37.3 — ROLAMENTO INTELIGENTE + JANELAS ADAPTATIVAS / ETAPA 3
+- Unificado o roteamento da roda do mouse: GPHSmartWheel passa a ser o único motor para páginas, Jogar e diálogos; removidos GPHPlayWheel, GPHScroll_<tela> e bindings locais de MouseWheel.
+- Treeview, Text e Listbox continuam rolando primeiro; ao atingir o limite, a página/Canvas assume quando existir.
+- Combobox e Spinbox continuam protegidos contra alteração acidental pela roda.
+- Scrollbars das páginas genéricas e da tela Jogar passam a ocultar-se automaticamente quando não existe overflow vertical e reaparecem quando necessário.
+- Criada fit_toplevel_to_screen(): janelas secundárias recebem tamanho-alvo, mas nunca ultrapassam a área útil disponível; mínimos também são limitados pela resolução real.
+- Janelas normais são centralizadas em relação à janela principal e têm maxsize compatível com o monitor; tooltips sem decoração mantêm o posicionamento especial junto ao elemento apontado.
+- Migradas para a regra adaptativa as janelas técnicas, detalhes de bicho/jogo, atualização, métodos, exemplos de puxadas, perfil, prévia de bichos, vários horários, fechamento diário, guia de métodos, calendário e cadastro manual.
+- Reset + 3+1, congelamento persistente, Reset Cobertura, Decisão Contextual, Similaridade, apostas, banco, financeiro e sincronização permanecem sem alteração de lógica.
+
 REVISÃO v0.37.2 — PADRÃO GLOBAL DE INTERFACE / ETAPA 2
 - Criada uma fundação visual permanente com constantes centrais para tipografia, espaçamento, padding de cartões, altura de tabela e texto sobre cor de destaque.
 - Escala tipográfica oficial: página 17, hero 18, KPI 15, seção/título de cartão 11, texto normal 9, texto secundário 8, tabela 9 e cabeçalho de tabela 9 Semibold.

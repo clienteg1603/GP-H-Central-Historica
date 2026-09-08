@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-GP-H Central Histórica v0.37.2
+GP-H Central Histórica v0.37.3
 Pesquisa e manutenção do histórico 2026 do Deu no Poste / PT-Rio.
 
 Escopo desta versão:
@@ -86,7 +86,7 @@ def write_crash_log(exc: BaseException):
 
 
 APP_NAME = "GP-H Central Histórica"
-APP_VERSION = "0.37.2"
+APP_VERSION = "0.37.3"
 START_DATE = date(2026, 1, 2)
 BASE_URL = "https://brasildeunoposte.com.br/resultado-do-jogo-do-bicho-deu-no-poste-{date}/"
 # Ao buscar/atualizar resultados, relê os últimos 7 dias para absorver
@@ -9953,6 +9953,71 @@ Database.home_animal_cards = _db_home_animal_cards
 Database.delay_leaders = _db_delay_leaders
 
 
+
+def fit_toplevel_to_screen(window, width=None, height=None, *, min_width=360, min_height=260, parent=None, margin_x=24, margin_y=56):
+    """Dimensiona e centraliza uma Toplevel sem ultrapassar a área útil do monitor.
+
+    O tamanho pedido é um alvo, não uma obrigação: em telas menores a janela encolhe.
+    O mínimo também é limitado ao espaço realmente disponível. Janelas que usam
+    conteúdo rolável continuam acessíveis mesmo quando precisam ser reduzidas.
+    """
+    try:
+        window.update_idletasks()
+        screen_w=max(1, int(window.winfo_screenwidth()))
+        screen_h=max(1, int(window.winfo_screenheight()))
+        max_w=max(320, screen_w - int(margin_x) * 2)
+        max_h=max(240, screen_h - int(margin_y) * 2)
+
+        req_w=max(1, int(window.winfo_reqwidth()))
+        req_h=max(1, int(window.winfo_reqheight()))
+        desired_w=int(width) if width else req_w
+        desired_h=int(height) if height else req_h
+        w=max(1, min(desired_w, max_w))
+        h=max(1, min(desired_h, max_h))
+        floor_w=max(1, min(int(min_width), max_w, w))
+        floor_h=max(1, min(int(min_height), max_h, h))
+
+        try:
+            window.minsize(floor_w, floor_h)
+            window.maxsize(max_w, max_h)
+        except tk.TclError:
+            pass
+
+        owner=parent
+        if owner is None:
+            try:
+                owner=window.master
+            except Exception:
+                owner=None
+
+        if owner is not None:
+            try:
+                owner.update_idletasks()
+                ox=int(owner.winfo_rootx())
+                oy=int(owner.winfo_rooty())
+                ow=max(1, int(owner.winfo_width()))
+                oh=max(1, int(owner.winfo_height()))
+                x=ox + (ow-w)//2
+                y=oy + (oh-h)//2
+            except Exception:
+                x=(screen_w-w)//2
+                y=(screen_h-h)//2
+        else:
+            x=(screen_w-w)//2
+            y=(screen_h-h)//2
+
+        x=max(int(margin_x), min(int(x), screen_w-w-int(margin_x)))
+        y=max(int(margin_y)//2, min(int(y), screen_h-h-int(margin_y)))
+        window.geometry(f"{w}x{h}+{x}+{y}")
+        return w, h
+    except Exception:
+        try:
+            if width and height:
+                window.geometry(f"{int(width)}x{int(height)}")
+        except Exception:
+            pass
+        return None
+
 class DatePickerDialog(tk.Toplevel):
     """Calendário simples feito apenas com Tkinter (sem dependências externas)."""
     def __init__(self, master, target_var: tk.StringVar, initial_date=None, title="Selecionar data"):
@@ -9993,6 +10058,7 @@ class DatePickerDialog(tk.Toplevel):
         ttk.Button(footer, text="Cancelar", command=self.destroy).pack(side="right")
 
         self.render_calendar()
+        fit_toplevel_to_screen(self, min_width=390, min_height=330, parent=master)
 
     def render_calendar(self):
         for child in self.days_frame.winfo_children():
@@ -10105,8 +10171,7 @@ class AnimalQuickDetailsDialog(tk.Toplevel):
         self.grupo = grupo
 
         self.title(f"{BICHOS[grupo]} — Grupo {grupo:02d}")
-        self.geometry("720x520")
-        self.minsize(620, 430)
+        fit_toplevel_to_screen(self, 720, 520, min_width=620, min_height=430, parent=master)
         self.resizable(True, True)
 
         outer = ttk.Frame(self, padding=14)
@@ -10210,8 +10275,7 @@ class ResetCoverageTechnicalDialog(tk.Toplevel):
         self.result = result
 
         self.title("Detalhes técnicos — GP-H Reset Cobertura v1")
-        self.geometry("1080x660")
-        self.minsize(900, 540)
+        fit_toplevel_to_screen(self, 1080, 660, min_width=900, min_height=540, parent=master)
         self.resizable(True, True)
 
         outer = ttk.Frame(self, padding=12)
@@ -10357,8 +10421,7 @@ class EditPlayDialog(tk.Toplevel):
         self.items = detail["items"]
 
         self.title(f"Editar jogada #{self.game_id}")
-        self.geometry("720x610")
-        self.minsize(650, 560)
+        fit_toplevel_to_screen(self, 720, 610, min_width=650, min_height=560, parent=master)
         self.resizable(True, True)
 
         outer = ttk.Frame(self, padding=14)
@@ -10608,8 +10671,7 @@ class PayoutConfigDialog(tk.Toplevel):
         self.on_saved = on_saved
 
         self.title("Cotações / Tabela de prêmios")
-        self.geometry("860x650")
-        self.minsize(780, 590)
+        fit_toplevel_to_screen(self, 860, 650, min_width=780, min_height=590, parent=master)
         self.resizable(True, True)
 
         outer = ttk.Frame(self, padding=14)
@@ -10793,8 +10855,7 @@ class FrozenGameDetailsDialog(tk.Toplevel):
         items = detail["items"]
 
         self.title(f"Jogo congelado #{self.game_id}")
-        self.geometry("980x620")
-        self.minsize(820, 520)
+        fit_toplevel_to_screen(self, 980, 620, min_width=820, min_height=520, parent=master)
         self.resizable(True, True)
 
         outer = ttk.Frame(self, padding=12)
@@ -10929,8 +10990,7 @@ class DryDayTechnicalDialog(tk.Toplevel):
         self.title(
             "Detalhes técnicos — Seca do Dia 1º"
         )
-        self.geometry("1080x650")
-        self.minsize(880, 540)
+        fit_toplevel_to_screen(self, 1080, 650, min_width=880, min_height=540, parent=master)
         self.resizable(True, True)
 
         outer = ttk.Frame(
@@ -11130,8 +11190,7 @@ class SimilarityTechnicalDialog(tk.Toplevel):
         super().__init__(master)
         self.result = result
         self.title("Detalhes técnicos — Sombra Similaridade")
-        self.geometry("1040x620")
-        self.minsize(860, 520)
+        fit_toplevel_to_screen(self, 1040, 620, min_width=860, min_height=520, parent=master)
         self.resizable(True, True)
 
         outer = ttk.Frame(self, padding=12)
@@ -11258,8 +11317,7 @@ class MethodsTechnicalDialog(tk.Toplevel):
         super().__init__(master)
         self.result = result
         self.title("Detalhes técnicos — Método de Puxada Combinada")
-        self.geometry("1280x720")
-        self.minsize(1000, 580)
+        fit_toplevel_to_screen(self, 1280, 720, min_width=1000, min_height=580, parent=master)
         self.resizable(True, True)
 
         outer = ttk.Frame(self, padding=14)
@@ -11388,8 +11446,7 @@ class MethodTargetDetailsDialog(tk.Toplevel):
     def __init__(self, master, result, target_row):
         super().__init__(master)
         self.title(f"Detalhes do bicho — {target_row['bicho']}")
-        self.geometry("920x520")
-        self.minsize(760, 430)
+        fit_toplevel_to_screen(self, 920, 520, min_width=760, min_height=430, parent=master)
         self.resizable(True, True)
 
         outer = ttk.Frame(self, padding=14)
@@ -11459,8 +11516,7 @@ class PullExamplesDialog(tk.Toplevel):
         self.title(
             f"Exemplos — {BICHOS[base_group]} → {target_row['bicho']}"
         )
-        self.geometry("1180x620")
-        self.minsize(930, 500)
+        fit_toplevel_to_screen(self, 1180, 620, min_width=930, min_height=500, parent=master)
 
         outer = ttk.Frame(self, padding=14)
         outer.pack(fill="both", expand=True)
@@ -11531,8 +11587,7 @@ class AnimalDetailsDialog(tk.Toplevel):
         self.db = db
         self.grupo = grupo
         self.title(f"Detalhes — {BICHOS[grupo]} ({grupo:02d})")
-        self.geometry("900x650")
-        self.minsize(760, 540)
+        fit_toplevel_to_screen(self, 900, 650, min_width=760, min_height=540, parent=master)
 
         outer = ttk.Frame(self, padding=14)
         outer.pack(fill="both", expand=True)
@@ -11599,8 +11654,7 @@ class UpdatePreviewDialog(tk.Toplevel):
         self.on_apply = on_apply
 
         self.title("Atualizações encontradas na internet")
-        self.geometry("1120x650")
-        self.minsize(900, 520)
+        fit_toplevel_to_screen(self, 1120, 650, min_width=900, min_height=520, parent=master)
         self.transient(master)
         self.grab_set()
 
@@ -11792,6 +11846,7 @@ class ManualDialog(tk.Toplevel):
 
         self.bind("<Return>", lambda e: self.save())
         self.bind("<Escape>", lambda e: self.destroy())
+        fit_toplevel_to_screen(self, min_width=470, min_height=430, parent=master)
 
     def update_hour(self, _=None):
         self.var_hour.set(DEFAULT_HOURS.get(self.var_sort.get(), ""))
@@ -12135,13 +12190,7 @@ class App(tk.Tk):
 
         win.protocol("WM_DELETE_WINDOW", close_dialog)
         name_entry.focus_set()
-        self.update_idletasks()
-        try:
-            x = self.winfo_rootx() + max(20, (self.winfo_width() - 570) // 2)
-            y = self.winfo_rooty() + max(20, (self.winfo_height() - 440) // 2)
-            win.geometry(f"570x440+{x}+{y}")
-        except tk.TclError:
-            win.geometry("570x440")
+        fit_toplevel_to_screen(win, 570, 440, min_width=500, min_height=390, parent=self)
         self.wait_window(win)
         return result["ok"]
 
@@ -12885,6 +12934,7 @@ class App(tk.Tk):
             f"Sincronização: {'ativa' if (self.account_profile or {}).get('sync_enabled') else 'somente local'}\n"
             f"Última sincronização: {(self.account_profile or {}).get('last_sync_at') or 'nunca'}\n\n"
             "Atualizações recentes:\n"
+            "• v0.37.3 — um único rolamento inteligente global e janelas secundárias adaptativas ao monitor.\n"
             "• v0.37.2 — padrão global de interface: tipografia, fonte mínima, tabelas, controles, espaçamento e cores semânticas centralizados.\n"
             "• v0.37.1 — limpeza estrutural: remove Gerador legado inalcançável e diálogos órfãos, sem alterar métodos, apostas ou interface ativa.\n"
             "• v0.37.0 — Decisão Contextual cruza horário, recente, estabilidade, Walk-Forward opcional, dia, convergência e geral sem trocar o método oficial.\n"
@@ -13187,15 +13237,7 @@ class App(tk.Tk):
             return
         pop = tk.Toplevel(self)
         pop.title(f"Prévia — {pack_name}")
-        pop.geometry("820x700")
-        pop.minsize(720, 620)
-        try:
-            self.update_idletasks()
-            px = self.winfo_rootx() + max(0, (self.winfo_width() - 820) // 2)
-            py = self.winfo_rooty() + max(0, (self.winfo_height() - 700) // 2)
-            pop.geometry(f"820x700+{px}+{py}")
-        except tk.TclError:
-            pass
+        fit_toplevel_to_screen(pop, 820, 700, min_width=720, min_height=620, parent=self)
         pop.transient(self)
         pop.configure(bg=self.colors["bg"])
 
@@ -13421,43 +13463,51 @@ class App(tk.Tk):
             ).pack(anchor="w", pady=(3, 14))
 
     def _make_scrollable_page_body(self, parent, key):
-        """Área vertical rolável: roda funciona sob qualquer filho e a barra só aparece quando necessária."""
+        """Cria uma página rolável usando exclusivamente o GPHSmartWheel global."""
         host = ttk.Frame(parent)
         host.pack(fill="both", expand=True)
         canvas = tk.Canvas(
             host, highlightthickness=0, borderwidth=0, bg=self.colors["bg"]
         )
         bar = ttk.Scrollbar(host, orient="vertical", command=canvas.yview)
-        canvas.configure(yscrollcommand=bar.set)
         canvas.pack(side="left", fill="both", expand=True)
         bar.pack(side="right", fill="y")
 
         body = ttk.Frame(canvas)
         window = canvas.create_window((0, 0), window=body, anchor="nw")
         canvas._gph_smart_scroll = True
+        canvas._gph_scrollbar = bar
+        body._gph_scroll_canvas = canvas
         if not hasattr(self, "_smart_scroll_canvases"):
             self._smart_scroll_canvases = {}
         self._smart_scroll_canvases[key] = canvas
 
-        def update_bar():
+        def update_bar(first=None, last=None):
             try:
-                bbox = canvas.bbox("all")
-                content_h = (bbox[3] - bbox[1]) if bbox else 0
-                need = content_h > max(1, canvas.winfo_height()) + 2
+                if first is None or last is None:
+                    first, last = canvas.yview()
+                need = float(first) > 0.0 or float(last) < 1.0
                 managed = bool(bar.winfo_manager())
                 if need and not managed:
                     bar.pack(side="right", fill="y")
                 elif not need and managed:
                     bar.pack_forget()
-            except tk.TclError:
+            except (tk.TclError, ValueError, TypeError):
                 pass
+
+        def on_yview(first, last):
+            try:
+                bar.set(first, last)
+            finally:
+                update_bar(first, last)
+
+        canvas.configure(yscrollcommand=on_yview)
 
         def update_region(_event=None):
             try:
                 bbox = canvas.bbox("all")
-                if bbox:
-                    canvas.configure(scrollregion=bbox)
-                update_bar()
+                canvas.configure(scrollregion=bbox or (0, 0, 0, 0))
+                self.after_idle(update_bar)
             except tk.TclError:
                 pass
 
@@ -13471,44 +13521,13 @@ class App(tk.Tk):
         body.bind("<Configure>", update_region, add="+")
         canvas.bind("<Configure>", resize_body, add="+")
 
-        tag = f"GPHScroll_{key}"
-
-        def route_wheel(event):
-            units = self._wheel_units(event)
-            if not units:
-                return
-            if self._play_scroll_child_if_possible(event.widget, units):
-                return "break"
-            try:
-                first, last = canvas.yview()
-                can_scroll = (units < 0 and first > 0.0) or (units > 0 and last < 1.0)
-                if can_scroll:
-                    canvas.yview_scroll(units, "units")
-                # Sempre consome a roda dentro da página para não alterar Combobox/Spinbox por acidente.
-                return "break"
-            except tk.TclError:
-                return
-
-        self.bind_class(tag, "<MouseWheel>", route_wheel)
-        self.bind_class(tag, "<Button-4>", route_wheel)
-        self.bind_class(tag, "<Button-5>", route_wheel)
-
-        def install_tags():
-            try:
-                stack = [host]
-                while stack:
-                    widget = stack.pop()
-                    tags = list(widget.bindtags())
-                    if tag not in tags:
-                        tags.insert(1 if len(tags) > 1 else 0, tag)
-                        widget.bindtags(tuple(tags))
-                    stack.extend(widget.winfo_children())
-            except tk.TclError:
-                pass
+        def install_global_policy():
+            self._smart_scroll_install_tags(host)
             update_region()
 
-        self.after_idle(install_tags)
+        self.after_idle(install_global_policy)
         return body
+
 
     def _install_smart_scroll_policy(self):
         """Padrão global: toda tela/janela atual ou futura recebe roteamento inteligente da roda."""
@@ -13581,7 +13600,7 @@ class App(tk.Tk):
         return candidates[0][2]
 
     def _smart_scroll_route(self, event):
-        units = self._wheel_units(event)
+        units = self._smart_scroll_units(event)
         if not units:
             return
         widget = getattr(event, "widget", None)
@@ -13589,7 +13608,7 @@ class App(tk.Tk):
             return
 
         # Controles que têm conteúdo próprio rolável recebem prioridade.
-        if self._play_scroll_child_if_possible(widget, units):
+        if self._smart_scroll_child_if_possible(widget, units):
             return "break"
 
         # Depois procura um Canvas rolável na cadeia de pais: é a página/janela atual.
@@ -14510,17 +14529,7 @@ class App(tk.Tk):
             "<Configure>", self._play_resize_body_window
         )
 
-        # A roda do mouse é roteada por um bindtag próprio, instalado nos
-        # controles da página. Isso faz a rolagem responder sob labels,
-        # botões, entradas e comboboxes sem exigir clique/foco prévio.
-        # Se o ponteiro estiver sobre Treeview/Text/Listbox, o próprio
-        # controle rola enquanto puder; ao chegar ao limite, a página assume.
-        self._play_wheel_tag = "GPHPlayWheel"
-        if not getattr(self, "_play_mousewheel_bound", False):
-            self.bind_class(self._play_wheel_tag, "<MouseWheel>", self._play_mousewheel, add="+")
-            self.bind_class(self._play_wheel_tag, "<Button-4>", self._play_mousewheel, add="+")
-            self.bind_class(self._play_wheel_tag, "<Button-5>", self._play_mousewheel, add="+")
-            self._play_mousewheel_bound = True
+        # Jogar usa o mesmo GPHSmartWheel global de todas as outras telas.
 
         self.play_show_new()
         self.after_idle(self._play_finalize_layout)
@@ -14533,27 +14542,9 @@ class App(tk.Tk):
             except tk.TclError:
                 pass
 
-    def _play_install_wheel_bindtag(self, root):
-        tag = getattr(self, "_play_wheel_tag", "GPHPlayWheel")
-        try:
-            stack = [root]
-            while stack:
-                widget = stack.pop()
-                try:
-                    tags = list(widget.bindtags())
-                    if tag not in tags:
-                        # Antes do bindtag de classe: evita que Combobox/Spinbox
-                        # consumam a roda e alterem valores acidentalmente.
-                        tags.insert(1 if len(tags) > 1 else 0, tag)
-                        widget.bindtags(tuple(tags))
-                    stack.extend(widget.winfo_children())
-                except tk.TclError:
-                    continue
-        except Exception:
-            pass
 
     @staticmethod
-    def _wheel_units(event):
+    def _smart_scroll_units(event):
         if getattr(event, "num", None) == 4:
             return -3
         if getattr(event, "num", None) == 5:
@@ -14564,7 +14555,7 @@ class App(tk.Tk):
         steps = max(1, abs(int(delta / 120)))
         return -steps if delta > 0 else steps
 
-    def _play_scroll_child_if_possible(self, widget, units):
+    def _smart_scroll_child_if_possible(self, widget, units):
         try:
             widget_class = widget.winfo_class()
         except Exception:
@@ -14583,40 +14574,15 @@ class App(tk.Tk):
         except Exception:
             return False
 
-    def _play_mousewheel(self, event):
-        if getattr(self, "_page", None) != "play":
-            return
-
-        units = self._wheel_units(event)
-        if not units:
-            return
-
-        # Primeiro tenta o controle sob o mouse. Se ele não tiver conteúdo
-        # rolável (ou já estiver no começo/fim), a rolagem continua na página.
-        if self._play_scroll_child_if_possible(event.widget, units):
-            return "break"
-
-        canvas = getattr(self, "play_body_canvas", None)
-        if canvas is None:
-            return
-
-        try:
-            first, last = canvas.yview()
-            can_scroll = (units < 0 and first > 0.0) or (units > 0 and last < 1.0)
-            if not can_scroll:
-                return "break"
-            canvas.yview_scroll(units, "units")
-            return "break"
-        except tk.TclError:
-            return
 
     def _play_finalize_layout(self):
         if getattr(self, "_page", None) != "play":
             return
         host = getattr(self, "play_scroll_host", None)
         if host is not None:
-            self._play_install_wheel_bindtag(host)
+            self._smart_scroll_install_tags(host)
         self._play_update_scrollregion()
+
 
     def _play_update_scrollregion(self, _event=None):
         canvas = getattr(self, "play_body_canvas", None)
@@ -14624,10 +14590,19 @@ class App(tk.Tk):
             return
         try:
             bbox = canvas.bbox("all")
-            if bbox:
-                canvas.configure(scrollregion=bbox)
-        except tk.TclError:
+            canvas.configure(scrollregion=bbox or (0, 0, 0, 0))
+            bar = getattr(self, "play_body_scrollbar", None)
+            if bar is not None:
+                first, last = canvas.yview()
+                need = float(first) > 0.0 or float(last) < 1.0
+                managed = bool(bar.winfo_manager())
+                if need and not managed:
+                    bar.pack(side="right", fill="y")
+                elif not need and managed:
+                    bar.pack_forget()
+        except (tk.TclError, ValueError, TypeError):
             pass
+
 
     def _play_resize_body_window(self, event):
         canvas = getattr(self, "play_body_canvas", None)
@@ -15962,8 +15937,7 @@ class App(tk.Tk):
         dialog.title("Selecionar vários horários")
         dialog.transient(self)
         dialog.grab_set()
-        dialog.minsize(510, 390)
-        dialog.geometry("560x470")
+        fit_toplevel_to_screen(dialog, 560, 470, min_width=510, min_height=390, parent=self)
 
         body = ttk.Frame(dialog, padding=14)
         body.pack(fill="both", expand=True)
@@ -16012,13 +15986,7 @@ class App(tk.Tk):
         if base_idx < len(options):
             listbox.see(base_idx)
 
-        def on_wheel(event):
-            delta = int(-1 * (event.delta / 120)) if event.delta else 0
-            if delta:
-                listbox.yview_scroll(delta, "units")
-            return "break"
-
-        listbox.bind("<MouseWheel>", on_wheel)
+        self._smart_scroll_install_tags(dialog)
 
         chosen = {"indices": None}
 
@@ -17772,8 +17740,7 @@ class App(tk.Tk):
 
         dialog = tk.Toplevel(self)
         dialog.title("Fechamento do dia")
-        dialog.geometry("760x620")
-        dialog.minsize(650,520)
+        fit_toplevel_to_screen(dialog, 760, 620, min_width=650, min_height=520, parent=self)
 
         outer = ttk.Frame(self._make_scrollable_page_body(dialog, "daily_closing"), padding=12,
         )
@@ -19603,8 +19570,7 @@ class App(tk.Tk):
     def _show_method_guide(self):
         win = tk.Toplevel(self)
         win.title("Como funcionam os métodos — GP-H")
-        win.geometry("980x650")
-        win.minsize(820, 520)
+        fit_toplevel_to_screen(win, 980, 650, min_width=820, min_height=520, parent=self)
         win.configure(bg=self.colors["bg"])
         win.transient(self)
 
