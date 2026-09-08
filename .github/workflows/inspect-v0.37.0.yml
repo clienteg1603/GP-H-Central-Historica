@@ -1,0 +1,43 @@
+name: Inspecionar Decisao v0.37.0
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/inspect-v0.37.0.yml"
+
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Mapear Decisao e recomendacao
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p=Path('source/gph_central.py')
+          lines=p.read_text(encoding='utf-8').splitlines()
+          needles=[
+            'decision', 'Decisão', 'DECISÃO', 'champion', 'challenger',
+            'Campeão', 'Desafiante', 'walk_forward', 'Walk-Forward',
+            'recommendation', 'Recomendação', 'shadow', 'context'
+          ]
+          hits=[]
+          for i,line in enumerate(lines,1):
+              low=line.lower()
+              if any(n.lower() in low for n in needles):
+                  hits.append(i)
+          print('HITS', hits)
+          # agrupa faixas proximas para evitar log gigante
+          groups=[]
+          for i in hits:
+              if not groups or i-groups[-1][-1] > 18:
+                  groups.append([i])
+              else:
+                  groups[-1].append(i)
+          for g in groups:
+              a=max(1,g[0]-10); b=min(len(lines),g[-1]+16)
+              print(f'--- {a}-{b} ---')
+              for j in range(a,b+1):
+                  print(f'{j}: {lines[j-1]}')
+          PY
