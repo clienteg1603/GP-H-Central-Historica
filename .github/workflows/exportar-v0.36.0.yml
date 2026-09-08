@@ -1,0 +1,32 @@
+name: Exportar pacote v0.36.0
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/exportar-v0.36.0.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  exportar:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Baixar pacote da Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release download v0.36.0-test \
+            --repo "$GITHUB_REPOSITORY" \
+            --pattern "GP-H_Central_Historica_v0.36.0_Windows.zip" \
+            --dir pacote
+
+      - name: Disponibilizar pacote
+        uses: actions/upload-artifact@v4
+        with:
+          name: GP-H_Central_Historica_v0.36.0_Windows
+          path: pacote/GP-H_Central_Historica_v0.36.0_Windows.zip
+          if-no-files-found: error
+          retention-days: 1
