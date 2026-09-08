@@ -1,3 +1,16 @@
+REVISÃO v0.41.0 — GP-H META v0.1 / MOTOR ADAPTATIVO EM SOMBRA
+- Cria o GP-H Meta v0.1, exclusivamente SOMBRA: ele não altera Reset + 3+1, apostas, recomendações oficiais ou pesos da Decisão Contextual.
+- O Meta usa regressão logística L2 nativa da biblioteca padrão, evitando nova dependência e aumento desnecessário do executável.
+- Cada bicho recebe características dos sinais prospectivos de Reset Cobertura, Puxada Combinada, Similaridade e GP-H Histórico Concentrado v0.1, além de convergência e presença/repetição na extração-base.
+- Treinamento usa somente decision_snapshots já AUDITADOS e anteriores ao alvo. O Histórico Concentrado usado como característica é reconstruído com before_draw_key/cutoff, portanto sem look-ahead.
+- A partir de 20 snapshots auditados o Meta pode ranquear os 25 bichos; abaixo disso fica AMOSTRA INSUFICIENTE. A leitura segue EXPERIMENTAL até ganhar suporte maior no mesmo horário.
+- O treinamento atual dá peso suave à recência, ao mesmo horário e ao mesmo dia da semana.
+- O ranking Top 5, todos os 25 scores, características e coeficientes ficam congelados no decision_snapshot ANTES do resultado. O primeiro congelamento é canônico e sincroniza entre PCs.
+- Depois do resultado o Meta é auditado por cobertura 1º–5º, acerto de 1º, posição do melhor bicho real no ranking e baseline aleatório esperado.
+- A tela Decisão ganha o cartão “GP-H META v0.1 — SOMBRA”, com Top 5, tamanho do treino, holdout temporal preliminar e auditoria prospectiva acumulada.
+- O score do Meta NÃO é probabilidade calibrada. Holdout atual é apenas diagnóstico preliminar; Walk-Forward rigoroso do Meta fica para a próxima fase.
+- Nenhum motor oficial foi alterado; Reset, Puxada, Similaridade, Histórico Concentrado, 3+1 e Decisão Contextual foram travados por comparação AST.
+
 REVISÃO v0.40.0 — AUDITORIA PROSPECTIVA DA PRÓPRIA DECISÃO
 - A Decisão Contextual deixa de existir apenas como cálculo exibido na tela e passa a ser congelada dentro do mesmo decision_snapshot antes da rodada-alvo.
 - O congelamento salva líder de evidência, índices dos três métodos, diferença entre 1º e 2º, nível FORTE/MODERADA/BAIXA/AMOSTRA INSUFICIENTE, fatores ativos e horário/data do congelamento.
