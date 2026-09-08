@@ -16,6 +16,9 @@ Novidades v0.35.0:
 - Ranking das construções de Centena.
 - Seca do Dia continua exclusiva do 1º prêmio.
 - Nenhum método ou fórmula oficial foi alterado.
+- O código-fonte oficial passa a ficar na pasta source/ do GitHub.
+- Alterações em source/ disparam automaticamente a compilação e publicação no canal Teste.
+- Não é mais necessário enviar manualmente um ZIP-fonte a cada versão.
 
 Novidades v0.34.2:
 - Define por padrão o servidor oficial de atualização no GitHub.
