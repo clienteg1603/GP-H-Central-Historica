@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-GP-H Central Histórica v0.37.3
+GP-H Central Histórica v0.38.0
 Pesquisa e manutenção do histórico 2026 do Deu no Poste / PT-Rio.
 
 Escopo desta versão:
@@ -86,7 +86,7 @@ def write_crash_log(exc: BaseException):
 
 
 APP_NAME = "GP-H Central Histórica"
-APP_VERSION = "0.37.3"
+APP_VERSION = "0.38.0"
 START_DATE = date(2026, 1, 2)
 BASE_URL = "https://brasildeunoposte.com.br/resultado-do-jogo-do-bicho-deu-no-poste-{date}/"
 # Ao buscar/atualizar resultados, relê os últimos 7 dias para absorver
@@ -12129,7 +12129,7 @@ class App(tk.Tk):
         ttk.Label(
             outer,
             text=(
-                "Depois de entrar, abra Base / Configurações → Conta / Perfil e escolha uma pasta "
+                "Depois de entrar, abra Configurações → Conta e Sync e escolha uma pasta "
                 "sincronizada pelo OneDrive, Google Drive ou Dropbox para compartilhar os dados entre PCs."
             ),
             style="Sub.TLabel", wraplength=520, justify="left",
@@ -12934,6 +12934,7 @@ class App(tk.Tk):
             f"Sincronização: {'ativa' if (self.account_profile or {}).get('sync_enabled') else 'somente local'}\n"
             f"Última sincronização: {(self.account_profile or {}).get('last_sync_at') or 'nunca'}\n\n"
             "Atualizações recentes:\n"
+            "• v0.38.0 — polimento geral: papéis das telas mais claros, Configurações simplificadas, redundâncias removidas e ações ambíguas renomeadas.\n"
             "• v0.37.3 — um único rolamento inteligente global e janelas secundárias adaptativas ao monitor.\n"
             "• v0.37.2 — padrão global de interface: tipografia, fonte mínima, tabelas, controles, espaçamento e cores semânticas centralizados.\n"
             "• v0.37.1 — limpeza estrutural: remove Gerador legado inalcançável e diálogos órfãos, sem alterar métodos, apostas ou interface ativa.\n"
@@ -13368,7 +13369,7 @@ class App(tk.Tk):
         )
 
         self._add_nav_button(
-            "Base / Configurações", self.show_base_config, secondary=True, icon_key="database"
+            "Configurações", self.show_base_config, secondary=True, icon_key="database"
         )
 
         tk.Label(
@@ -13686,7 +13687,6 @@ class App(tk.Tk):
             header,
             text="Visão geral",
             style="Title.TLabel",
-            font=("Segoe UI Semibold", 16),
         ).pack(side="left")
         ttk.Label(
             header,
@@ -13794,7 +13794,7 @@ class App(tk.Tk):
         ).pack(side="left")
         ttk.Button(
             hero_actions,
-            text="Buscar atualização",
+            text="Atualizar resultados",
             command=self.start_update_search,
         ).pack(side="left", padx=(5, 0))
         ttk.Button(
@@ -14299,7 +14299,7 @@ class App(tk.Tk):
 
         self._page_title(
             "Pesquisa",
-            "Bicho, Grupo, Dezena, Centena e Milhar com filtros inteligentes.",
+            "Consulta direta da base por Bicho, Grupo, Dezena, Centena ou Milhar.",
         )
         body = self._make_scrollable_page_body(self.content, "search")
 
@@ -18935,7 +18935,7 @@ class App(tk.Tk):
 
         self._page_title(
             "Resultados",
-            "Atualizações, jogos congelados e desempenho prospectivo.",
+            "Atualize os resultados, acompanhe jogos congelados e audite o desempenho prospectivo.",
         )
         body = self._make_scrollable_page_body(self.content, "results")
 
@@ -18973,7 +18973,7 @@ class App(tk.Tk):
 
         self.update_btn = ttk.Button(
             actions,
-            text="Buscar atualizações",
+            text="Atualizar resultados",
             style="Accent.TButton",
             command=self.start_update_search,
         )
@@ -19720,15 +19720,47 @@ class App(tk.Tk):
             outer, text="Fechar", command=win.destroy
         ).pack(anchor="e", pady=(10, 0))
 
+    def _base_scroll_to(self, key):
+        """Leva a navegação interna de Configurações ao bloco correspondente."""
+        try:
+            canvas = getattr(self, "_smart_scroll_canvases", {}).get("base")
+            widget = getattr(self, "_base_section_widgets", {}).get(key)
+            if canvas is None or widget is None:
+                return
+            self.update_idletasks()
+            bbox = canvas.bbox("all")
+            if not bbox:
+                return
+            content_h = max(1, int(bbox[3] - bbox[1]))
+            viewport_h = max(1, int(canvas.winfo_height()))
+            max_scroll = max(1, content_h - viewport_h)
+            y = max(0, int(widget.winfo_y()) - UI_SPACING["small"])
+            canvas.yview_moveto(min(1.0, max(0.0, y / max_scroll)))
+        except Exception:
+            return
+
     def show_base_config(self):
-        self._set_active_nav("Base / Configurações")
+        self._set_active_nav("Configurações")
         self._clear_content()
         self._page = "base"
 
         self._page_title(
-            "Base / Configurações",
-            "Saúde, persistência, backup, importação e revisão da base.",
+            "Configurações",
+            "Conta, aparência, atualizações e manutenção da base de dados.",
         )
+
+        config_nav = ttk.Frame(self.content)
+        config_nav.pack(fill="x", pady=(0, UI_SPACING["small"]))
+        for idx, (label, key) in enumerate((
+            ("Conta e Sync", "account"),
+            ("Aparência", "appearance"),
+            ("Atualizações", "updates"),
+            ("Base de dados", "data"),
+        )):
+            ttk.Button(
+                config_nav, text=label, style="Subnav.TButton",
+                command=lambda k=key: self._base_scroll_to(k),
+            ).pack(side="left", padx=(0 if idx == 0 else UI_SPACING["micro"], 0))
 
         base_body = self._make_scrollable_page_body(self.content, "base")
 
@@ -19737,7 +19769,7 @@ class App(tk.Tk):
         account_box.pack(fill="x", pady=(0, 7))
         account_head = ttk.Frame(account_box, style="Card.TFrame")
         account_head.pack(fill="x")
-        ttk.Label(account_head, text="Conta / Perfil", style="Section.TLabel").pack(side="left")
+        ttk.Label(account_head, text="Conta e Sync", style="Section.TLabel").pack(side="left")
         ttk.Label(
             account_head, text="IDENTIDADE MULTI-PC", style="CardMuted.TLabel"
         ).pack(side="right")
@@ -19856,7 +19888,7 @@ class App(tk.Tk):
         update_actions = ttk.Frame(update_box, style="Card.TFrame")
         update_actions.pack(fill="x")
         ttk.Button(
-            update_actions, text="BUSCAR ATUALIZAÇÃO", style="Accent.TButton",
+            update_actions, text="BUSCAR NOVA VERSÃO", style="Accent.TButton",
             command=lambda: self.program_update_check(manual=True),
         ).grid(row=0, column=0, sticky="ew", padx=(0, 4))
         self.program_update_install_btn = ttk.Button(
@@ -20021,32 +20053,6 @@ class App(tk.Tk):
             style="CardMuted.TLabel",
         ).pack(anchor="w", pady=(8, 0))
 
-        guide_box = ttk.Frame(base_body, style="Card.TFrame", padding=10)
-        guide_box.pack(fill="x", pady=(0, 7))
-        guide_head = ttk.Frame(guide_box, style="Card.TFrame")
-        guide_head.pack(fill="x")
-        ttk.Label(
-            guide_head,
-            text="Como funcionam os métodos",
-            style="Section.TLabel",
-        ).pack(side="left")
-        ttk.Button(
-            guide_head,
-            text="ABRIR GUIA COMPLETO",
-            style="Accent.TButton",
-            command=self._show_method_guide,
-        ).pack(side="right")
-        ttk.Label(
-            guide_box,
-            text=(
-                "Reset Cobertura • Puxada Combinada • Reset + Histórica • Reset + 3+1 • "
-                "Reset combinações • Similaridade • Seca do Dia • Manual. "
-                "O guia mostra a base usada, janela histórica, cálculo e saída de cada modelo."
-            ),
-            style="CardMuted.TLabel",
-            wraplength=940,
-        ).pack(anchor="w", pady=(3, 0))
-
         health = self.db.base_health()
         audit = health["audit"]
         latest = self.db.latest_draw()
@@ -20129,7 +20135,7 @@ class App(tk.Tk):
 
         ttk.Label(
             info,
-            text="Base compartilhada",
+            text="Local da base de dados",
             style="Card.TLabel",
             font=("Segoe UI Semibold", 11),
         ).pack(anchor="w")
@@ -20163,7 +20169,7 @@ class App(tk.Tk):
 
         diag_box = ttk.Frame(base_body, style="Card.TFrame", padding=10)
         diag_box.pack(fill="x", pady=(0, 7))
-        ttk.Label(diag_box, text="Diagnóstico / Pré-EXE", style="Section.TLabel").pack(anchor="w")
+        ttk.Label(diag_box, text="Diagnóstico da instalação", style="Section.TLabel").pack(anchor="w")
         ttk.Label(
             diag_box,
             text=(
@@ -20199,16 +20205,20 @@ class App(tk.Tk):
         )
         actions.pack(fill="x", pady=(0, 7))
 
+        ttk.Label(
+            actions, text="Ferramentas da base", style="Section.TLabel"
+        ).grid(row=0, column=0, columnspan=3, sticky="w", pady=(0, 8))
+
         action_specs = [
             ("Revisar base", self.show_audit),
             ("Verificar lacunas", self.base_verify_gaps),
             ("Sincronizar 2026 inteiro", self.start_sync),
             ("Fazer backup", self.base_backup),
-            ("Tabela de prêmios", lambda: PayoutConfigDialog(self, self.db)),
             ("Importar / mesclar banco", self.base_import_database),
         ]
         for idx, (text, command) in enumerate(action_specs):
             row, col = divmod(idx, 3)
+            row += 1
             btn = ttk.Button(actions, text=text, command=command)
             btn.grid(
                 row=row, column=col, sticky="ew",
@@ -20219,6 +20229,13 @@ class App(tk.Tk):
                 self.sync_btn = btn
         for col in range(3):
             actions.grid_columnconfigure(col, weight=1, uniform="baseact")
+
+        self._base_section_widgets = {
+            "account": account_box,
+            "appearance": visual_box,
+            "updates": update_box,
+            "data": health_box,
+        }
 
         ttk.Label(
             base_body,
@@ -20585,8 +20602,8 @@ class App(tk.Tk):
             error = ""
 
         self._page_title(
-            "Central de Decisão",
-            "Visão da rodada, convergência, desempenho prospectivo e Laboratório Sombra em uma única tela. O índice não é probabilidade de prêmio.",
+            "Decisão da rodada",
+            "Qual leitura tem melhor evidência para a próxima rodada. O índice não é probabilidade de prêmio.",
         )
         body = self._make_scrollable_page_body(self.content, "decision")
 
@@ -20621,7 +20638,7 @@ class App(tk.Tk):
         components = snapshot.get("components") or {}
         comp_card = ttk.Frame(body, style="Card.TFrame", padding=10)
         comp_card.pack(fill="x", pady=(0,8))
-        ttk.Label(comp_card, text="Por que esse índice?", style="CardTitle.TLabel").pack(anchor="w")
+        ttk.Label(comp_card, text="Componentes do índice", style="CardTitle.TLabel").pack(anchor="w")
         comp_row = ttk.Frame(comp_card, style="Card.TFrame")
         comp_row.pack(fill="x", pady=(7,0))
         comp_defs = [
@@ -20641,7 +20658,7 @@ class App(tk.Tk):
         signals = snapshot.get("signals") or {}
         sig_card = ttk.Frame(body, style="Card.TFrame", padding=10)
         sig_card.pack(fill="x", pady=(0,8))
-        ttk.Label(sig_card,text="O que cada método está dizendo",style="CardTitle.TLabel").pack(anchor="w")
+        ttk.Label(sig_card,text="Leituras da rodada",style="CardTitle.TLabel").pack(anchor="w")
         sig_row = ttk.Frame(sig_card, style="Card.TFrame")
         sig_row.pack(fill="x",pady=(7,0))
         for i,name in enumerate(("Reset Cobertura","Puxada Combinada","Similaridade")):
@@ -20662,7 +20679,7 @@ class App(tk.Tk):
         why.pack(fill="x",pady=(0,8))
         topbar = ttk.Frame(why,style="Card.TFrame")
         topbar.pack(fill="x")
-        ttk.Label(topbar,text="Por que estes 5?",style="CardTitle.TLabel").pack(side="left")
+        ttk.Label(topbar,text="Convergência dos 5 bichos",style="CardTitle.TLabel").pack(side="left")
         ttk.Label(topbar,text="Clique num bicho para ver onde ele aparece nos métodos.",style="CardMuted.TLabel").pack(side="left",padx=(10,0))
         chips = ttk.Frame(why,style="Card.TFrame")
         chips.pack(fill="x",pady=(7,0))
@@ -20676,7 +20693,7 @@ class App(tk.Tk):
         perf_card.pack(fill="both",expand=True,pady=(0,8))
         perf_head = ttk.Frame(perf_card,style="Card.TFrame")
         perf_head.pack(fill="x")
-        ttk.Label(perf_head,text="Comparação prospectiva dos métodos",style="CardTitle.TLabel").pack(side="left")
+        ttk.Label(perf_head,text="Desempenho prospectivo",style="CardTitle.TLabel").pack(side="left")
         self.decision_window = tk.StringVar(value="30")
         ttk.Label(perf_head,text="Janela",style="CardMuted.TLabel").pack(side="right",padx=(8,4))
         cb=ttk.Combobox(perf_head,textvariable=self.decision_window,values=["30","60","120","Todos"],width=7,state="readonly")
@@ -21200,7 +21217,7 @@ class App(tk.Tk):
 
         self._page_title(
             "Estatísticas",
-            "Frequência histórica dos 25 bichos no recorte escolhido.",
+            "Frequência e distribuição histórica dos 25 bichos no recorte escolhido.",
         )
         body = self._make_scrollable_page_body(self.content, "statistics")
 
@@ -21439,7 +21456,7 @@ class App(tk.Tk):
 
         self._page_title(
             "Puxadas",
-            "Quando o bicho-base aparece, o que costuma vir na extração seguinte?",
+            "Relações históricas: dado um bicho-base, o que apareceu na extração seguinte.",
         )
         body = self._make_scrollable_page_body(self.content, "pulls")
 
@@ -21659,7 +21676,7 @@ class App(tk.Tk):
 
         self._page_title(
             "Métodos",
-            "Escolha o resultado-base, a quantidade e gere os bichos.",
+            "Área técnica para executar e comparar métodos sobre um resultado-base.",
         )
         body = self._make_scrollable_page_body(self.content, "methods")
 
@@ -21686,7 +21703,7 @@ class App(tk.Tk):
 
         ttk.Button(
             head,
-            text="Último",
+            text="Usar último",
             command=self.methods_load_latest,
         ).pack(side="right")
 
@@ -21695,6 +21712,13 @@ class App(tk.Tk):
             text="Escolher outro",
             variable=self.method_choose_old,
             command=self.methods_toggle_base,
+        ).pack(side="right", padx=(0, 7))
+
+        ttk.Button(
+            head,
+            text="Guia dos métodos",
+            style="Quiet.TButton",
+            command=self._show_method_guide,
         ).pack(side="right", padx=(0, 7))
 
         self.method_selector = ttk.Frame(base, style="Card.TFrame")

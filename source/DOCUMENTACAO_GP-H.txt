@@ -1,3 +1,14 @@
+REVISÃO v0.38.0 — POLIMENTO GERAL DAS TELAS / ETAPA 4
+- A navegação lateral passa a usar apenas “Configurações”; o nome antigo “Base / Configurações” foi eliminado da interface.
+- Configurações ganha navegação interna fixa para Conta e Sync, Aparência, Atualizações e Base de dados, usando a rolagem inteligente já padronizada.
+- O guia completo dos métodos sai de Configurações e passa para a própria tela Métodos.
+- “Tabela de prêmios” sai de Configurações porque a mesma função já está disponível como Cotações em Jogar.
+- Atualização de resultados e atualização do programa passam a ter nomes inequívocos: “Atualizar resultados” e “Buscar nova versão”.
+- Decisão, Métodos, Puxadas, Pesquisa, Estatísticas e Resultados recebem títulos/subtítulos mais claros para explicitar a função de cada tela sem fundi-las.
+- Configurações troca termos técnicos antigos por nomes de uso real: Conta e Sync, Local da base de dados e Diagnóstico da instalação.
+- A Home passa a usar a tipografia global de título definida na Etapa 2.
+- Nenhum método, fórmula, banco, congelamento, seletor, geração, sincronização ou atualizador teve lógica alterada; a classe Database e funções críticas foram comparadas via AST antes/depois.
+
 REVISÃO v0.37.3 — ROLAMENTO INTELIGENTE + JANELAS ADAPTATIVAS / ETAPA 3
 - Unificado o roteamento da roda do mouse: GPHSmartWheel passa a ser o único motor para páginas, Jogar e diálogos; removidos GPHPlayWheel, GPHScroll_<tela> e bindings locais de MouseWheel.
 - Treeview, Text e Listbox continuam rolando primeiro; ao atingir o limite, a página/Canvas assume quando existir.
