@@ -1,0 +1,95 @@
+name: Publicar GP-H Consulta Histórica
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "consulta/**"
+      - ".github/workflows/publicar-consulta.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-consulta:
+    runs-on: windows-latest
+
+    steps:
+      - name: Baixar repositório
+        uses: actions/checkout@v4
+
+      - name: Preparar Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Restaurar código da Consulta
+        shell: pwsh
+        run: |
+          python -c "import gzip,pathlib; p=pathlib.Path('consulta/gph_consulta.py.gz'); pathlib.Path('consulta/gph_consulta.py').write_bytes(gzip.decompress(p.read_bytes()))"
+
+      - name: Validar código
+        shell: pwsh
+        run: |
+          python -m py_compile consulta/gph_consulta.py
+          $text = Get-Content consulta/gph_consulta.py -Raw
+          $m = [regex]::Match($text, 'APP_VERSION\s*=\s*"([0-9]+\.[0-9]+\.[0-9]+)"')
+          if (-not $m.Success) { throw "APP_VERSION não encontrado" }
+          "CONSULTA_VERSION=$($m.Groups[1].Value)" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+
+      - name: Instalar PyInstaller
+        shell: pwsh
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install pyinstaller
+
+      - name: Gerar EXE sem console
+        shell: pwsh
+        run: |
+          python -m PyInstaller --clean --noconfirm --onefile --windowed `
+            --name "GP-H Consulta Historica" `
+            --icon "source/assets/logo/gph_icon.ico" `
+            --add-data "source/assets;assets" `
+            "consulta/gph_consulta.py"
+          if (-not (Test-Path "dist\GP-H Consulta Historica.exe")) {
+            throw "Executável da Consulta não foi gerado"
+          }
+
+      - name: Montar pacote Windows limpo
+        shell: pwsh
+        run: |
+          $pkg = "GP-H_Consulta_Historica_v$env:CONSULTA_VERSION`_Windows"
+          Remove-Item $pkg -Recurse -Force -ErrorAction SilentlyContinue
+          New-Item -ItemType Directory -Force $pkg | Out-Null
+          Copy-Item "dist\GP-H Consulta Historica.exe" $pkg
+          Copy-Item "consulta\README.txt" $pkg
+          Copy-Item "source\APACHE-2.0.txt" $pkg
+          Copy-Item "source\THIRD_PARTY_NOTICES.txt" $pkg
+          $zip = "$pkg.zip"
+          Remove-Item $zip -Force -ErrorAction SilentlyContinue
+          Compress-Archive -Path "$pkg\*" -DestinationPath $zip -CompressionLevel Optimal -Force
+          "CONSULTA_ZIP=$($PWD.Path)\$zip" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          "CONSULTA_TAG=consulta-v$env:CONSULTA_VERSION" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+
+      - name: Publicar Release da Consulta
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release view "$env:CONSULTA_TAG" --repo "$env:GITHUB_REPOSITORY" *> $null
+          if ($LASTEXITCODE -eq 0) {
+            gh release upload "$env:CONSULTA_TAG" "$env:CONSULTA_ZIP" --clobber --repo "$env:GITHUB_REPOSITORY"
+            gh release edit "$env:CONSULTA_TAG" --title "GP-H Consulta Histórica v$env:CONSULTA_VERSION" --notes "Primeira distribuição Windows compilada da Consulta Histórica. Não exige Python e não abre console." --repo "$env:GITHUB_REPOSITORY"
+          } else {
+            gh release create "$env:CONSULTA_TAG" "$env:CONSULTA_ZIP" --repo "$env:GITHUB_REPOSITORY" --title "GP-H Consulta Histórica v$env:CONSULTA_VERSION" --notes "Primeira distribuição Windows compilada da Consulta Histórica. Não exige Python e não abre console."
+          }
+
+      - name: Disponibilizar artefato
+        uses: actions/upload-artifact@v4
+        with:
+          name: GP-H_Consulta_Historica_Windows
+          path: ${{ env.CONSULTA_ZIP }}
+          if-no-files-found: error
+          retention-days: 7
