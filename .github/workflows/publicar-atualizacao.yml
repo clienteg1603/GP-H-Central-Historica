@@ -1,0 +1,157 @@
+name: Publicar atualização GP-H
+
+on:
+  workflow_dispatch:
+    inputs:
+      channel:
+        description: Canal a atualizar
+        required: true
+        default: test
+        type: choice
+        options:
+          - test
+          - stable
+      notes:
+        description: Notas exibidas pela Central
+        required: true
+        default: "Teste da atualização real pela internet"
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-publish:
+    runs-on: windows-latest
+    env:
+      CHANNEL: ${{ inputs.channel }}
+      RELEASE_NOTES: ${{ inputs.notes }}
+      SOURCE_ZIP: GP-H_Central_Historica_v0.34.1_Teste_GitHub.zip
+
+    steps:
+      - name: Baixar repositório
+        uses: actions/checkout@v4
+
+      - name: Conferir arquivo-fonte
+        shell: pwsh
+        run: |
+          if (-not (Test-Path "$env:SOURCE_ZIP")) {
+            throw "Arquivo $env:SOURCE_ZIP não encontrado na raiz do repositório."
+          }
+
+      - name: Extrair versão-fonte
+        shell: pwsh
+        run: |
+          $work = Join-Path $env:RUNNER_TEMP "gph_source"
+          Remove-Item $work -Recurse -Force -ErrorAction SilentlyContinue
+          New-Item -ItemType Directory -Force $work | Out-Null
+          Expand-Archive -Path "$env:SOURCE_ZIP" -DestinationPath $work -Force
+          $src = Get-ChildItem $work -Directory | Select-Object -First 1
+          if (-not $src) { throw "Pasta principal não encontrada dentro do ZIP." }
+          "SOURCE_DIR=$($src.FullName)" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+
+      - name: Preparar Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Descobrir versão do aplicativo
+        shell: pwsh
+        run: |
+          Set-Location "$env:SOURCE_DIR"
+          $text = Get-Content "gph_central.py" -Raw
+          $m = [regex]::Match($text, 'APP_VERSION\s*=\s*"([0-9]+\.[0-9]+\.[0-9]+)"')
+          if (-not $m.Success) { throw "APP_VERSION não encontrado em gph_central.py" }
+          $version = $m.Groups[1].Value
+          if ($env:CHANNEL -eq "stable") { $tag = "v$version" } else { $tag = "v$version-test" }
+          $packageName = "GP-H_update_v$version.zip"
+          $packageUrl = "https://github.com/$env:GITHUB_REPOSITORY/releases/download/$tag/$packageName"
+          "VERSION=$version" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          "TAG=$tag" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          "PACKAGE_NAME=$packageName" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          "PACKAGE_URL=$packageUrl" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+
+      - name: Validar Python
+        shell: pwsh
+        run: |
+          Set-Location "$env:SOURCE_DIR"
+          python -m py_compile gph_central.py gph_updater.py CRIAR_PACOTE_ATUALIZACAO.py
+
+      - name: Instalar PyInstaller
+        shell: pwsh
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install pyinstaller
+
+      - name: Gerar executáveis sem console
+        shell: pwsh
+        run: |
+          Set-Location "$env:SOURCE_DIR"
+          python -m PyInstaller --clean --noconfirm "GP-H_Updater.spec"
+          python -m PyInstaller --clean --noconfirm "GP-H_Central.spec"
+          if (-not (Test-Path "dist\GP-H_Updater.exe")) { throw "GP-H_Updater.exe não foi gerado" }
+          if (-not (Test-Path "dist\GP-H Central Historica.exe")) { throw "GP-H Central Historica.exe não foi gerado" }
+
+      - name: Preparar pacote e manifesto
+        shell: pwsh
+        run: |
+          Set-Location "$env:SOURCE_DIR"
+          New-Item -ItemType Directory -Force "release_server" | Out-Null
+          if (Test-Path "$env:GITHUB_WORKSPACE\update_manifest.json") {
+            Copy-Item "$env:GITHUB_WORKSPACE\update_manifest.json" "release_server\update_manifest.json" -Force
+          }
+          python CRIAR_PACOTE_ATUALIZACAO.py `
+            --version "$env:VERSION" `
+            --exe "dist\GP-H Central Historica.exe" `
+            --channel "$env:CHANNEL" `
+            --notes "$env:RELEASE_NOTES" `
+            --out "release_server" `
+            --server-name "GitHub GP-H" `
+            --url "$env:PACKAGE_URL"
+          Copy-Item "release_server\update_manifest.json" "$env:GITHUB_WORKSPACE\update_manifest.json" -Force
+
+      - name: Gerar distribuição Windows limpa
+        shell: pwsh
+        run: |
+          Set-Location "$env:SOURCE_DIR"
+          $full = "windows_package"
+          Remove-Item $full -Recurse -Force -ErrorAction SilentlyContinue
+          New-Item -ItemType Directory -Force $full | Out-Null
+          Copy-Item "dist\GP-H Central Historica.exe" $full
+          Copy-Item "dist\GP-H_Updater.exe" $full
+          Copy-Item "APACHE-2.0.txt" $full
+          Copy-Item "THIRD_PARTY_NOTICES.txt" $full
+          $zip = "GP-H_Central_Historica_v$env:VERSION`_Windows.zip"
+          Compress-Archive -Path "$full\*" -DestinationPath $zip -CompressionLevel Optimal -Force
+          "WINDOWS_ZIP=$($env:SOURCE_DIR)\$zip" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          "UPDATE_ZIP=$($env:SOURCE_DIR)\release_server\releases\$env:PACKAGE_NAME" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+
+      - name: Publicar GitHub Release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release view "$env:TAG" --repo "$env:GITHUB_REPOSITORY" *> $null
+          if ($LASTEXITCODE -eq 0) {
+            gh release upload "$env:TAG" "$env:UPDATE_ZIP" "$env:WINDOWS_ZIP" --clobber --repo "$env:GITHUB_REPOSITORY"
+            gh release edit "$env:TAG" --title "GP-H Central Histórica v$env:VERSION" --notes "$env:RELEASE_NOTES" --repo "$env:GITHUB_REPOSITORY"
+          } else {
+            $ghArgs = @("release", "create", $env:TAG, $env:UPDATE_ZIP, $env:WINDOWS_ZIP, "--repo", $env:GITHUB_REPOSITORY, "--title", "GP-H Central Histórica v$env:VERSION", "--notes", $env:RELEASE_NOTES)
+            if ($env:CHANNEL -eq "test") { $ghArgs += "--prerelease" }
+            & gh @ghArgs
+          }
+
+      - name: Publicar manifesto fixo
+        shell: pwsh
+        run: |
+          Set-Location "$env:GITHUB_WORKSPACE"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add update_manifest.json
+          git diff --cached --quiet
+          if ($LASTEXITCODE -ne 0) {
+            git commit -m "Atualiza manifesto para v$env:VERSION ($env:CHANNEL)"
+            git push
+          } else {
+            Write-Host "Manifesto sem alterações para commit."
+          }
