@@ -1,0 +1,155 @@
+name: Repetir Histórico Concentrado v0.39.0
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/retry-v0.39.0.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  patch-and-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Aplicar v0.39.0
+        run: python .github/scripts/patch_v0390.py
+
+      - name: Validar sintaxe
+        run: python -m py_compile source/gph_central.py
+
+      - name: Testar motor isolado sem interface grafica
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import ast
+
+          src=Path('source/gph_central.py').read_text(encoding='utf-8')
+          tree=ast.parse(src)
+          db=next(n for n in tree.body if isinstance(n,ast.ClassDef) and n.name=='Database')
+          wanted={
+              'method_historico_concentrado_v01',
+              'minimum_animals_for_combinations',
+              'generate_historical_concentrated_bundle',
+          }
+          methods=[n for n in db.body if isinstance(n,ast.FunctionDef) and n.name in wanted]
+          assert {n.name for n in methods}==wanted
+          lines=src.splitlines()
+          chunks=[]
+          for n in methods:
+              block='\n'.join(lines[n.lineno-1:n.end_lineno])
+              # Remove a indentacao da classe original para encaixar na classe de teste.
+              block='\n'.join(line[4:] if line.startswith('    ') else line for line in block.splitlines())
+              chunks.append(block)
+
+          pre='''from itertools import combinations\nfrom math import comb\nBICHOS={i:f"B{i:02d}" for i in range(1,26)}\nclass Database:\n'''
+          body='\n\n'.join(''.join('    '+line+'\n' for line in chunk.splitlines()) for chunk in chunks)
+          ns={}
+          exec(pre+body,ns)
+          Database=ns['Database']
+
+          class Fake:
+              method_historico_concentrado_v01=Database.method_historico_concentrado_v01
+              def get_draw(self,d,s,h):
+                  return {'data':d,'sorteio':s,'hora':h,'prizes':[
+                      {'grupo':20},{'grupo':20},{'grupo':25},{'grupo':13},{'grupo':12}
+                  ]}
+              def historical_pulls(self,source,state='Geral',before_draw_key=None):
+                  tables={
+                      20:[(19,.31,1.5),(25,.27,1.2),(12,.22,1.1)],
+                      25:[(19,.34,1.4),(23,.26,1.1),(20,.21,1.0)],
+                      13:[(20,.39,1.5),(25,.31,1.3),(8,.24,1.0)],
+                      12:[(19,.29,1.2),(11,.26,1.1),(4,.20,1.0)],
+                  }
+                  ranking=[{'grupo':g,'bicho':f'B{g:02d}','prob':p,'lift':l,'hit_draws':10} for g,p,l in tables[source]]
+                  return {'state':'Geral','support':30,'ranking':ranking}
+
+          # A repeticao da fonte Peru/G20 deve contar duas vezes.
+          report=Fake().method_historico_concentrado_v01('2026-09-08','PT','14h',top_n=8)
+          by_group={r['grupo']:r for r in report['ranking']}
+          assert by_group[19]['indication_count']==4, by_group[19]
+          assert by_group[25]['indication_count']==3, by_group[25]
+          assert report['repeated_sources_count_again'] is True
+          assert report['lookahead_safe'] is True
+
+          ranking=[]
+          for i,g in enumerate(range(1,7),start=1):
+              ranking.append({'grupo':g,'bicho':f'B{g:02d}','rank':i,'indication_count':10-i,'sum_prob':1.0-i*.05,'avg_lift':1.5-i*.05})
+
+          b=Database.generate_historical_concentrated_bundle(ranking,3,{'Dupla de Grupo':2})
+          assert [r['numero'] for r in b['bundle_generations'][0]['rows']]==['01-02','01-03']
+
+          b=Database.generate_historical_concentrated_bundle(ranking,3,{'Dupla de Grupo':3})
+          assert [r['numero'] for r in b['bundle_generations'][0]['rows']]==['01-02','01-03','02-03']
+
+          b=Database.generate_historical_concentrated_bundle(ranking,5,{'Terno de Grupo':5})
+          assert [r['numero'] for r in b['bundle_generations'][0]['rows']]==[
+              '01-02-03','01-02-04','01-03-04','02-03-04','01-02-05'
+          ]
+
+          assert Database.minimum_animals_for_combinations(5,3,15)==6
+          b=Database.generate_historical_concentrated_bundle(ranking,6,{'Quina de Grupo':3})
+          nums=[r['numero'] for r in b['bundle_generations'][0]['rows']]
+          assert nums==['01-02-03-04-05','01-02-03-04-06','01-02-03-05-06'], nums
+          assert len(nums)==len(set(nums))==3
+
+          assert Database.minimum_animals_for_combinations(3,5,15)==5
+          try:
+              Database.generate_historical_concentrated_bundle(ranking,4,{'Terno de Grupo':5})
+          except ValueError as exc:
+              assert 'pelo menos 5 bichos' in str(exc), str(exc)
+          else:
+              raise AssertionError('Pedido impossivel nao foi bloqueado')
+
+          # Todas as quatro modalidades no mesmo fechamento e sem duplicatas internas.
+          mixed=Database.generate_historical_concentrated_bundle(
+              ranking,6,{
+                  'Dupla de Grupo':2,'Terno de Grupo':5,
+                  'Quadra de Grupo':3,'Quina de Grupo':3,
+              }
+          )
+          assert len(mixed['bundle_generations'])==4
+          assert len(mixed['rows'])==13
+          for sub in mixed['bundle_generations']:
+              nums=[r['numero'] for r in sub['rows']]
+              assert len(nums)==len(set(nums))
+
+          print('TESTES ISOLADOS DO HISTÓRICO CONCENTRADO OK')
+          PY
+
+      - name: Validar marcadores
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import ast
+          text=Path('source/gph_central.py').read_text(encoding='utf-8')
+          ast.parse(text)
+          checks=[
+              'APP_VERSION = "0.39.0"',
+              'def method_historico_concentrado_v01(',
+              'def generate_historical_concentrated_bundle(',
+              '("Grupo", "Fechamento"): "Fechamento de Grupo"',
+              '"Histórico • Concentrado"',
+              'self.play_hc_duplas', 'bundle_generations',
+              'def generate_centenas_3plus1(',
+              'def centena_31_freeze_state(',
+              'def method_convergencia_g5(',
+          ]
+          for c in checks:
+              assert c in text,c
+          print('VALIDAÇÃO ESTRUTURAL v0.39.0 OK')
+          PY
+
+      - name: Registrar v0.39.0
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add source/gph_central.py source/DOCUMENTACAO_GP-H.txt
+          git diff --cached --stat
+          git commit -m "v0.39.0 histórico concentrado de grupos"
+          git push origin main
