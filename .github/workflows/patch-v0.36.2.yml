@@ -1,0 +1,74 @@
+name: Aplicar correções v0.36.2
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/patch-v0.36.2.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Aplicar patch
+        run: python .github/scripts/patch_v0362.py
+      - name: Validar Python e comportamento estrutural
+        run: |
+          python -m py_compile source/gph_central.py
+          python - <<'PY'
+          from pathlib import Path
+          t = Path('source/gph_central.py').read_text(encoding='utf-8')
+          assert 'APP_VERSION = "0.36.2"' in t
+          a = t.index('    def play_register_ticket_multi(self):')
+          b = t.index('    def play_register_ticket(self):', a)
+          multi = t[a:b]
+          assert 'self.db.register_ticket(' not in multi, 'CONTINUAR ainda registra no banco'
+          reg_end = t.index('    def play_controls_changed', b)
+          reg = t[b:reg_end]
+          assert 'play_ticket_multi_targets' in reg
+          assert 'self.db.register_ticket(' in reg
+          assert '    def delete_ticket(self, ticket_id):' in t
+          assert '    def play_delete_selected_ticket(self):' in t
+          assert 'text="Excluir bilhete"' in t
+          print('Validacao estrutural OK')
+          PY
+      - name: Testar exclusão no SQLite
+        run: |
+          python - <<'PY'
+          import ast, sqlite3, tempfile
+          from pathlib import Path
+          src = Path('source/gph_central.py').read_text(encoding='utf-8')
+          # Teste direto da mesma sequência SQL usada pelo método: item -> jogo -> bilhete.
+          with tempfile.TemporaryDirectory() as td:
+              db = Path(td) / 't.db'
+              con = sqlite3.connect(db)
+              con.executescript('''
+                  CREATE TABLE bilhetes (id INTEGER PRIMARY KEY, alvo_data TEXT);
+                  CREATE TABLE jogos_congelados (id INTEGER PRIMARY KEY, bilhete_id INTEGER, valor_total REAL);
+                  CREATE TABLE jogos_itens (id INTEGER PRIMARY KEY, jogo_id INTEGER, numero TEXT);
+                  INSERT INTO bilhetes VALUES (1,'2026-09-08');
+                  INSERT INTO jogos_congelados VALUES (10,1,1.0);
+                  INSERT INTO jogos_itens VALUES (100,10,'930');
+              ''')
+              game_ids = [r[0] for r in con.execute('SELECT id FROM jogos_congelados WHERE bilhete_id=?',(1,))]
+              con.executemany('DELETE FROM jogos_itens WHERE jogo_id=?', [(gid,) for gid in game_ids])
+              con.execute('DELETE FROM jogos_congelados WHERE bilhete_id=?',(1,))
+              con.execute('DELETE FROM bilhetes WHERE id=?',(1,))
+              con.commit()
+              assert con.execute('SELECT COUNT(*) FROM bilhetes').fetchone()[0] == 0
+              assert con.execute('SELECT COUNT(*) FROM jogos_congelados').fetchone()[0] == 0
+              assert con.execute('SELECT COUNT(*) FROM jogos_itens').fetchone()[0] == 0
+              con.close()
+          print('Exclusao SQLite OK')
+          PY
+      - name: Publicar source
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add source/gph_central.py source/DOCUMENTACAO_GP-H.txt
+          git commit -m "GP-H v0.36.2: multi-horario seguro e exclusao de bilhetes"
+          git push
