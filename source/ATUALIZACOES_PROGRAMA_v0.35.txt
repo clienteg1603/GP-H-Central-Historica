@@ -15,6 +15,7 @@ Novidades v0.35.3:
 - Informa quantos bichos do método recomendado recebem apoio de outro método.
 - No escopo 1º prêmio, mostra também a Seca do Dia atual e sua sobreposição com a convergência.
 - A convergência não promove métodos sozinha; nenhum método ou fórmula oficial foi alterado.
+- Publicação automática pelo código-fonte oficial em source/.
 
 Novidades v0.35.2:
 - Laboratório Sombra passa a mostrar a leitura atual já congelada da próxima rodada.
