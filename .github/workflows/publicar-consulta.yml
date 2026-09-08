@@ -25,10 +25,10 @@ jobs:
         with:
           python-version: "3.13"
 
-      - name: Restaurar código da Consulta
+      - name: Restaurar e verificar código da Consulta
         shell: pwsh
         run: |
-          python -c "import gzip,pathlib; p=pathlib.Path('consulta/gph_consulta.py.gz'); pathlib.Path('consulta/gph_consulta.py').write_bytes(gzip.decompress(p.read_bytes()))"
+          python consulta/restaurar_fonte.py
 
       - name: Validar código
         shell: pwsh
