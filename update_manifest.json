@@ -1,0 +1,16 @@
+{
+  "schema": 1,
+  "app": "GP-H Central Histórica",
+  "server_name": "GitHub GP-H",
+  "channels": {
+    "test": {
+      "version": "0.34.1",
+      "url": "https://github.com/clienteg1603/GP-H-Central-Historica/releases/download/v0.34.1-test/GP-H_update_v0.34.1.zip",
+      "sha256": "c8b07c8db601a52bde9f846f2e91147be6ceb58b34da4171ea42921864f8acb3",
+      "notes": "Teste da atualização real pela internet",
+      "published_at": "2026-09-08T01:31:32+00:00",
+      "mirrors": []
+    }
+  },
+  "updated_at": "2026-09-08T01:31:32+00:00"
+}
