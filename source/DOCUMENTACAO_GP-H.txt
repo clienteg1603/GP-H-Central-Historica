@@ -1,3 +1,10 @@
+REVISÃO v0.36.4 — RESET + 3+1 / AUDITORIA VISUAL
+- O Gerador passa a mostrar um painel auditável dos 5 bichos sempre que o Oficial 3+1 é gerado.
+- Cada bicho mostra estado LIVRE/CONGELADA, principal, 2ª, 3ª, aplicação 3×+1× e o evento que acionou ou liberou o congelamento quando disponível.
+- O painel é reconstruído junto com o jogo e desaparece ao alterar os controles, evitando exibir estado antigo como se fosse atual.
+- Corrigido texto visual legado que ainda dizia “congelamento por 1 rodada”; a regra oficial permanece persistente até o mesmo bicho reaparecer.
+- Nenhuma fórmula, ranking, seletor de bicho, resultado histórico, financeiro ou método concorrente foi alterado.
+
 REVISÃO v0.36.3 — RESET + 3+1 / CONGELAMENTO PERSISTENTE
 - Regra oficial corrigida: a dezena principal não descansa apenas uma rodada; o congelamento passa a ser um estado persistente.
 - Estado livre + dezena principal aparece em qualquer prêmio da extração: congela.
@@ -60,7 +67,7 @@ REVISÃO v0.35.0 — LABORATÓRIO SOMBRA VISÍVEL / COLETA AUTOMÁTICA
 - O sistema de atualização online, backup e rollback permanece igual ao validado na v0.34.2.
 
 GP-H CENTRAL HISTÓRICA
-VERSÃO ATUAL: v0.36.3
+VERSÃO ATUAL: v0.36.4
 =============================================
 
 OBJETIVO

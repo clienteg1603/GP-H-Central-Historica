@@ -1,4 +1,4 @@
-GP-H CENTRAL HISTÓRICA v0.36.3 — ATUALIZAÇÕES DO PROGRAMA
+GP-H CENTRAL HISTÓRICA v0.36.4 — ATUALIZAÇÕES DO PROGRAMA
 
 Nesta versão o cliente de atualização está pronto para um servidor HTTPS estático.
 
@@ -73,3 +73,8 @@ Novidades v0.36.3:
 - Reset + 3+1 passa a usar congelamento persistente da dezena principal.
 - Principal sai livre: congela; enquanto congelada, 3 da segunda + 1 da terceira.
 - O mesmo bicho reaparece: descongela, mesmo que a principal seja a dezena que reapareceu.
+
+Novidades v0.36.4:
+- Painel auditável do Reset + 3+1 no Gerador.
+- Mostra LIVRE/CONGELADA, ranking das três dezenas, aplicação 3×+1× e evento do estado.
+- Texto legado de “congelamento por 1 rodada” corrigido para a regra persistente oficial.

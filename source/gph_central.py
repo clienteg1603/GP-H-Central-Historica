@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-GP-H Central Histórica v0.36.3
+GP-H Central Histórica v0.36.4
 Pesquisa e manutenção do histórico 2026 do Deu no Poste / PT-Rio.
 
 Escopo desta versão:
@@ -86,7 +86,7 @@ def write_crash_log(exc: BaseException):
 
 
 APP_NAME = "GP-H Central Histórica"
-APP_VERSION = "0.36.3"
+APP_VERSION = "0.36.4"
 START_DATE = date(2026, 1, 2)
 BASE_URL = "https://brasildeunoposte.com.br/resultado-do-jogo-do-bicho-deu-no-poste-{date}/"
 # Ao buscar/atualizar resultados, relê os últimos 7 dias para absorver
@@ -23069,7 +23069,35 @@ class App(tk.Tk):
             side="right", padx=(8, 0)
         )
 
+        self.gen_31_state_frame = ttk.Frame(
+            body, style="Card.TFrame", padding=(9, 7)
+        )
+        state_head = ttk.Frame(
+            self.gen_31_state_frame, style="Card.TFrame"
+        )
+        state_head.pack(fill="x", pady=(0, 5))
+        ttk.Label(
+            state_head,
+            text="ESTADO DO RESET + 3+1",
+            style="Section.TLabel",
+            font=("Segoe UI Semibold", 10),
+        ).pack(side="left")
+        self.gen_31_state_note = ttk.Label(
+            state_head,
+            text="",
+            style="CardMuted.TLabel",
+            wraplength=760,
+        )
+        self.gen_31_state_note.pack(
+            side="left", fill="x", expand=True, padx=(12, 0)
+        )
+        self.gen_31_state_rows = ttk.Frame(
+            self.gen_31_state_frame, style="Card.TFrame"
+        )
+        self.gen_31_state_rows.pack(fill="x")
+
         table = ttk.Frame(body)
+        self.gen_table_frame = table
         table.pack(fill="both", expand=True)
 
         cols = (
@@ -23211,6 +23239,7 @@ class App(tk.Tk):
             kind == "Centena"
             and strategy == "Oficial 3+1"
         )
+        self.generator_hide_31_state()
         dry = (
             kind in ("Centena", "Milhar")
             and strategy == "Seca do Dia 1º"
@@ -23340,7 +23369,8 @@ class App(tk.Tk):
                 text=(
                     "Oficial 3+1: 5 bichos × 4 Centenas. "
                     "3 na principal + 1 na segunda; "
-                    "com congelamento da principal por 1 rodada."
+                    "se a principal congelar, usa 3 da segunda + 1 da terceira "
+                    "até o mesmo bicho reaparecer."
                 )
             )
             return
@@ -23397,6 +23427,159 @@ class App(tk.Tk):
             )
         )
 
+    def generator_hide_31_state(self):
+        frame = getattr(self, "gen_31_state_frame", None)
+        if frame is not None:
+            try:
+                frame.pack_forget()
+            except Exception:
+                pass
+
+    def generator_format_31_event(self, event, action):
+        if not event:
+            return "sem evento ativo"
+
+        raw_date = str(event.get("data") or "")
+        try:
+            date_txt = datetime.strptime(raw_date, "%Y-%m-%d").strftime("%d/%m/%Y")
+        except Exception:
+            date_txt = raw_date or "data não identificada"
+
+        draw_txt = " ".join(
+            part for part in (
+                str(event.get("sorteio") or "").strip(),
+                str(event.get("hora") or "").strip(),
+            )
+            if part
+        )
+        dezenas = [str(v).zfill(2) for v in (event.get("dezenas") or [])]
+        dez_txt = "/".join(dezenas)
+
+        pieces = [f"{action} em {date_txt}"]
+        if draw_txt:
+            pieces.append(draw_txt)
+        if dez_txt:
+            pieces.append(f"dezena(s) {dez_txt}")
+        return " • ".join(pieces)
+
+    def generator_render_31_state(self, generation):
+        self.generator_hide_31_state()
+
+        if (
+            not generation
+            or generation.get("strategy") != "Oficial 3+1"
+            or not generation.get("animals")
+        ):
+            return
+
+        rows_host = getattr(self, "gen_31_state_rows", None)
+        frame = getattr(self, "gen_31_state_frame", None)
+        table = getattr(self, "gen_table_frame", None)
+        if rows_host is None or frame is None or table is None:
+            return
+
+        for child in rows_host.winfo_children():
+            child.destroy()
+
+        previous_draw = generation.get("previous_draw") or {}
+        base_text = "estado reconstruído até a extração-base"
+        if previous_draw:
+            try:
+                d = datetime.strptime(
+                    previous_draw.get("data", ""), "%Y-%m-%d"
+                ).strftime("%d/%m/%Y")
+            except Exception:
+                d = str(previous_draw.get("data") or "")
+            draw_txt = " ".join(
+                part for part in (
+                    str(previous_draw.get("sorteio") or "").strip(),
+                    str(previous_draw.get("hora") or "").strip(),
+                )
+                if part
+            )
+            base_text = f"Estado reconstruído até {draw_txt} • {d}".strip(" •")
+
+        self.gen_31_state_note.configure(
+            text=(
+                base_text
+                + " • principal sai livre = congela • mesmo bicho reaparece = libera"
+            )
+        )
+
+        for animal in generation.get("animals") or []:
+            frozen = bool(animal.get("frozen"))
+            status = "CONGELADA" if frozen else "LIVRE"
+            status_prefix = "[LOCK]" if frozen else "[OK]"
+
+            row = ttk.Frame(
+                rows_host, style="Card.TFrame", padding=(5, 3)
+            )
+            row.pack(fill="x", pady=(0, 2))
+            row.grid_columnconfigure(0, weight=18)
+            row.grid_columnconfigure(1, weight=15)
+            row.grid_columnconfigure(2, weight=28)
+            row.grid_columnconfigure(3, weight=20)
+            row.grid_columnconfigure(4, weight=34)
+
+            ttk.Label(
+                row,
+                text=f"{animal.get('bicho', '')} • G{int(animal.get('grupo') or 0):02d}",
+                style="Card.TLabel",
+                font=("Segoe UI Semibold", 9),
+            ).grid(row=0, column=0, sticky="w", padx=(0, 8))
+
+            ttk.Label(
+                row,
+                text=f"{status_prefix} {status}",
+                style="Card.TLabel",
+                font=("Segoe UI Semibold", 9),
+            ).grid(row=0, column=1, sticky="w", padx=(0, 8))
+
+            rank_text = (
+                f"Principal {animal.get('principal')} • 2ª {animal.get('segunda')} "
+                f"• 3ª {animal.get('terceira')}"
+            )
+            if animal.get("principal_tied"):
+                rank_text += " • empate técnico"
+            ttk.Label(
+                row,
+                text=rank_text,
+                style="CardMuted.TLabel",
+            ).grid(row=0, column=2, sticky="w", padx=(0, 8))
+
+            ttk.Label(
+                row,
+                text=(
+                    f"Jogo: 3× {animal.get('main_dezena')} + "
+                    f"1× {animal.get('extra_dezena')}"
+                ),
+                style="Card.TLabel",
+                font=("Segoe UI Semibold", 9),
+            ).grid(row=0, column=3, sticky="w", padx=(0, 8))
+
+            if frozen:
+                event_text = self.generator_format_31_event(
+                    animal.get("freeze_trigger"), "congelada"
+                )
+            else:
+                released = animal.get("freeze_released_by")
+                event_text = (
+                    self.generator_format_31_event(released, "liberada")
+                    if released
+                    else "sem congelamento ativo"
+                )
+
+            ttk.Label(
+                row,
+                text=event_text,
+                style="CardMuted.TLabel",
+                wraplength=420,
+            ).grid(row=0, column=4, sticky="w")
+
+        frame.pack(
+            fill="x", pady=(0, 5), before=table
+        )
+
     def generator_resolve_groups(self):
         if self.gen_source.get() == "Escolher manualmente":
             if not self.gen_manual_groups:
@@ -23438,6 +23621,7 @@ class App(tk.Tk):
 
     def generator_generate(self):
         try:
+            self.generator_hide_31_state()
             kind = self.gen_kind.get()
             strategy = self.gen_strategy.get()
 
@@ -23652,6 +23836,9 @@ class App(tk.Tk):
 
                 self.gen_summary_label.configure(
                     text=summary
+                )
+                self.generator_render_31_state(
+                    self.gen_current_generation
                 )
 
             else:
