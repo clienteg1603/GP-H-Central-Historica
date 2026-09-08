@@ -7,4 +7,4 @@ windows_package/
 *.log
 *.tmp
 *.bak
-# build-trigger v0.37.1 limpeza estrutural
+# build-trigger v0.37.2 padrao global interface
