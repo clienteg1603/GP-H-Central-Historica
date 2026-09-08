@@ -1,0 +1,89 @@
+name: Aplicar regra Reset 3+1 v0.36.3
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/patch-v0.36.3.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Aplicar patch
+        run: python .github/scripts/patch_v0363.py
+
+      - name: Validar Python e regra oficial
+        run: |
+          python -m py_compile source/gph_central.py
+          python - <<'PY'
+          from pathlib import Path
+          import ast
+
+          text = Path('source/gph_central.py').read_text(encoding='utf-8')
+          assert 'APP_VERSION = "0.36.3"' in text
+          assert 'def centena_31_freeze_state' in text
+          assert 'persistente_ate_reaparicao_do_bicho' in text
+          assert 'frozen = principal["numero"] in previous_dezenas' not in text
+          ast.parse(text)
+          print('Validacao estrutural OK')
+          PY
+
+      - name: Testar máquina de estado sem olhar o futuro
+        run: |
+          python - <<'PY'
+          import importlib.util
+          from pathlib import Path
+
+          spec = importlib.util.spec_from_file_location('gph', Path('source/gph_central.py'))
+          mod = importlib.util.module_from_spec(spec)
+          spec.loader.exec_module(mod)
+
+          def draw(day, hour, prizes):
+              return {'data': day, 'sorteio': 'TESTE', 'hora': hour, 'prizes': prizes}
+
+          def prize(group, dezena):
+              return {'grupo': group, 'dezena': dezena}
+
+          draws = [
+              draw('2026-01-01','09:00',[prize(1,'01')]),
+              draw('2026-01-01','11:00',[prize(10,'40')]),  # livre + principal -> congela
+              draw('2026-01-01','14:00',[prize(5,'17')]),   # sem coelho -> continua
+              draw('2026-01-01','16:00',[prize(10,'39')]),  # coelho reaparece -> descongela
+              draw('2026-01-01','18:00',[prize(10,'40')]),  # livre + principal -> congela
+              draw('2026-01-01','21:00',[prize(10,'40')]),  # já congelada + coelho -> descongela
+          ]
+
+          db = object.__new__(mod.Database)
+          db._draws_in_order = lambda: draws
+
+          s1 = db.centena_31_freeze_state(10, '40', previous_draw=draws[1])
+          assert s1['frozen'] is True
+
+          s2 = db.centena_31_freeze_state(10, '40', previous_draw=draws[2])
+          assert s2['frozen'] is True, 'Congelamento deve persistir sem o bicho reaparecer'
+
+          s3 = db.centena_31_freeze_state(10, '40', previous_draw=draws[3])
+          assert s3['frozen'] is False, 'Coelho por outra dezena deve descongelar'
+
+          s4 = db.centena_31_freeze_state(10, '40', previous_draw=draws[4])
+          assert s4['frozen'] is True
+
+          s5 = db.centena_31_freeze_state(10, '40', previous_draw=draws[5])
+          assert s5['frozen'] is False, 'Principal repetida enquanto congelada deve descongelar'
+
+          print('Maquina de estado 3+1 OK')
+          PY
+
+      - name: Publicar source
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add source/gph_central.py source/DOCUMENTACAO_GP-H.txt source/ATUALIZACOES_PROGRAMA_v0.35.txt
+          git commit -m "GP-H v0.36.3: congelamento persistente no Reset 3+1"
+          git push
