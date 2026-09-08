@@ -1,0 +1,142 @@
+name: Histórico Concentrado v0.39.0
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/patch-v0.39.0.yml"
+      - ".github/scripts/patch_v0390.py"
+
+permissions:
+  contents: write
+
+jobs:
+  patch-and-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Aplicar v0.39.0
+        run: python .github/scripts/patch_v0390.py
+
+      - name: Validar sintaxe
+        run: python -m py_compile source/gph_central.py
+
+      - name: Testar Histórico v0.1 e fechamento concentrado
+        run: |
+          python - <<'PY'
+          import importlib.util
+          from pathlib import Path
+
+          path=Path('source/gph_central.py')
+          spec=importlib.util.spec_from_file_location('gph',path)
+          mod=importlib.util.module_from_spec(spec)
+          spec.loader.exec_module(mod)
+          Database=mod.Database
+
+          # ---------- Teste do ranking antigo: repetição conta novamente.
+          class Fake:
+              method_historico_concentrado_v01 = Database.method_historico_concentrado_v01
+              def get_draw(self, d, s, h):
+                  return {'data':d,'sorteio':s,'hora':h,'prizes':[
+                      {'grupo':20},{'grupo':20},{'grupo':25},{'grupo':13},{'grupo':12}
+                  ]}
+              def historical_pulls(self, source, state='Geral', before_draw_key=None):
+                  tables={
+                      20:[(19,.31,1.5),(25,.27,1.2),(12,.22,1.1)],
+                      25:[(19,.34,1.4),(23,.26,1.1),(20,.21,1.0)],
+                      13:[(20,.39,1.5),(25,.31,1.3),(8,.24,1.0)],
+                      12:[(19,.29,1.2),(11,.26,1.1),(4,.20,1.0)],
+                  }
+                  ranking=[]
+                  for g,p,l in tables[source]:
+                      ranking.append({'grupo':g,'bicho':mod.BICHOS[g],'prob':p,'lift':l,'hit_draws':10})
+                  return {'state':'Geral','support':30,'ranking':ranking}
+
+          report=Fake().method_historico_concentrado_v01('2026-09-08','PT','14h',top_n=8)
+          by_group={r['grupo']:r for r in report['ranking']}
+          assert by_group[19]['indication_count'] == 4, by_group[19]
+          # G19 recebe Peru duas vezes + Vaca + Elefante.
+          assert by_group[25]['indication_count'] == 3, by_group[25]
+          assert report['repeated_sources_count_again'] is True
+          assert report['lookahead_safe'] is True
+
+          # ---------- Ranking artificial A>B>C>D>E>F para testar fechamento.
+          ranking=[]
+          for i,g in enumerate(range(1,7),start=1):
+              ranking.append({
+                  'grupo':g,'bicho':mod.BICHOS[g], 'rank':i,
+                  'indication_count':10-i, 'sum_prob':1.0-(i*.05), 'avg_lift':1.5-(i*.05)
+              })
+
+          # 2 Duplas entre 3 bichos => AB, AC.
+          b=Database.generate_historical_concentrated_bundle(
+              ranking,3,{'Dupla de Grupo':2,'Terno de Grupo':0,'Quadra de Grupo':0,'Quina de Grupo':0}
+          )
+          nums=[r['numero'] for r in b['bundle_generations'][0]['rows']]
+          assert nums == ['01-02','01-03'], nums
+
+          # 3 Duplas => AB, AC, BC.
+          b=Database.generate_historical_concentrated_bundle(
+              ranking,3,{'Dupla de Grupo':3}
+          )
+          nums=[r['numero'] for r in b['bundle_generations'][0]['rows']]
+          assert nums == ['01-02','01-03','02-03'], nums
+
+          # 5 Ternos entre 5 => estrutura histórica congelada.
+          b=Database.generate_historical_concentrated_bundle(
+              ranking,5,{'Terno de Grupo':5}
+          )
+          nums=[r['numero'] for r in b['bundle_generations'][0]['rows']]
+          assert nums == ['01-02-03','01-02-04','01-03-04','02-03-04','01-02-05'], nums
+
+          # 3 Quinas: 6 bichos é suficiente e gera 3 distintas.
+          assert Database.minimum_animals_for_combinations(5,3,max_animals=15) == 6
+          b=Database.generate_historical_concentrated_bundle(
+              ranking,6,{'Quina de Grupo':3}
+          )
+          nums=[r['numero'] for r in b['bundle_generations'][0]['rows']]
+          assert nums == ['01-02-03-04-05','01-02-03-04-06','01-02-03-05-06'], nums
+          assert len(nums)==len(set(nums))==3
+
+          # 5 Ternos não cabem em 4 bichos; mínimo correto é 5.
+          assert Database.minimum_animals_for_combinations(3,5,max_animals=15) == 5
+          try:
+              Database.generate_historical_concentrated_bundle(ranking,4,{'Terno de Grupo':5})
+          except ValueError as exc:
+              assert 'pelo menos 5 bichos' in str(exc), str(exc)
+          else:
+              raise AssertionError('Pedido impossível não foi bloqueado')
+
+          print('TESTES HISTÓRICO CONCENTRADO OK')
+          PY
+
+      - name: Validar preservação e marcadores
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import ast
+          text=Path('source/gph_central.py').read_text(encoding='utf-8')
+          ast.parse(text)
+          assert 'APP_VERSION = "0.39.0"' in text
+          assert 'def method_historico_concentrado_v01(' in text
+          assert 'def generate_historical_concentrated_bundle(' in text
+          assert '("Grupo", "Fechamento"): "Fechamento de Grupo"' in text
+          assert 'Histórico • Concentrado' in text
+          assert 'bundle_generations' in text
+          assert 'def generate_centenas_3plus1(' in text
+          assert 'def centena_31_freeze_state(' in text
+          assert 'def method_convergencia_g5(' in text
+          print('VALIDAÇÃO ESTRUTURAL v0.39.0 OK')
+          PY
+
+      - name: Registrar v0.39.0
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add source/gph_central.py source/DOCUMENTACAO_GP-H.txt
+          git diff --cached --stat
+          git commit -m "v0.39.0 histórico concentrado de grupos"
+          git push origin main
