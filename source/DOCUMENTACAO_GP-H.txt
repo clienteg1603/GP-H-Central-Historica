@@ -1,3 +1,11 @@
+REVISÃO v0.36.6 — GERADOR ABSORVIDO POR JOGAR
+- A aba Gerador é removida do menu lateral por ter se tornado redundante.
+- Jogar passa a ser o ponto oficial e único da interface para gerar, revisar e registrar apostas.
+- Ctrl+G, a rota interna antiga do Gerador e open_game_generator redirecionam para Jogar, preservando compatibilidade.
+- O atalho da tela Início para preparar o próximo jogo agora abre Jogar e gera o Reset + 3+1 diretamente ali.
+- O motor e as rotinas internas de geração permanecem preservados; foi removida apenas a porta de entrada visual obsoleta.
+- Nenhuma fórmula, ranking, seleção dos 5 bichos, congelamento, histórico, bilhete ou financeiro foi alterado.
+
 REVISÃO v0.36.5 — RESET + 3+1 / ESTADO VISÍVEL EM JOGAR
 - O painel auditável do Reset + 3+1 passa a aparecer também na tela Jogar, entre Aposta e Palpites, onde a aposta oficial é realmente montada.
 - Para cada um dos 5 bichos mostra LIVRE/CONGELADA, principal, 2ª, 3ª, regra efetivamente aplicada 3×+1× e evento que congelou ou liberou o estado.
@@ -75,7 +83,7 @@ REVISÃO v0.35.0 — LABORATÓRIO SOMBRA VISÍVEL / COLETA AUTOMÁTICA
 - O sistema de atualização online, backup e rollback permanece igual ao validado na v0.34.2.
 
 GP-H CENTRAL HISTÓRICA
-VERSÃO ATUAL: v0.36.5
+VERSÃO ATUAL: v0.36.6
 =============================================
 
 OBJETIVO

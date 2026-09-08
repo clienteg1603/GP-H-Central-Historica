@@ -1,4 +1,4 @@
-GP-H CENTRAL HISTÓRICA v0.36.5 — ATUALIZAÇÕES DO PROGRAMA
+GP-H CENTRAL HISTÓRICA v0.36.6 — ATUALIZAÇÕES DO PROGRAMA
 
 Nesta versão o cliente de atualização está pronto para um servidor HTTPS estático.
 
@@ -83,3 +83,9 @@ Novidades v0.36.5:
 - Estado auditável do Reset + 3+1 também na tela Jogar.
 - Mostra os 5 bichos, LIVRE/CONGELADA, principal/2ª/3ª, aplicação 3×+1× e evento do estado antes da aposta.
 - Nenhuma fórmula do método oficial foi alterada.
+
+Novidades v0.36.6:
+- Gerador removido do menu lateral; a geração de apostas fica concentrada em Jogar.
+- Rotas/atalhos antigos do Gerador redirecionam para Jogar.
+- Preparar próximo jogo na Início agora usa diretamente o fluxo de Jogar.
+- Motor interno preservado e nenhuma fórmula alterada.

@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-GP-H Central Histórica v0.36.5
+GP-H Central Histórica v0.36.6
 Pesquisa e manutenção do histórico 2026 do Deu no Poste / PT-Rio.
 
 Escopo desta versão:
@@ -86,7 +86,7 @@ def write_crash_log(exc: BaseException):
 
 
 APP_NAME = "GP-H Central Histórica"
-APP_VERSION = "0.36.5"
+APP_VERSION = "0.36.6"
 START_DATE = date(2026, 1, 2)
 BASE_URL = "https://brasildeunoposte.com.br/resultado-do-jogo-do-bicho-deu-no-poste-{date}/"
 # Ao buscar/atualizar resultados, relê os últimos 7 dias para absorver
@@ -12952,7 +12952,7 @@ class App(tk.Tk):
         )
         self.bind_all(
             "<Control-g>",
-            lambda _e: self.show_generator_page(),
+            lambda _e: self.show_play_page(),
         )
         self.bind_all(
             "<Control-r>",
@@ -13959,7 +13959,7 @@ class App(tk.Tk):
 
         self._activate_animal_pack(self.animal_pack_name)
 
-        for key in ("home","ticket","results","search","statistics","pulls","methods","generator","database","animals"):
+        for key in ("home","ticket","results","search","statistics","pulls","methods","database","animals"):
             normal = ICON_ASSET_DIR / f"{key}.png"
             active = ICON_ASSET_DIR / f"{key}_active.png"
             try:
@@ -14262,7 +14262,6 @@ class App(tk.Tk):
             ("Estatísticas", self.show_statistics_page, "statistics"),
             ("Puxadas", self.show_pulls_page, "pulls"),
             ("Métodos", self.show_methods_page, "methods"),
-            ("Gerador", self.show_generator_page, "generator"),
         ]:
             self._add_nav_button(label, command, secondary=True, icon_key=icon_key)
 
@@ -14960,16 +14959,8 @@ class App(tk.Tk):
                     "Não foi possível determinar a próxima rodada operacional."
                 )
 
-            self.show_generator_page()
-            self.gen_source.set("Método oficial — Reset")
-            self.gen_num_animals.set("5")
-            self.gen_kind.set("Centena")
-            self.gen_strategy.set("Oficial 3+1")
-            self.gen_scope.set("1º–5º")
-            self.gen_total.set("20")
-
-            self.generator_refresh_control_states()
-            self.generator_generate()
+            self.show_play_page()
+            self.play_generate()
 
             target_date = datetime.strptime(
                 target["data"], "%Y-%m-%d"
@@ -14979,7 +14970,7 @@ class App(tk.Tk):
                 text=(
                     f"Próximo jogo preparado para "
                     f"{target['sorteio']} {target['hora']} • {target_date}. "
-                    "Confira e congele quando estiver satisfeito."
+                    "Confira os palpites e adicione ao bilhete quando estiver satisfeito."
                 )
             )
         except Exception as exc:
@@ -22968,6 +22959,10 @@ class App(tk.Tk):
             MethodsTechnicalDialog(self, self.method_current_result)
 
     def show_generator_page(self):
+        """Compatibilidade: a antiga tela Gerador foi absorvida por Jogar."""
+        return self.show_play_page()
+
+        # Implementação legada preservada internamente por segurança do motor.
         self._set_active_nav("Gerador")
         self._clear_content()
         self._page = "generator"
@@ -24468,7 +24463,7 @@ class App(tk.Tk):
         elif self._page == "methods":
             self.show_methods_page()
         elif self._page == "generator":
-            self.show_generator_page()
+            self.show_play_page()
         elif self._page == "play":
             # Nunca destruir uma montagem em andamento só para refletir dados externos.
             if getattr(self, "play_generation", None) or getattr(self, "play_ticket_draft", None):
@@ -24495,7 +24490,8 @@ class App(tk.Tk):
         self.show_methods_page()
 
     def open_game_generator(self):
-        self.show_generator_page()
+        # Compatibilidade com chamadas antigas: geração oficial vive em Jogar.
+        self.show_play_page()
 
     def open_manual(self):
         ManualDialog(self, self.db, self.after_manual_saved)
