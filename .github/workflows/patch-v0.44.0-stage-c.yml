@@ -1,0 +1,59 @@
+name: GP-H Etapa C Decisão Adaptativa v0.44.0
+
+on:
+  push:
+    paths:
+      - '.github/workflows/patch-v0.44.0-stage-c.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  patch-test-commit:
+    runs-on: windows-latest
+    steps:
+      - name: Baixar repositório
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Preparar Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Aplicar Etapa C
+        run: python .github/scripts/patch_v0440_stage_c.py
+
+      - name: Validar sintaxe
+        run: python -m py_compile source/gph_central.py
+
+      - name: Testar adaptação sintética
+        run: python .github/scripts/test_v0440_stage_c.py
+
+      - name: Validar invariantes
+        shell: pwsh
+        run: |
+          $t = Get-Content source/gph_central.py -Raw -Encoding UTF8
+          if ($t -notmatch 'APP_VERSION = "0.44.0"') { throw 'Versão incorreta' }
+          if ($t -notmatch 'def decision_adaptive_context') { throw 'Motor adaptativo ausente' }
+          if ($t -notmatch 'def decision_adaptive_audit_summary') { throw 'Auditoria adaptativa ausente' }
+          if ($t -notmatch 'DECISÃO ADAPTATIVA — ETAPA C') { throw 'Painel Etapa C ausente' }
+          if ($t -notmatch 'DECISION_ADAPTIVE_SHRINK_V1') { throw 'Modelo adaptativo ausente' }
+          if ($t -notmatch 'max_adjustment": max_adjustment') { throw 'Limite de ajuste não registrado' }
+          if ($t -notmatch 'changes_official_game": False') { throw 'Proteção do jogo oficial ausente' }
+          if ($t -notmatch 'payload = self.decision_adaptive_context') { throw 'Etapa C não integrada ao congelamento' }
+          $d = Get-Content source/DOCUMENTACAO_GP-H.txt -Raw -Encoding UTF8
+          if (-not $d.StartsWith('REVISÃO v0.44.0')) { throw 'Documentação não atualizada' }
+          Write-Host 'VALIDAÇÃO v0.44.0 ETAPA C OK'
+
+      - name: Registrar v0.44.0
+        shell: pwsh
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add source/gph_central.py source/DOCUMENTACAO_GP-H.txt
+          git diff --cached --stat
+          git commit -m "v0.44.0 Etapa C Decisao Adaptativa"
+          git push origin main
