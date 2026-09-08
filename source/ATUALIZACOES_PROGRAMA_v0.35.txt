@@ -1,4 +1,4 @@
-GP-H CENTRAL HISTÓRICA v0.36.0 — ATUALIZAÇÕES DO PROGRAMA
+GP-H CENTRAL HISTÓRICA v0.36.3 — ATUALIZAÇÕES DO PROGRAMA
 
 Nesta versão o cliente de atualização está pronto para um servidor HTTPS estático.
 
@@ -68,3 +68,8 @@ Novidades v0.34.0:
 - Configuração de servidor pela própria tela Base / Configurações.
 - Canais Estável e Teste continuam separados.
 - Dados do usuário permanecem fora da instalação em %LOCALAPPDATA%.
+
+Novidades v0.36.3:
+- Reset + 3+1 passa a usar congelamento persistente da dezena principal.
+- Principal sai livre: congela; enquanto congelada, 3 da segunda + 1 da terceira.
+- O mesmo bicho reaparece: descongela, mesmo que a principal seja a dezena que reapareceu.

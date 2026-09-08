@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-GP-H Central Histórica v0.36.2
+GP-H Central Histórica v0.36.3
 Pesquisa e manutenção do histórico 2026 do Deu no Poste / PT-Rio.
 
 Escopo desta versão:
@@ -86,7 +86,7 @@ def write_crash_log(exc: BaseException):
 
 
 APP_NAME = "GP-H Central Histórica"
-APP_VERSION = "0.36.2"
+APP_VERSION = "0.36.3"
 START_DATE = date(2026, 1, 2)
 BASE_URL = "https://brasildeunoposte.com.br/resultado-do-jogo-do-bicho-deu-no-poste-{date}/"
 # Ao buscar/atualizar resultados, relê os últimos 7 dias para absorver
@@ -720,11 +720,11 @@ METHOD_GUIDE = [
     {
         "name": "Oficial • Reset + 3+1",
         "status": "OFICIAL — 20 Centenas",
-        "base": "O Reset escolhe exatamente 5 bichos. O sorteio imediatamente anterior é usado para a regra de congelamento da dezena principal.",
+        "base": "O Reset escolhe exatamente 5 bichos. O congelamento da dezena principal é um estado persistente do bicho, reconstruído até a extração-base sem olhar o futuro.",
         "history": "A lógica interna 3+1 ranqueia as quatro dezenas e as Centenas pelo histórico 1º–5º. Essa definição interna permanece fixa mesmo que você escolha apostar o bilhete em 1º ou 1º–5º.",
-        "does": "Para cada bicho: normalmente usa 3 Centenas da dezena principal + 1 da segunda. Se a principal apareceu no sorteio anterior, ela descansa uma rodada e passa a usar 3 da segunda + 1 da terceira.",
+        "does": "Para cada bicho: normalmente usa 3 Centenas da dezena principal + 1 da segunda. Quando a principal aparece enquanto está livre, ela congela. Enquanto congelada, usa 3 da segunda + 1 da terceira e permanece assim até o mesmo bicho aparecer novamente; essa nova aparição descongela a principal.",
         "output": "4 Centenas por bicho × 5 bichos = 20 Centenas.",
-        "note": "A colocação do bilhete agora é livre; isso não muda silenciosamente a fórmula interna do 3+1.",
+        "note": "Estado oficial: principal saiu → congela; congelada + mesmo bicho saiu novamente → descongela. A colocação do bilhete continua livre e não altera a fórmula interna.",
     },
     {
         "name": "Oficial • Reset combinações",
@@ -5471,6 +5471,87 @@ class Database:
         )
         return [r for r in ranking if r["numero"][-2:] == dezena]
 
+    def centena_31_freeze_state(self, group: int, principal_dezena: str, previous_draw=None):
+        """Reconstrói o estado oficial de congelamento do 3+1 até a extração-base.
+
+        Máquina de estado por bicho/dezena principal:
+        - livre + principal aparece -> congela;
+        - congelada + o mesmo bicho aparece novamente -> descongela;
+        - congelada + o bicho não aparece -> continua congelada.
+
+        Cada extração conta como um único evento, mesmo que o bicho apareça mais
+        de uma vez entre os cinco prêmios. Se o bicho reaparecer enquanto já
+        estava congelado, a reaparição apenas libera o estado; mesmo que a
+        principal esteja entre os prêmios dessa extração, ela não recongela no
+        mesmo evento.
+        """
+        group = int(group)
+        principal_dezena = str(principal_dezena).zfill(2)
+
+        if previous_draw is None:
+            previous_draw = self.latest_operational_draw()
+        if previous_draw is None:
+            raise ValueError("Não há extração-base para reconstruir o congelamento 3+1.")
+
+        cutoff = (
+            previous_draw.get("data"),
+            previous_draw.get("sorteio"),
+            previous_draw.get("hora"),
+        )
+        draws = self._draws_in_order()
+        cutoff_idx = next(
+            (
+                i for i, draw in enumerate(draws)
+                if (draw.get("data"), draw.get("sorteio"), draw.get("hora")) == cutoff
+            ),
+            None,
+        )
+        if cutoff_idx is None:
+            raise ValueError("A extração-base não foi encontrada para reconstruir o congelamento 3+1.")
+
+        frozen = False
+        trigger = None
+        released_by = None
+
+        for draw in draws[:cutoff_idx + 1]:
+            group_prizes = [
+                p for p in draw.get("prizes", [])
+                if int(p.get("grupo") or 0) == group
+            ]
+            if not group_prizes:
+                continue
+
+            event = {
+                "data": draw.get("data"),
+                "sorteio": draw.get("sorteio"),
+                "hora": draw.get("hora"),
+                "dezenas": [str(p.get("dezena") or "").zfill(2) for p in group_prizes],
+            }
+
+            if frozen:
+                frozen = False
+                released_by = event
+                trigger = None
+                continue
+
+            if any(str(p.get("dezena") or "").zfill(2) == principal_dezena for p in group_prizes):
+                frozen = True
+                trigger = event
+                released_by = None
+
+        return {
+            "grupo": group,
+            "principal": principal_dezena,
+            "frozen": frozen,
+            "trigger": trigger,
+            "released_by": released_by,
+            "cutoff": {
+                "data": cutoff[0],
+                "sorteio": cutoff[1],
+                "hora": cutoff[2],
+            },
+        }
+
     def generate_centenas_3plus1(
         self,
         groups: list[int],
@@ -5484,9 +5565,10 @@ class Database:
         Para cada um dos 5 bichos:
         - ordena as 4 dezenas pela frequência histórica 1º–5º;
         - normal: 3 Centenas na dezena principal + 1 na segunda;
-        - se a dezena principal apareceu em qualquer prêmio do sorteio
-          imediatamente anterior, ela fica congelada por uma rodada:
-          3 Centenas na segunda + 1 na terceira;
+        - quando a principal aparece enquanto está livre, ela congela;
+        - enquanto congelada: 3 Centenas na segunda + 1 na terceira;
+        - o congelamento persiste até o mesmo bicho aparecer novamente;
+        - essa nova aparição do bicho descongela a principal;
         - dentro da dezena escolhida, usa as Centenas historicamente mais fortes.
 
         Empates de frequência entre dezenas são mantidos transparentes nos
@@ -5536,7 +5618,12 @@ class Database:
                 principal["ocorrencias"] == segunda["ocorrencias"]
             )
 
-            frozen = principal["numero"] in previous_dezenas
+            freeze_state = self.centena_31_freeze_state(
+                g,
+                principal["numero"],
+                previous_draw=previous_draw,
+            )
+            frozen = bool(freeze_state.get("frozen"))
 
             if frozen:
                 main_dez = segunda["numero"]
@@ -5573,6 +5660,9 @@ class Database:
                 "terceira_ocorrencias": terceira["ocorrencias"],
                 "principal_tied": principal_tied,
                 "frozen": frozen,
+                "freeze_trigger": freeze_state.get("trigger"),
+                "freeze_released_by": freeze_state.get("released_by"),
+                "freeze_rule": "persistente_ate_reaparicao_do_bicho",
                 "main_dezena": main_dez,
                 "extra_dezena": extra_dez,
             }
@@ -5590,6 +5680,7 @@ class Database:
                     "rank_no_bicho": pos,
                     "rank_bicho": rank_group,
                     "frozen": frozen,
+                    "freeze_rule": "persistente_ate_reaparicao_do_bicho",
                     "principal": principal["numero"],
                     "segunda": segunda["numero"],
                     "terceira": terceira["numero"],
@@ -5626,6 +5717,7 @@ class Database:
             "animals": animals,
             "previous_draw": previous_draw,
             "previous_dezenas": sorted(previous_dezenas),
+            "freeze_rule": "principal_sai_congela__mesmo_bicho_reaparece_descongela",
         }
 
 

@@ -1,3 +1,14 @@
+REVISÃO v0.36.3 — RESET + 3+1 / CONGELAMENTO PERSISTENTE
+- Regra oficial corrigida: a dezena principal não descansa apenas uma rodada; o congelamento passa a ser um estado persistente.
+- Estado livre + dezena principal aparece em qualquer prêmio da extração: congela.
+- Enquanto congelada, o gerador usa 3 Centenas da 2ª dezena mais forte + 1 da 3ª.
+- O congelamento permanece mesmo que passem outras extrações sem o bicho aparecer.
+- Quando o mesmo bicho aparece novamente em uma extração, a principal é descongelada, independentemente de qual das quatro dezenas do bicho saiu.
+- Se a principal reaparece enquanto já estava congelada, essa reaparição também descongela; não recongela no mesmo evento.
+- Quando livre, o gerador volta a 3 Centenas da principal + 1 da 2ª.
+- A reconstrução respeita a extração-base e não olha resultados posteriores, preservando o uso prospectivo/sombra.
+- Nenhum seletor de bicho ou outro método foi alterado.
+
 REVISÃO v0.36.0 — DECISÃO ÚNICA / ROLAMENTO INTELIGENTE GLOBAL
 - Decisão e Laboratório Sombra deixam de ser páginas paralelas: o Laboratório passa a ser uma seção da Central de Decisão.
 - O item Laboratório é removido do menu lateral para eliminar duplicidade e dúvida sobre onde analisar a rodada.
@@ -49,7 +60,7 @@ REVISÃO v0.35.0 — LABORATÓRIO SOMBRA VISÍVEL / COLETA AUTOMÁTICA
 - O sistema de atualização online, backup e rollback permanece igual ao validado na v0.34.2.
 
 GP-H CENTRAL HISTÓRICA
-VERSÃO ATUAL: v0.36.0
+VERSÃO ATUAL: v0.36.3
 =============================================
 
 OBJETIVO
