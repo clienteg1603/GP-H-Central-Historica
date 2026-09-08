@@ -7,4 +7,4 @@ windows_package/
 *.log
 *.tmp
 *.bak
-# build-trigger v0.42.0 Walk-Forward rigoroso do GP-H Meta
+# build-trigger v0.42.1 isolamento do Walk-Forward Meta
