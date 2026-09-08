@@ -14,7 +14,7 @@ on:
       notes:
         description: Notas exibidas pela Central
         required: true
-        default: "Teste da atualização real pela internet"
+        default: "Teste real de atualização v0.34.1 para v0.34.2"
         type: string
 
 permissions:
@@ -26,7 +26,7 @@ jobs:
     env:
       CHANNEL: ${{ inputs.channel }}
       RELEASE_NOTES: ${{ inputs.notes }}
-      SOURCE_ZIP: GP-H_Central_Historica_v0.34.1_Teste_GitHub.zip
+      SOURCE_ZIP: GP-H_Central_Historica_v0.34.2_Teste_GitHub.zip
 
     steps:
       - name: Baixar repositório
