@@ -1,4 +1,4 @@
-GP-H CENTRAL HISTÓRICA v0.35.1 — ATUALIZAÇÕES DO PROGRAMA
+GP-H CENTRAL HISTÓRICA v0.35.2 — ATUALIZAÇÕES DO PROGRAMA
 
 Nesta versão o cliente de atualização está pronto para um servidor HTTPS estático.
 
@@ -8,6 +8,13 @@ Fluxo:
 3. O conteúdo de release_server é publicado em um endereço HTTPS fixo.
 4. A Central consulta somente update_manifest.json.
 5. O pacote é baixado, conferido por SHA-256, instalado pelo GP-H_Updater e a versão anterior fica disponível para rollback.
+
+Novidades v0.35.2:
+- Laboratório Sombra passa a mostrar a leitura atual já congelada da próxima rodada.
+- Exibe os 5 bichos atuais de Reset Cobertura, Puxada Combinada e Similaridade.
+- Mostra convergência transparente entre os métodos disponíveis, sem criar desempates artificiais.
+- Exibe separadamente a Seca do Dia focada exclusivamente no 1º prêmio.
+- Nenhum método, fórmula ou jogo oficial foi alterado.
 
 Novidades v0.35.1:
 - Busca/atualização de resultados passa a reler os últimos 7 dias em vez de 30.

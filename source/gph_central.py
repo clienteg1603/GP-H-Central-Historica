@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-GP-H Central Histórica v0.35.1
+GP-H Central Histórica v0.35.2
 Pesquisa e manutenção do histórico 2026 do Deu no Poste / PT-Rio.
 
 Escopo desta versão:
@@ -86,7 +86,7 @@ def write_crash_log(exc: BaseException):
 
 
 APP_NAME = "GP-H Central Histórica"
-APP_VERSION = "0.35.1"
+APP_VERSION = "0.35.2"
 START_DATE = date(2026, 1, 2)
 BASE_URL = "https://brasildeunoposte.com.br/resultado-do-jogo-do-bicho-deu-no-poste-{date}/"
 # Ao buscar/atualizar resultados, relê os últimos 7 dias para absorver
@@ -20557,6 +20557,95 @@ class App(tk.Tk):
             style="CardMuted.TLabel", wraplength=860,
         ).grid(row=2,column=0,sticky="w")
         ttk.Label(summary, text=f"Escopo {scope} • janela até {window} rodadas", style="CardMuted.TLabel").grid(row=0,column=1,sticky="e",padx=(15,0))
+
+        # v0.35.2 — leitura atual congelada para a próxima rodada.
+        # Apenas apresenta os sinais já gravados prospectivamente; não altera métodos.
+        payload_now = current.get("payload") or {}
+        current_box = ttk.Frame(host, style="Card.TFrame", padding=10)
+        current_box.pack(fill="x", pady=(0,8))
+        ttk.Label(current_box, text="LEITURA ATUAL CONGELADA", style="CardTitle.TLabel").pack(anchor="w")
+        ttk.Label(
+            current_box,
+            text="Sinais que já estavam congelados para esta rodada antes do resultado. A convergência abaixo é somente contagem transparente entre métodos disponíveis.",
+            style="CardMuted.TLabel", wraplength=1050,
+        ).pack(anchor="w", pady=(2,6))
+
+        def _shadow_fmt_groups(values):
+            out=[]
+            for raw in values or []:
+                try:
+                    g=int(raw)
+                except Exception:
+                    continue
+                if 1 <= g <= 25:
+                    out.append(f"{g:02d} {BICHOS.get(g, str(g)).title()}")
+            return " • ".join(out) if out else "Sem leitura disponível"
+
+        bichos_now = payload_now.get("bichos") or {}
+        method_sets = []
+        for method_name in ("Reset Cobertura", "Puxada Combinada", "Similaridade"):
+            method_payload = bichos_now.get(method_name) or {}
+            groups_now = []
+            for raw in method_payload.get("groups") or []:
+                try:
+                    g=int(raw)
+                except Exception:
+                    continue
+                if 1 <= g <= 25 and g not in groups_now:
+                    groups_now.append(g)
+            groups_now = groups_now[:5]
+            if groups_now:
+                method_sets.append((method_name, set(groups_now)))
+                ttk.Label(
+                    current_box,
+                    text=f"{method_name}: {_shadow_fmt_groups(groups_now)}",
+                    style="Card.TLabel", wraplength=1050, justify="left",
+                ).pack(anchor="w", pady=(1,0))
+            else:
+                ttk.Label(
+                    current_box,
+                    text=f"{method_name}: Sem leitura disponível",
+                    style="CardMuted.TLabel", wraplength=1050, justify="left",
+                ).pack(anchor="w", pady=(1,0))
+
+        convergence = Counter()
+        for _method_name, group_set in method_sets:
+            convergence.update(group_set)
+        shared = sorted(
+            ((g,c) for g,c in convergence.items() if c >= 2),
+            key=lambda item: (-item[1], item[0]),
+        )
+        available_methods = len(method_sets)
+        if shared:
+            conv_text = " • ".join(
+                f"{g:02d} {BICHOS.get(g, str(g)).title()} ({count}/{available_methods})"
+                for g,count in shared
+            )
+        elif available_methods >= 2:
+            conv_text = "Nenhum bicho apareceu em pelo menos 2 métodos nesta leitura."
+        else:
+            conv_text = "Ainda não há métodos suficientes disponíveis para medir convergência."
+        ttk.Label(
+            current_box,
+            text=f"Convergência: {conv_text}",
+            style="CardMuted.TLabel", wraplength=1050, justify="left",
+        ).pack(anchor="w", pady=(5,0))
+
+        dry_now = ((payload_now.get("seca_1p") or {}).get("Seca do Dia 1º") or {})
+        dry_groups_now = []
+        for raw in dry_now.get("groups") or []:
+            try:
+                g=int(raw)
+            except Exception:
+                continue
+            if 1 <= g <= 25 and g not in dry_groups_now:
+                dry_groups_now.append(g)
+        ttk.Label(
+            current_box,
+            text=f"Seca do Dia • 1º prêmio: {_shadow_fmt_groups(dry_groups_now[:5])}",
+            style="Card.TLabel" if dry_groups_now else "CardMuted.TLabel",
+            wraplength=1050, justify="left",
+        ).pack(anchor="w", pady=(5,0))
 
         # Três blocos principais: Centenas, Puxadas/Bichos e Seca 1º.
         cards = ttk.Frame(host)

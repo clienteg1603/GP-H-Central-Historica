@@ -1,3 +1,10 @@
+REVISÃO v0.35.2 — LEITURA ATUAL / CONVERGÊNCIA DO LABORATÓRIO
+- O Laboratório Sombra mostra os sinais atuais já congelados para a próxima rodada.
+- Reset Cobertura, Puxada Combinada e Similaridade aparecem com seus 5 bichos atuais.
+- A convergência é contada de forma transparente entre métodos disponíveis; empates permanecem empates.
+- A Seca do Dia continua separada e exclusivamente voltada ao 1º prêmio.
+- Nenhum método, fórmula, histórico ou jogo oficial foi alterado.
+
 REVISÃO v0.35.1 — JANELA DE ATUALIZAÇÃO DE RESULTADOS
 - Ao buscar/atualizar resultados, a Central relê os últimos 7 dias em vez de 30.
 - A mudança reduz trabalho de rede sem alterar métodos, fórmulas ou histórico.
@@ -14,7 +21,7 @@ REVISÃO v0.35.0 — LABORATÓRIO SOMBRA VISÍVEL / COLETA AUTOMÁTICA
 - O sistema de atualização online, backup e rollback permanece igual ao validado na v0.34.2.
 
 GP-H CENTRAL HISTÓRICA
-VERSÃO ATUAL: v0.35.1
+VERSÃO ATUAL: v0.35.2
 =============================================
 
 OBJETIVO
