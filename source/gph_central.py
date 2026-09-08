@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-GP-H Central Histórica v0.35.3
+GP-H Central Histórica v0.36.0
 Pesquisa e manutenção do histórico 2026 do Deu no Poste / PT-Rio.
 
 Escopo desta versão:
@@ -86,7 +86,7 @@ def write_crash_log(exc: BaseException):
 
 
 APP_NAME = "GP-H Central Histórica"
-APP_VERSION = "0.35.3"
+APP_VERSION = "0.36.0"
 START_DATE = date(2026, 1, 2)
 BASE_URL = "https://brasildeunoposte.com.br/resultado-do-jogo-do-bicho-deu-no-poste-{date}/"
 # Ao buscar/atualizar resultados, relê os últimos 7 dias para absorver
@@ -12891,7 +12891,7 @@ class App(tk.Tk):
         except tk.TclError:
             pass
 
-        outer = ttk.Frame(win, padding=18)
+        outer = ttk.Frame(self._make_scrollable_page_body(win, "profile_dialog"), padding=18)
         outer.pack(fill="both", expand=True)
         ttk.Label(outer, text="Entrar na Central", style="Title.TLabel").pack(anchor="w")
         ttk.Label(
@@ -13742,6 +13742,7 @@ class App(tk.Tk):
             f"Última sincronização: {(self.account_profile or {}).get('last_sync_at') or 'nunca'}\n\n"
             "Atualizações recentes:\n"
             "• v0.35.1 — Busca/atualização de resultados passa a reler somente os últimos 7 dias, em vez de 30.\n"
+            "• v0.36.0 — Decisão incorpora o Laboratório Sombra e o rolamento inteligente vira padrão global de interface.\n"
             "• v0.35.3 — Recomendação da Rodada explica desempenho do horário, convergência atual e Seca do 1º.\n"
             "• v0.35.0 — Laboratório Sombra visível, coleta prospectiva automática após novos resultados e painel separado para Puxadas/Seca 1º.\n"
             "• v0.34.1 — versão de teste da primeira publicação real pelo GitHub; métodos e fórmulas permanecem inalterados.\n"
@@ -14005,7 +14006,7 @@ class App(tk.Tk):
         pop.transient(self)
         pop.configure(bg=self.colors["bg"])
 
-        outer = ttk.Frame(pop, padding=14)
+        outer = ttk.Frame(self._make_scrollable_page_body(pop, "animal_pack_preview"), padding=14)
         outer.pack(fill="both", expand=True)
         ttk.Label(outer, text=pack_name, style="Title.TLabel").pack(anchor="w")
         ttk.Label(
@@ -14058,6 +14059,7 @@ class App(tk.Tk):
         self._page = None
         self._hover_popup = None
         self._hover_after_id = None
+        self._install_smart_scroll_policy()
 
         shell = ttk.Frame(self)
         shell.pack(fill="both", expand=True)
@@ -14121,7 +14123,6 @@ class App(tk.Tk):
         for label, command, icon_key in [
             ("Pesquisa", self.show_search, "search"),
             ("Estatísticas", self.show_statistics_page, "statistics"),
-            ("Laboratório", self.show_shadow_lab_page, "methods"),
             ("Puxadas", self.show_pulls_page, "pulls"),
             ("Métodos", self.show_methods_page, "methods"),
             ("Gerador", self.show_generator_page, "generator"),
@@ -14228,7 +14229,7 @@ class App(tk.Tk):
             ).pack(anchor="w", pady=(3, 14))
 
     def _make_scrollable_page_body(self, parent, key):
-        """Cria uma área vertical rolável cujo wheel funciona sob qualquer filho."""
+        """Área vertical rolável: roda funciona sob qualquer filho e a barra só aparece quando necessária."""
         host = ttk.Frame(parent)
         host.pack(fill="both", expand=True)
         canvas = tk.Canvas(
@@ -14241,18 +14242,37 @@ class App(tk.Tk):
 
         body = ttk.Frame(canvas)
         window = canvas.create_window((0, 0), window=body, anchor="nw")
+        canvas._gph_smart_scroll = True
+        if not hasattr(self, "_smart_scroll_canvases"):
+            self._smart_scroll_canvases = {}
+        self._smart_scroll_canvases[key] = canvas
+
+        def update_bar():
+            try:
+                bbox = canvas.bbox("all")
+                content_h = (bbox[3] - bbox[1]) if bbox else 0
+                need = content_h > max(1, canvas.winfo_height()) + 2
+                managed = bool(bar.winfo_manager())
+                if need and not managed:
+                    bar.pack(side="right", fill="y")
+                elif not need and managed:
+                    bar.pack_forget()
+            except tk.TclError:
+                pass
 
         def update_region(_event=None):
             try:
                 bbox = canvas.bbox("all")
                 if bbox:
                     canvas.configure(scrollregion=bbox)
+                update_bar()
             except tk.TclError:
                 pass
 
         def resize_body(event):
             try:
                 canvas.itemconfigure(window, width=max(1, int(event.width)))
+                self.after_idle(update_region)
             except tk.TclError:
                 pass
 
@@ -14272,6 +14292,7 @@ class App(tk.Tk):
                 can_scroll = (units < 0 and first > 0.0) or (units > 0 and last < 1.0)
                 if can_scroll:
                     canvas.yview_scroll(units, "units")
+                # Sempre consome a roda dentro da página para não alterar Combobox/Spinbox por acidente.
                 return "break"
             except tk.TclError:
                 return
@@ -14297,6 +14318,126 @@ class App(tk.Tk):
         self.after_idle(install_tags)
         return body
 
+    def _install_smart_scroll_policy(self):
+        """Padrão global: toda tela/janela atual ou futura recebe roteamento inteligente da roda."""
+        tag = "GPHSmartWheel"
+        self._smart_scroll_tag = tag
+        if not getattr(self, "_smart_scroll_policy_installed", False):
+            self.bind_class(tag, "<MouseWheel>", self._smart_scroll_route, add="+")
+            self.bind_class(tag, "<Button-4>", self._smart_scroll_route, add="+")
+            self.bind_class(tag, "<Button-5>", self._smart_scroll_route, add="+")
+            self.bind_all("<Map>", self._smart_scroll_on_map, add="+")
+            self._smart_scroll_policy_installed = True
+        self.after_idle(lambda: self._smart_scroll_install_tags(self))
+
+    def _smart_scroll_install_tags(self, root):
+        tag = getattr(self, "_smart_scroll_tag", "GPHSmartWheel")
+        try:
+            stack = [root]
+            while stack:
+                widget = stack.pop()
+                try:
+                    tags = list(widget.bindtags())
+                    if tag not in tags:
+                        tags.insert(1 if len(tags) > 1 else 0, tag)
+                        widget.bindtags(tuple(tags))
+                    stack.extend(widget.winfo_children())
+                except tk.TclError:
+                    continue
+        except Exception:
+            pass
+
+    def _smart_scroll_on_map(self, event):
+        try:
+            self._smart_scroll_install_tags(event.widget)
+        except Exception:
+            pass
+
+    @staticmethod
+    def _smart_scroll_can_move(widget, units):
+        try:
+            first, last = widget.yview()
+            return (units < 0 and first > 0.0) or (units > 0 and last < 1.0)
+        except Exception:
+            return False
+
+    def _smart_scroll_find_candidate(self, root, units, skip=None):
+        candidates = []
+        try:
+            stack = list(root.winfo_children())
+            while stack:
+                widget = stack.pop()
+                try:
+                    stack.extend(widget.winfo_children())
+                    if widget is skip or not widget.winfo_ismapped():
+                        continue
+                    cls = widget.winfo_class()
+                    if cls not in {"Treeview", "Text", "Listbox", "Canvas"}:
+                        continue
+                    if not self._smart_scroll_can_move(widget, units):
+                        continue
+                    priority = {"Treeview": 4, "Text": 3, "Listbox": 3, "Canvas": 2}.get(cls, 1)
+                    area = max(1, widget.winfo_width()) * max(1, widget.winfo_height())
+                    candidates.append((priority, area, widget))
+                except Exception:
+                    continue
+        except Exception:
+            return None
+        if not candidates:
+            return None
+        candidates.sort(key=lambda item: (item[0], item[1]), reverse=True)
+        return candidates[0][2]
+
+    def _smart_scroll_route(self, event):
+        units = self._wheel_units(event)
+        if not units:
+            return
+        widget = getattr(event, "widget", None)
+        if widget is None:
+            return
+
+        # Controles que têm conteúdo próprio rolável recebem prioridade.
+        if self._play_scroll_child_if_possible(widget, units):
+            return "break"
+
+        # Depois procura um Canvas rolável na cadeia de pais: é a página/janela atual.
+        current = widget
+        visited = set()
+        while current is not None and current not in visited:
+            visited.add(current)
+            try:
+                if current.winfo_class() == "Canvas" and self._smart_scroll_can_move(current, units):
+                    current.yview_scroll(units, "units")
+                    return "break"
+                parent_name = current.winfo_parent()
+                if not parent_name:
+                    break
+                current = current._nametowidget(parent_name)
+            except Exception:
+                break
+
+        # Em diálogos antigos sem Canvas externo, rola o principal Text/Tree/Listbox disponível.
+        try:
+            top = widget.winfo_toplevel()
+        except Exception:
+            top = None
+        if top is not None:
+            candidate = self._smart_scroll_find_candidate(top, units, skip=widget)
+            if candidate is not None:
+                try:
+                    candidate.yview_scroll(units, "units")
+                    return "break"
+                except Exception:
+                    pass
+
+        # Evita que a roda altere valores de seleção quando não há conteúdo para rolar.
+        try:
+            if widget.winfo_class() in {"TCombobox", "TSpinbox", "Spinbox"}:
+                return "break"
+        except Exception:
+            pass
+        return
+
     def _bind_wraplength(self, label, container, margin=18, minimum=180, maximum=None):
         """Mantém textos longos dentro do cartão sem empurrar botões/vizinhos."""
         def _resize(event):
@@ -14313,6 +14454,7 @@ class App(tk.Tk):
         self._set_active_nav("Início")
         self._clear_content()
         self._page = "home"
+        body = self._make_scrollable_page_body(self.content, "home")
 
         summary = self.db.home_summary()
         delays = self.db.delay_leaders()
@@ -14327,7 +14469,7 @@ class App(tk.Tk):
         # v0.33: Home reorganizada em duas áreas. Os 25 bichos voltam a ser
         # protagonistas, com cartões quase quadrados; o painel operacional fica
         # à direita. Os indicadores financeiros saíram daqui e vivem no Financeiro.
-        header = ttk.Frame(self.content)
+        header = ttk.Frame(body)
         header.pack(fill="x", pady=(0, 5))
         ttk.Label(
             header,
@@ -14342,7 +14484,7 @@ class App(tk.Tk):
             font=("Segoe UI", 8),
         ).pack(side="right", anchor="e")
 
-        main = ttk.Frame(self.content)
+        main = ttk.Frame(body)
         main.pack(fill="both", expand=True)
         main.grid_columnconfigure(0, weight=59, uniform="homecols")
         main.grid_columnconfigure(1, weight=41, uniform="homecols")
@@ -14643,8 +14785,9 @@ class App(tk.Tk):
         self._set_active_nav("Início")
         self._clear_content()
         self._page = "home_animals"
+        body = self._make_scrollable_page_body(self.content, "home_animals")
 
-        header = ttk.Frame(self.content)
+        header = ttk.Frame(body)
         header.pack(fill="x", pady=(0, 8))
         left = ttk.Frame(header)
         left.pack(side="left", fill="x", expand=True)
@@ -14656,7 +14799,7 @@ class App(tk.Tk):
         ).pack(anchor="w", pady=(2, 0))
         ttk.Button(header, text="← Voltar ao Início", command=self.show_home).pack(side="right")
 
-        grid = tk.Frame(self.content, bg=self.colors["bg"])
+        grid = tk.Frame(body, bg=self.colors["bg"])
         grid.pack(fill="both", expand=True)
         self.home_grid = grid
         self.home_cards = []
@@ -14955,6 +15098,7 @@ class App(tk.Tk):
             "Pesquisa",
             "Bicho, Grupo, Dezena, Centena e Milhar com filtros inteligentes.",
         )
+        body = self._make_scrollable_page_body(self.content, "search")
 
         self.var_type = tk.StringVar(value="Todos")
         self.var_value = tk.StringVar()
@@ -14964,7 +15108,7 @@ class App(tk.Tk):
         self.var_draw = tk.StringVar(value="Todos")
         self.var_prize = tk.StringVar(value="Todos")
 
-        filt = ttk.Frame(self.content, style="Card.TFrame", padding=10)
+        filt = ttk.Frame(body, style="Card.TFrame", padding=10)
         filt.pack(fill="x", pady=(0, 8))
 
         ttk.Label(filt, text="Pesquisar por", style="Card.TLabel").grid(row=0,column=0,sticky="w",padx=(0,8))
@@ -15010,7 +15154,7 @@ class App(tk.Tk):
         ).pack(side="left",padx=(12,0))
 
         self.summary = tk.Text(
-            self.content,
+            body,
             height=4,
             bg=self.colors["card"],
             fg=self.colors["text"],
@@ -15024,7 +15168,7 @@ class App(tk.Tk):
         self.summary.pack(fill="x", pady=(0, 8))
         self.summary.configure(state="disabled")
 
-        table_frame = ttk.Frame(self.content)
+        table_frame = ttk.Frame(body)
         table_frame.pack(fill="both", expand=True)
 
         cols = ("data","sorteio","hora","premio","milhar","centena","dezena","grupo","bicho")
@@ -15051,7 +15195,7 @@ class App(tk.Tk):
         table_frame.rowconfigure(0,weight=1)
         table_frame.columnconfigure(0,weight=1)
 
-        footer = ttk.Frame(self.content, padding=(0,8,0,0))
+        footer = ttk.Frame(body, padding=(0,8,0,0))
         footer.pack(fill="x")
         ttk.Button(footer,text="Exportar CSV",command=self.export_csv).pack(side="right")
 
@@ -18048,9 +18192,7 @@ class App(tk.Tk):
         dialog.geometry("760x620")
         dialog.minsize(650,520)
 
-        outer = ttk.Frame(
-            dialog,
-            padding=12,
+        outer = ttk.Frame(self._make_scrollable_page_body(dialog, "daily_closing"), padding=12,
         )
         outer.pack(fill="both", expand=True)
 
@@ -19183,11 +19325,12 @@ class App(tk.Tk):
             "Resultados",
             "Atualizações, jogos congelados e desempenho prospectivo.",
         )
+        body = self._make_scrollable_page_body(self.content, "results")
 
         latest = self.db.home_summary()["latest"]
 
         top = ttk.Frame(
-            self.content,
+            body,
             style="Card.TFrame",
             padding=8,
         )
@@ -19237,7 +19380,7 @@ class App(tk.Tk):
         ).pack(side="left", padx=(5, 0))
 
         # Navegação interna, sem abrir nova janela.
-        switch = ttk.Frame(self.content)
+        switch = ttk.Frame(body)
         switch.pack(fill="x", pady=(0, 6))
 
         self.results_games_btn = ttk.Button(
@@ -19262,7 +19405,7 @@ class App(tk.Tk):
         results_hint.pack(side="left", fill="x", expand=True, padx=(10, 0))
         self._bind_wraplength(results_hint, switch, margin=280, minimum=180, maximum=700)
 
-        self.results_body = ttk.Frame(self.content)
+        self.results_body = ttk.Frame(body)
         self.results_body.pack(fill="both", expand=True)
 
         self.results_show_games_view()
@@ -19820,7 +19963,7 @@ class App(tk.Tk):
         win.configure(bg=self.colors["bg"])
         win.transient(self)
 
-        outer = ttk.Frame(win, padding=12)
+        outer = ttk.Frame(self._make_scrollable_page_body(win, "method_guide"), padding=12)
         outer.pack(fill="both", expand=True)
 
         ttk.Label(
@@ -20510,23 +20653,27 @@ class App(tk.Tk):
             d = str(target.get("data") or "—")
         return f"{d} • {target.get('sorteio','—')} {target.get('hora','—')}"
 
-    def show_shadow_lab_page(self):
-        self._set_active_nav("Laboratório")
-        self._clear_content()
-        self._page = "shadow_lab"
-        self._page_title(
-            "Laboratório Sombra",
-            "Inteligência prospectiva separada das apostas oficiais. As leituras são congeladas antes do resultado e servem somente para recomendar a próxima rodada.",
-        )
-
-        # Abrir o laboratório já garante a leitura da próxima rodada, sem exigir aposta real.
+    def _build_shadow_lab_section(self, body):
+        """Laboratório Sombra incorporado à Central de Decisão."""
         try:
             self.db.audit_shadow_snapshots()
-            self.db.ensure_shadow_snapshot(trigger="ABRIR_LABORATORIO")
+            self.db.ensure_shadow_snapshot(trigger="ABRIR_DECISAO")
         except Exception:
             pass
 
-        body = self._make_scrollable_page_body(self.content, "shadow_lab")
+        lab_intro = ttk.Frame(body, style="Card.TFrame", padding=11)
+        lab_intro.pack(fill="x", pady=(4, 8))
+        ttk.Label(lab_intro, text="LABORATÓRIO SOMBRA", style="CardTitle.TLabel").pack(anchor="w")
+        ttk.Label(
+            lab_intro,
+            text=(
+                "Área experimental da própria Decisão: leituras congeladas antes do resultado, "
+                "comparação prospectiva de Centenas/Puxadas e Seca exclusiva do 1º prêmio. "
+                "Nada aqui promove método automaticamente."
+            ),
+            style="CardMuted.TLabel", wraplength=1080, justify="left",
+        ).pack(anchor="w", pady=(3, 0))
+
 
         controls = ttk.Frame(body, style="Card.TFrame", padding=10)
         controls.pack(fill="x", pady=(0, 8))
@@ -20591,6 +20738,10 @@ class App(tk.Tk):
         self.shadow_lab_results = ttk.Frame(body)
         self.shadow_lab_results.pack(fill="both", expand=True)
         self._shadow_lab_refresh()
+
+    def show_shadow_lab_page(self):
+        """Compatibilidade: o antigo Laboratório agora abre a tela única de Decisão."""
+        self.show_decision_page(open_lab=True)
 
     def _shadow_lab_selected_target(self):
         return dict(self.shadow_lab_target_map.get(self.shadow_lab_target_var.get()) or {})
@@ -20809,7 +20960,7 @@ class App(tk.Tk):
             style="Sub.TLabel", wraplength=1080,
         ).pack(anchor="w", pady=(0,10))
 
-    def show_decision_page(self):
+    def show_decision_page(self, open_lab=False):
         self._set_active_nav("Decisão")
         self._clear_content()
         self._page = "decision"
@@ -20824,7 +20975,7 @@ class App(tk.Tk):
 
         self._page_title(
             "Central de Decisão",
-            "Convergência dos métodos, confiança dos sinais e desempenho prospectivo. O índice não é probabilidade de prêmio.",
+            "Visão da rodada, convergência, desempenho prospectivo e Laboratório Sombra em uma única tela. O índice não é probabilidade de prêmio.",
         )
         body = self._make_scrollable_page_body(self.content, "decision")
 
@@ -20934,6 +21085,13 @@ class App(tk.Tk):
 
         # v0.29.0 — Etapa 3: simulador histórico walk-forward sem look-ahead.
         self._decision_build_stage3(body)
+
+        # v0.36.0 — Laboratório deixa de ser página paralela e vira seção da Decisão.
+        self._build_shadow_lab_section(body)
+        if open_lab:
+            canvas = getattr(self, "_smart_scroll_canvases", {}).get("decision")
+            if canvas is not None:
+                self.after_idle(lambda c=canvas: c.yview_moveto(1.0))
 
         hist = ttk.Frame(body,style="Card.TFrame",padding=10)
         hist.pack(fill="x",pady=(0,8))
@@ -21326,8 +21484,9 @@ class App(tk.Tk):
             "Estatísticas",
             "Frequência histórica dos 25 bichos no recorte escolhido.",
         )
+        body = self._make_scrollable_page_body(self.content, "statistics")
 
-        filt = ttk.Frame(self.content, style="Card.TFrame", padding=8)
+        filt = ttk.Frame(body, style="Card.TFrame", padding=8)
         filt.pack(fill="x", pady=(0, 7))
 
         ttk.Label(filt, text="De", style="Card.TLabel").grid(row=0,column=0,sticky="w",padx=(0,7))
@@ -21365,7 +21524,7 @@ class App(tk.Tk):
             filt, text="Limpar", command=self.statistics_clear,
         ).grid(row=1,column=5,padx=(5,0),pady=(2,0))
 
-        top_line = ttk.Frame(self.content)
+        top_line = ttk.Frame(body)
         top_line.pack(fill="x", pady=(0, 5))
         self.stat_summary = ttk.Label(top_line, text="")
         self.stat_summary.pack(side="left", fill="x", expand=True)
@@ -21378,7 +21537,7 @@ class App(tk.Tk):
             command=self.statistics_export_csv,
         ).pack(side="right", padx=(0, 6))
 
-        table = ttk.Frame(self.content)
+        table = ttk.Frame(body)
         table.pack(fill="both", expand=True)
 
         cols = (
@@ -21564,8 +21723,9 @@ class App(tk.Tk):
             "Puxadas",
             "Quando o bicho-base aparece, o que costuma vir na extração seguinte?",
         )
+        body = self._make_scrollable_page_body(self.content, "pulls")
 
-        filt = ttk.Frame(self.content, style="Card.TFrame", padding=8)
+        filt = ttk.Frame(body, style="Card.TFrame", padding=8)
         filt.pack(fill="x", pady=(0, 7))
 
         controls = [
@@ -21606,7 +21766,7 @@ class App(tk.Tk):
             command=self.pulls_refresh,
         ).grid(row=1,column=5,padx=(4,0),pady=(2,0))
 
-        info = ttk.Frame(self.content)
+        info = ttk.Frame(body)
         info.pack(fill="x", pady=(0, 5))
         self.pull_summary = ttk.Label(info, text="")
         self.pull_summary.pack(side="left", fill="x", expand=True)
@@ -21615,7 +21775,7 @@ class App(tk.Tk):
             command=self.pulls_open_examples,
         ).pack(side="right")
 
-        table = ttk.Frame(self.content)
+        table = ttk.Frame(body)
         table.pack(fill="both", expand=True)
         cols = (
             "rank","grupo","bicho","hits","prob","baseline","lift","ocorr",
@@ -21652,7 +21812,7 @@ class App(tk.Tk):
         self.pull_tree.bind("<Double-1>", self.pulls_open_examples)
 
         self.pull_transitions = ttk.Label(
-            self.content, text="Transições: —", wraplength=950
+            body, text="Transições: —", wraplength=950
         )
         self.pull_transitions.pack(anchor="w", pady=(5, 0))
 
@@ -21783,8 +21943,9 @@ class App(tk.Tk):
             "Métodos",
             "Escolha o resultado-base, a quantidade e gere os bichos.",
         )
+        body = self._make_scrollable_page_body(self.content, "methods")
 
-        base = ttk.Frame(self.content, style="Card.TFrame", padding=8)
+        base = ttk.Frame(body, style="Card.TFrame", padding=8)
         base.pack(fill="x", pady=(0, 6))
 
         head = ttk.Frame(base, style="Card.TFrame")
@@ -21851,7 +22012,7 @@ class App(tk.Tk):
             command=self.methods_use_selected_draw,
         ).grid(row=1,column=2,padx=(4,0),pady=(2,0))
 
-        controls = ttk.Frame(self.content, style="Card.TFrame", padding=8)
+        controls = ttk.Frame(body, style="Card.TFrame", padding=8)
         controls.pack(fill="x", pady=(0, 6))
 
         ttk.Label(
@@ -21897,7 +22058,7 @@ class App(tk.Tk):
         self.method_advanced_check.pack(side="right")
 
         self.method_advanced_frame = ttk.Frame(
-            self.content, style="Card.TFrame", padding=7
+            body, style="Card.TFrame", padding=7
         )
 
         ttk.Label(
@@ -21920,7 +22081,7 @@ class App(tk.Tk):
             style="Card.TLabel",
         ).pack(side="left")
 
-        result_head = ttk.Frame(self.content)
+        result_head = ttk.Frame(body)
         result_head.pack(fill="x", pady=(0, 4))
 
         ttk.Label(
@@ -21940,7 +22101,7 @@ class App(tk.Tk):
             command=self.methods_open_technical,
         ).pack(side="right")
 
-        table = ttk.Frame(self.content)
+        table = ttk.Frame(body)
         table.pack(fill="both", expand=True)
 
         cols = ("rank","bicho","grupo","sinal")
@@ -22242,9 +22403,10 @@ class App(tk.Tk):
             "Gerador",
             "Escolha a estratégia, o tipo e exatamente quantos números quer.",
         )
+        body = self._make_scrollable_page_body(self.content, "generator")
 
         controls = ttk.Frame(
-            self.content, style="Card.TFrame", padding=8
+            body, style="Card.TFrame", padding=8
         )
         controls.pack(fill="x", pady=(0, 6))
 
@@ -22381,7 +22543,7 @@ class App(tk.Tk):
         # Opções recolhíveis da Seca do Dia
         # ----------------------------------------------------
         self.gen_dry_frame = ttk.Frame(
-            self.content, style="Card.TFrame", padding=7
+            body, style="Card.TFrame", padding=7
         )
 
         ttk.Label(
@@ -22450,7 +22612,7 @@ class App(tk.Tk):
         # ----------------------------------------------------
         # Resumo e tabela
         # ----------------------------------------------------
-        info = ttk.Frame(self.content)
+        info = ttk.Frame(body)
         info.pack(fill="x", pady=(0, 5))
 
         self.gen_animals_label = ttk.Label(
@@ -22469,7 +22631,7 @@ class App(tk.Tk):
             side="right", padx=(8, 0)
         )
 
-        table = ttk.Frame(self.content)
+        table = ttk.Frame(body)
         table.pack(fill="both", expand=True)
 
         cols = (
@@ -22521,7 +22683,7 @@ class App(tk.Tk):
         table.columnconfigure(0,weight=1)
 
         footer = ttk.Frame(
-            self.content, padding=(0,5,0,0)
+            body, padding=(0,5,0,0)
         )
         footer.pack(fill="x")
 

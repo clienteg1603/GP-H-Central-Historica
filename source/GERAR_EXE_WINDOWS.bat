@@ -2,10 +2,10 @@
 setlocal EnableExtensions
 chcp 65001 >nul
 cd /d "%~dp0"
-title Gerar EXE - GP-H Central v0.35.1
+title Gerar EXE - GP-H Central v0.36.0
 
 echo ==========================================
-echo   GP-H CENTRAL - BUILD WINDOWS v0.35.1
+echo   GP-H CENTRAL - BUILD WINDOWS v0.36.0
 echo ==========================================
 echo.
 

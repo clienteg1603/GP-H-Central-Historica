@@ -1,3 +1,22 @@
+REVISÃO v0.36.0 — DECISÃO ÚNICA / ROLAMENTO INTELIGENTE GLOBAL
+- Decisão e Laboratório Sombra deixam de ser páginas paralelas: o Laboratório passa a ser uma seção da Central de Decisão.
+- O item Laboratório é removido do menu lateral para eliminar duplicidade e dúvida sobre onde analisar a rodada.
+- A Central de Decisão mantém índice de consistência, sinais, desempenho, Campeão × Desafiante, tendência, concentração e Walk-Forward, e passa a incluir também a leitura atual congelada, Centenas sombra, Puxadas/Bichos e Seca do 1º prêmio.
+- O antigo caminho interno do Laboratório permanece como compatibilidade e redireciona para Decisão.
+- Início, painel dos 25 bichos, Pesquisa, Resultados, Estatísticas, Puxadas, Métodos e Gerador passam a usar a mesma área vertical rolável inteligente já aplicada em telas mais novas.
+- Jogar preserva seu mecanismo próprio de rolagem, inclusive prioridade de Treeview/Text/Listbox e fallback para a página.
+- Grandes janelas abertas diretamente pela Central recebem área externa rolável quando aplicável.
+- Uma política global de roda do mouse passa a alcançar também diálogos e widgets atuais/futuros: controles com rolagem própria têm prioridade, depois a página/janela assume; Combobox/Spinbox não mudam valor acidentalmente quando a intenção é rolar.
+- Nenhum método, fórmula, histórico, financeiro ou jogo oficial foi alterado.
+
+PADRÃO PERMANENTE DE INTERFACE — ROLAMENTO INTELIGENTE
+- Toda nova aba, tela, seção extensa ou janela criada no GP-H deve prever rolagem vertical desde a implementação inicial.
+- A roda do mouse deve funcionar mesmo quando o ponteiro estiver sobre labels, botões, entradas, comboboxes ou cartões; não deve exigir clicar na barra de rolagem.
+- Treeview, Text e Listbox rolam primeiro enquanto ainda tiverem conteúdo na direção pedida; ao chegar ao limite, a página/janela externa assume quando houver continuação.
+- Combobox e Spinbox não devem trocar valores apenas porque o usuário girou a roda tentando mover a tela.
+- A barra vertical pode ficar oculta quando todo o conteúdo couber e reaparecer quando houver overflow.
+- Esta regra vale para telas já existentes e para qualquer tela/janela futura; exceção apenas para elementos efêmeros sem conteúdo rolável, como tooltips pequenos.
+
 REVISÃO v0.35.3 — RECOMENDAÇÃO EXPLICADA / CONTEXTO ATUAL
 - A Recomendação da Rodada continua escolhendo a melhor evidência prospectiva do mesmo horário.
 - A explicação passa a cruzar essa evidência com a convergência atual entre Reset Cobertura, Puxada Combinada e Similaridade.
@@ -30,7 +49,7 @@ REVISÃO v0.35.0 — LABORATÓRIO SOMBRA VISÍVEL / COLETA AUTOMÁTICA
 - O sistema de atualização online, backup e rollback permanece igual ao validado na v0.34.2.
 
 GP-H CENTRAL HISTÓRICA
-VERSÃO ATUAL: v0.35.3
+VERSÃO ATUAL: v0.36.0
 =============================================
 
 OBJETIVO
