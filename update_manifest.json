@@ -4,11 +4,11 @@
   "server_name": "GitHub GP-H",
   "channels": {
     "test": {
-      "version": "0.36.6",
-      "url": "https://github.com/clienteg1603/GP-H-Central-Historica/releases/download/v0.36.6-test/GP-H_update_v0.36.6.zip",
-      "sha256": "31d1bb7b51dd0047889639dd20cb4cbb02a409ee2dbcbcbd9822cf6160ca376e",
-      "notes": "Gerador absorvido por Jogar: aba removida do menu, rotas antigas redirecionadas e motor interno preservado.",
-      "published_at": "2026-09-08T14:24:09+00:00",
+      "version": "0.37.0",
+      "url": "https://github.com/clienteg1603/GP-H-Central-Historica/releases/download/v0.37.0-test/GP-H_update_v0.37.0.zip",
+      "sha256": "e1c56157a9999d586c2f997a938ccbabef56fe648e47c131e11613776576a64e",
+      "notes": "Atualização de teste automática do GP-H Central Histórica",
+      "published_at": "2026-09-08T14:58:03+00:00",
       "mirrors": []
     },
     "stable": {
@@ -20,5 +20,5 @@
       "mirrors": []
     }
   },
-  "updated_at": "2026-09-08T14:24:09+00:00"
+  "updated_at": "2026-09-08T14:58:03+00:00"
 }
