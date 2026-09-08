@@ -1,3 +1,14 @@
+REVISÃO v0.44.0 — ETAPA C / DECISÃO ADAPTATIVA v0.1
+- A Etapa C passa a usar as auditorias prospectivas das Etapas A/B para fazer uma correção pequena e regularizada na escolha contextual entre Reset Cobertura, Puxada Combinada e Similaridade.
+- A Decisão Contextual BASE continua sendo calculada exatamente como antes. Depois dela, e ainda ANTES do resultado, a camada DECISION_ADAPTIVE_SHRINK_V1 pode ajustar cada índice em no máximo ±3 pontos.
+- A adaptação fica EM FORMAÇÃO até acumular pelo menos 30 rodadas pareadas anteriores e pelo menos 20 observações válidas para cada um dos três métodos. Até lá, ajuste aplicado = zero e a decisão-base é preservada.
+- O desempenho de cada método é medido de forma pareada nas mesmas rodadas: quantas vezes ele terminou melhor ou empatado. As taxas recebem shrinkage para a média geral; o mesmo horário só refina a leitura quando possui suporte mínimo.
+- Sem look-ahead: a Etapa C ignora qualquer snapshot igual ou posterior à rodada-alvo. Nenhuma decisão antiga é reconstruída.
+- A calibração da Etapa B pode somente REBAIXAR um nível de confiança quando houver inversão clara (>5 pp) entre níveis com pelo menos 8 casos. A Etapa C nunca promove confiança automaticamente por esse mecanismo.
+- Cada snapshot v0.44+ preserva base_best/base_status/base_evidence_leader e também o resultado adaptativo. Após o sorteio, a Auditoria C compara decisão-base × decisão adaptativa e registra mudança, melhora, piora, neutralidade e delta médio de cobertura.
+- IMPORTANTE: a Etapa C NÃO altera as fórmulas de Reset, Puxada, Similaridade, Histórico Concentrado, 3+1 nem o GP-H Meta v0.1. Reset + 3+1 continua sendo o jogo oficial protegido.
+- O novo painel “DECISÃO ADAPTATIVA — ETAPA C” mostra estado, líder-base, líder adaptativo, ajustes, amostra, mesmo horário e auditoria A/B prospectiva.
+
 REVISÃO v0.43.0 — ETAPA B / CALIBRAÇÃO DA CONFIANÇA DA DECISÃO
 - Retoma a sequência original iniciada na v0.40.0: Etapa A = auditoria prospectiva; Etapa B = medir se os níveis BAIXA/MODERADA/FORTE realmente separam desempenho.
 - Novo painel “CALIBRAÇÃO DA CONFIANÇA — ETAPA B” usa somente Decisões Contextuais congeladas antes do resultado; não há backfill e não há look-ahead.
