@@ -256,3 +256,8 @@ REVISÃO v0.34.2
   https://raw.githubusercontent.com/clienteg1603/GP-H-Central-Historica/main/update_manifest.json
 - Objetivo: validar atualização real da v0.34.1 para v0.34.2 pela internet.
 - Métodos e fórmulas permanecem inalterados.
+
+v0.36.1 — Bilhete multi-horário
+- Adicionado 'VÁRIOS HORÁRIOS...' para registrar o mesmo bilhete em várias rodadas, sempre como bilhetes separados.
+- Os cinco horários a partir da rodada original vêm pré-selecionados.
+- A nova janela possui rolagem pela roda do mouse.
