@@ -1,0 +1,55 @@
+name: Inspecionar bilhetes v0.36.2
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/inspect-v0362-ticket.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Mostrar blocos relevantes
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          text = Path('source/gph_central.py').read_text(encoding='utf-8')
+          needles = [
+              'def register_ticket(',
+              'CREATE TABLE IF NOT EXISTS bilhetes',
+              'CREATE TABLE bilhetes',
+              'bilhete_id',
+              'def play_show_games(',
+              'play_ticket_history_tree =',
+              'def play_ticket_history_selected(',
+          ]
+          for needle in needles:
+              print('\n' + '='*90)
+              print('NEEDLE:', needle)
+              start = 0
+              found = False
+              while True:
+                  idx = text.find(needle, start)
+                  if idx < 0:
+                      break
+                  found = True
+                  line = text.count('\n', 0, idx) + 1
+                  lines = text.splitlines()
+                  a = max(0, line-18)
+                  b = min(len(lines), line+85)
+                  print(f'--- linha {line} ---')
+                  for n in range(a, b):
+                      print(f'{n+1:05d}: {lines[n]}')
+                  start = idx + len(needle)
+                  if needle == 'bilhete_id' and start > idx + 1:
+                      # limitar ocorrências genéricas
+                      if text[:start].count('bilhete_id') >= 8:
+                          break
+              if not found:
+                  print('NAO ENCONTRADO')
+          PY
