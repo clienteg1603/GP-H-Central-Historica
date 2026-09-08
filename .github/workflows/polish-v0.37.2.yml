@@ -1,0 +1,59 @@
+name: Padrão global de interface v0.37.2
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/polish-v0.37.2.yml"
+      - ".github/scripts/polish_v0372.py"
+
+permissions:
+  contents: write
+
+jobs:
+  polish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Aplicar padrão global de interface
+        run: python .github/scripts/polish_v0372.py
+
+      - name: Validar Python e regras visuais
+        run: |
+          python -m py_compile source/gph_central.py
+          python - <<'PY'
+          from pathlib import Path
+          import ast
+          text=Path('source/gph_central.py').read_text(encoding='utf-8')
+          assert 'APP_VERSION = "0.37.2"' in text
+          assert 'UI_FONT_SIZES = {' in text
+          assert 'UI_SPACING = {' in text
+          assert 'UI_TABLE_ROWHEIGHT = 28' in text
+          assert 'def generate_centenas_3plus1(' in text
+          assert 'def centena_31_freeze_state(' in text
+          assert 'def decision_contextual_evidence(' in text
+          assert 'def method_reset_coverage_v1(' in text
+          assert 'def play_generate(' in text
+          tree=ast.parse(text)
+          bad=[]
+          for node in ast.walk(tree):
+              if isinstance(node,ast.Call):
+                  for kw in node.keywords:
+                      if kw.arg=='font' and isinstance(kw.value,ast.Tuple):
+                          ints=[n.value for n in ast.walk(kw.value) if isinstance(n,ast.Constant) and isinstance(n.value,int)]
+                          if any(v<8 for v in ints): bad.append((getattr(node,'lineno','?'),ints))
+          assert not bad, bad[:20]
+          print('VALIDAÇÃO VISUAL v0.37.2 OK')
+          PY
+
+      - name: Registrar v0.37.2 no source
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add source/gph_central.py source/DOCUMENTACAO_GP-H.txt
+          git diff --cached --stat
+          git commit -m "v0.37.2 padrao global de interface"
+          git push origin main
