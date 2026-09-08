@@ -1,4 +1,4 @@
-GP-H CENTRAL HISTÓRICA v0.36.6 — ATUALIZAÇÕES DO PROGRAMA
+GP-H CENTRAL HISTÓRICA v0.37.0 — ATUALIZAÇÕES DO PROGRAMA
 
 Nesta versão o cliente de atualização está pronto para um servidor HTTPS estático.
 
@@ -89,3 +89,10 @@ Novidades v0.36.6:
 - Rotas/atalhos antigos do Gerador redirecionam para Jogar.
 - Preparar próximo jogo na Início agora usa diretamente o fluxo de Jogar.
 - Motor interno preservado e nenhuma fórmula alterada.
+
+Novidades v0.37.0:
+- Decisão Contextual para a próxima rodada, comparando os três seletores com foco maior no mesmo horário.
+- Índice de Evidência Contextual 0–100, explicitamente separado de probabilidade de acerto.
+- Cruza horário, recente, estabilidade, Walk-Forward quando disponível, dia da semana, convergência atual e desempenho geral.
+- Amostra pequena reduz a força da conclusão e pode resultar em AMOSTRA INSUFICIENTE.
+- Reset + 3+1 continua oficial e nenhuma promoção é automática.

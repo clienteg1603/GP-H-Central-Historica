@@ -1,3 +1,14 @@
+REVISÃO v0.37.0 — DECISÃO CONTEXTUAL
+- Nova camada “Decisão Contextual da Próxima Rodada” compara Reset Cobertura, Puxada Combinada e Similaridade especificamente para o horário/dia que está por vir.
+- O novo Índice de Evidência Contextual NÃO é probabilidade de acerto; é apenas uma escala relativa de 0–100 para ordenar força de evidência entre métodos.
+- Pesos-base: mesmo horário 35%, desempenho recente 20%, estabilidade 15%, Walk-Forward 10%, dia da semana 8%, convergência atual 7% e desempenho geral 5%.
+- Quando um componente não está disponível — especialmente Walk-Forward ainda não executado na sessão — ele é retirado e os demais pesos são renormalizados, sem inventar dado neutro.
+- Amostras pequenas do mesmo horário são encolhidas e limitam o índice; abaixo de 8 leituras auditadas a recomendação aparece explicitamente como AMOSTRA INSUFICIENTE.
+- A convergência atual funciona apenas como confirmação de baixa ponderação e não escolhe sozinha o vencedor histórico.
+- O Reset + 3+1 continua oficial em qualquer cenário; a Decisão Contextual pode apontar um desafiante com melhor evidência sem promovê-lo automaticamente.
+- Toda a comparação usa snapshots prospectivos já congelados/auditados; nenhum resultado futuro é usado para reconstruir recomendação passada.
+- A tela Decisão continua com rolamento inteligente e mantém intactos Índice de Consistência, Campeão × Desafiante, tendência, contexto por horário/dia, Walk-Forward e Laboratório Sombra.
+
 REVISÃO v0.36.6 — GERADOR ABSORVIDO POR JOGAR
 - A aba Gerador é removida do menu lateral por ter se tornado redundante.
 - Jogar passa a ser o ponto oficial e único da interface para gerar, revisar e registrar apostas.
@@ -83,7 +94,7 @@ REVISÃO v0.35.0 — LABORATÓRIO SOMBRA VISÍVEL / COLETA AUTOMÁTICA
 - O sistema de atualização online, backup e rollback permanece igual ao validado na v0.34.2.
 
 GP-H CENTRAL HISTÓRICA
-VERSÃO ATUAL: v0.36.6
+VERSÃO ATUAL: v0.37.0
 =============================================
 
 OBJETIVO
