@@ -4,10 +4,11 @@ import re
 
 SOURCE = Path('source/gph_central.py')
 DOC = Path('source/DOCUMENTACAO_GP-H.txt')
-
 text = SOURCE.read_text(encoding='utf-8')
-original = text
 original_lines = len(text.splitlines())
+
+if 'APP_VERSION = "0.37.1"' not in text:
+    raise SystemExit('A fase B exige source já em v0.37.1')
 
 
 def parse(src):
@@ -21,99 +22,75 @@ def remove_spans(src, spans):
         del lines[start-1:end]
     return ''.join(lines)
 
-
-def top_class_spans(src, names):
-    tree = parse(src)
-    found = {}
-    for node in tree.body:
-        if isinstance(node, ast.ClassDef) and node.name in names:
-            found[node.name] = (node.lineno, node.end_lineno, f'class {node.name}')
-    missing = set(names) - set(found)
-    if missing:
-        raise SystemExit(f'Classes esperadas não encontradas: {sorted(missing)}')
-    return list(found.values())
-
-# 1) Classes antigas comprovadamente sem qualquer chamada atual.
-# A auditoria da v0.37.0 mostrou que cada uma aparecia apenas na própria definição.
-definite_orphans = {
-    'GameGeneratorDialog',
-    'MethodsLabDialog',
-    'HistoricalPullsDialog',
-    'StatisticsDialog',
-}
-text = remove_spans(text, top_class_spans(text, definite_orphans))
-
-# 2) show_generator_page já redirecionava antes de todo o bloco legado.
-# Substitui a função inteira pelo comportamento que já era efetivamente executado.
-tree = parse(text)
-app = next((n for n in tree.body if isinstance(n, ast.ClassDef) and n.name == 'App'), None)
-if app is None:
-    raise SystemExit('Classe App não encontrada')
-show_gen = next((n for n in app.body if isinstance(n, ast.FunctionDef) and n.name == 'show_generator_page'), None)
-if show_gen is None:
-    raise SystemExit('show_generator_page não encontrado')
-replacement = (
-    '    def show_generator_page(self):\n'
-    '        """Compatibilidade: a antiga tela Gerador foi absorvida por Jogar."""\n'
-    '        return self.show_play_page()\n\n'
-)
-lines = text.splitlines(keepends=True)
-print(f'COMPACTANDO show_generator_page: linhas {show_gen.lineno}-{show_gen.end_lineno}')
-lines[show_gen.lineno-1:show_gen.end_lineno] = [replacement]
-text = ''.join(lines)
-
-# 3) O conjunto generator_* era o controlador exclusivo da tela removida.
-# Só é retirado se NÃO existir nenhuma referência a esses métodos fora do próprio conjunto.
+# O primeiro passe provou que apenas generator_format_31_event é usado fora
+# do controlador legado: a tela Jogar reutiliza esse pequeno formatador.
+# Agora fazemos análise de alcançabilidade: raízes são métodos generator_*
+# chamados fora do próprio conjunto; preservamos também qualquer helper
+# generator_* chamado transitivamente por essas raízes.
 tree = parse(text)
 app = next(n for n in tree.body if isinstance(n, ast.ClassDef) and n.name == 'App')
 gen_methods = [n for n in app.body if isinstance(n, ast.FunctionDef) and n.name.startswith('generator_')]
-gen_names = {n.name for n in gen_methods}
-if gen_methods:
-    protected_ranges = [(n.lineno, n.end_lineno) for n in gen_methods]
-    raw_lines = text.splitlines()
-    external = []
-    for name in sorted(gen_names):
-        for i, line in enumerate(raw_lines, 1):
-            if name not in line:
-                continue
-            if any(a <= i <= b for a, b in protected_ranges):
-                continue
-            external.append((name, i, line.strip()))
-    if external:
-        print('generator_* mantido: existem referências externas:')
-        for item in external:
-            print(' ', item)
-    else:
-        text = remove_spans(text, [(n.lineno, n.end_lineno, f'método {n.name}') for n in gen_methods])
-        print(f'REMOVIDOS {len(gen_methods)} métodos generator_* sem referência externa.')
+gen_by_name = {n.name: n for n in gen_methods}
+gen_names = set(gen_by_name)
+ranges = {name: (node.lineno, node.end_lineno) for name, node in gen_by_name.items()}
+raw_lines = text.splitlines()
 
-# 4) ManualGroupSelectorDialog só era usado pelos dois geradores antigos.
-# Remove apenas se, após a limpeza acima, restar somente a definição.
+roots = set()
+for name, (start, end) in ranges.items():
+    for i, line in enumerate(raw_lines, 1):
+        if name not in line:
+            continue
+        if any(a <= i <= b for a, b in ranges.values()):
+            continue
+        roots.add(name)
+        print(f'RAIZ EXTERNA {name}: linha {i}: {line.strip()}')
+
+# Grafo interno self.generator_x(...)
+call_graph = {name: set() for name in gen_names}
+for name, node in gen_by_name.items():
+    for sub in ast.walk(node):
+        if isinstance(sub, ast.Attribute) and sub.attr in gen_names:
+            call_graph[name].add(sub.attr)
+
+keep = set(roots)
+stack = list(roots)
+while stack:
+    cur = stack.pop()
+    for dep in call_graph.get(cur, ()):
+        if dep not in keep:
+            keep.add(dep)
+            stack.append(dep)
+
+remove = [node for name, node in gen_by_name.items() if name not in keep]
+print('generator_* preservados:', sorted(keep))
+print('generator_* removíveis:', sorted(n.name for n in remove))
+if remove:
+    text = remove_spans(text, [(n.lineno, n.end_lineno, f'método {n.name}') for n in remove])
+
+# Após retirar o controlador legado, o seletor de grupos antigo deve ficar órfão.
 tree = parse(text)
-manual_node = next((n for n in tree.body if isinstance(n, ast.ClassDef) and n.name == 'ManualGroupSelectorDialog'), None)
-if manual_node is not None:
-    refs = [m.start() for m in re.finditer(r'\bManualGroupSelectorDialog\b', text)]
+manual = next((n for n in tree.body if isinstance(n, ast.ClassDef) and n.name == 'ManualGroupSelectorDialog'), None)
+if manual is not None:
+    refs = list(re.finditer(r'\bManualGroupSelectorDialog\b', text))
+    print('ManualGroupSelectorDialog referências:', len(refs))
     if len(refs) == 1:
-        text = remove_spans(text, [(manual_node.lineno, manual_node.end_lineno, 'class ManualGroupSelectorDialog')])
+        text = remove_spans(text, [(manual.lineno, manual.end_lineno, 'class ManualGroupSelectorDialog')])
     else:
-        print(f'ManualGroupSelectorDialog mantido: {len(refs)} referências restantes.')
+        raise SystemExit('ManualGroupSelectorDialog ainda tem uso inesperado; limpeza interrompida')
 
-# 5) Versão e notas. Nenhuma regra de negócio é alterada.
-if 'GP-H Central Histórica v0.37.0' not in text or 'APP_VERSION = "0.37.0"' not in text:
-    raise SystemExit('Marcadores de versão 0.37.0 não encontrados')
-text = text.replace('GP-H Central Histórica v0.37.0', 'GP-H Central Histórica v0.37.1', 1)
-text = text.replace('APP_VERSION = "0.37.0"', 'APP_VERSION = "0.37.1"', 1)
+# Invariantes: nenhum controlador antigo deve restar, exceto helpers realmente compartilhados.
+tree = parse(text)
+app = next(n for n in tree.body if isinstance(n, ast.ClassDef) and n.name == 'App')
+remaining_gen = sorted(n.name for n in app.body if isinstance(n, ast.FunctionDef) and n.name.startswith('generator_'))
+if remaining_gen != sorted(keep):
+    raise SystemExit(f'Conjunto generator_* inesperado: {remaining_gen} vs {sorted(keep)}')
 
-release_anchor = '            "• v0.37.0 — Decisão Contextual cruza horário, recente, estabilidade, Walk-Forward opcional, dia, convergência e geral sem trocar o método oficial.\\n"\n'
-release_new = (
-    '            "• v0.37.1 — limpeza estrutural: remove Gerador legado inalcançável e diálogos órfãos, sem alterar métodos, apostas ou interface ativa.\\n"\n'
-    + release_anchor
-)
-if release_anchor not in text:
-    raise SystemExit('Âncora do histórico de versões não encontrada')
-text = text.replace(release_anchor, release_new, 1)
+# A tela Jogar depende do formatador compartilhado; ele precisa permanecer.
+if 'generator_format_31_event' not in keep:
+    raise SystemExit('Formatador 3+1 compartilhado não foi reconhecido como raiz ativa')
+if text.count('self.generator_format_31_event(') < 2:
+    raise SystemExit('Referências ativas do painel 3+1 em Jogar não foram preservadas')
 
-# Validações de preservação das partes críticas.
 required = [
     'def generate_centenas_3plus1(',
     'def centena_31_freeze_state(',
@@ -126,45 +103,38 @@ required = [
     'def show_methods_page(',
     'def _make_scrollable_page_body(',
     'def _install_smart_scroll_policy(',
+    'def show_generator_page(',
 ]
 for marker in required:
     if marker not in text:
         raise SystemExit(f'Marcador crítico desapareceu: {marker}')
 
-# Deve continuar existindo apenas o redirecionamento de compatibilidade.
+for dead in ('GameGeneratorDialog','MethodsLabDialog','HistoricalPullsDialog','StatisticsDialog','ManualGroupSelectorDialog'):
+    if re.search(rf'^class {dead}\b', text, re.M):
+        raise SystemExit(f'Estrutura órfã ainda presente: {dead}')
+
+if 'self._set_active_nav("Gerador")' in text or 'self._page = "generator"' in text:
+    raise SystemExit('Restos da página visual Gerador ainda presentes')
+
+# show_generator_page continua sendo só compatibilidade.
 tree = parse(text)
 app = next(n for n in tree.body if isinstance(n, ast.ClassDef) and n.name == 'App')
 show_gen = next(n for n in app.body if isinstance(n, ast.FunctionDef) and n.name == 'show_generator_page')
 if len(show_gen.body) != 2 or not isinstance(show_gen.body[-1], ast.Return):
-    raise SystemExit('show_generator_page não ficou como redirecionamento mínimo')
-
-for dead in definite_orphans:
-    if re.search(rf'^class {re.escape(dead)}\b', text, re.M):
-        raise SystemExit(f'Classe órfã ainda presente: {dead}')
-
-# Não deve sobrar a antiga página visual do Gerador.
-if 'self._set_active_nav("Gerador")' in text or 'self._page = "generator"' in text:
-    raise SystemExit('Restos ativos da antiga página Gerador ainda encontrados')
+    raise SystemExit('show_generator_page deixou de ser redirecionamento mínimo')
 
 SOURCE.write_text(text, encoding='utf-8')
 
-# Documentação consolidada.
+# Ajusta a descrição da revisão para refletir o resultado final da fase B.
 doc = DOC.read_text(encoding='utf-8')
-revision = '''REVISÃO v0.37.1 — LIMPEZA ESTRUTURAL / SEM ALTERAÇÃO FUNCIONAL
-- Removido o corpo inalcançável da antiga página Gerador; show_generator_page permanece apenas como redirecionamento de compatibilidade para Jogar.
-- Removidas classes antigas comprovadamente órfãs, sem chamadas na aplicação atual: GameGeneratorDialog, MethodsLabDialog, HistoricalPullsDialog e StatisticsDialog.
-- O controlador generator_* da antiga página é removido somente quando a validação comprova ausência total de referências externas; ManualGroupSelectorDialog também só é removido se ficar sem uso após essa limpeza.
-- Jogar continua sendo o único ponto ativo da interface para geração e registro de apostas.
-- Reset + 3+1, congelamento persistente, Decisão Contextual, Puxadas, Similaridade, histórico, bilhetes, financeiro, sincronização e atualização online permanecem sem alteração de lógica.
-- Esta versão inicia a fase de organização/polimento; não adiciona método novo nem muda o visual ativo.
-
-'''
-if not doc.startswith('REVISÃO v0.37.0'):
-    raise SystemExit('Topo inesperado da DOCUMENTACAO_GP-H.txt')
-DOC.write_text(revision + doc, encoding='utf-8')
+old = '- O controlador generator_* da antiga página é removido somente quando a validação comprova ausência total de referências externas; ManualGroupSelectorDialog também só é removido se ficar sem uso após essa limpeza.\n'
+new = '- Removido o controlador generator_* exclusivo da antiga tela; permanece somente generator_format_31_event, pequeno helper ainda reutilizado pelo painel ativo do Reset + 3+1 em Jogar. ManualGroupSelectorDialog também foi removido após ficar comprovadamente órfão.\n'
+if old not in doc:
+    raise SystemExit('Linha da documentação da fase A não encontrada')
+DOC.write_text(doc.replace(old, new, 1), encoding='utf-8')
 
 new_lines = len(text.splitlines())
-print(f'LINHAS ANTES: {original_lines}')
-print(f'LINHAS DEPOIS: {new_lines}')
-print(f'REDUÇÃO: {original_lines-new_lines}')
-print('v0.37.1 estrutural preparada com sucesso.')
+print(f'LINHAS ANTES FASE B: {original_lines}')
+print(f'LINHAS DEPOIS FASE B: {new_lines}')
+print(f'REDUÇÃO FASE B: {original_lines-new_lines}')
+print('v0.37.1 limpeza estrutural finalizada.')
