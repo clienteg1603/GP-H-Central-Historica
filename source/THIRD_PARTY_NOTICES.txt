@@ -1,0 +1,15 @@
+GP-H CENTRAL HISTÓRICA — THIRD PARTY NOTICES
+==============================================
+
+Imagens dos 25 bichos
+----------------------
+As ilustrações PNG dos animais foram renderizadas a partir de glifos do
+Noto Color Emoji, projeto Google Noto Emoji.
+Projeto: https://github.com/googlefonts/noto-emoji
+Recursos de imagem do projeto: Apache License 2.0.
+
+O arquivo APACHE-2.0.txt acompanha esta distribuição.
+
+Os ícones outline do menu e o logo GP-H desta versão foram desenhados
+especificamente para a Central e não exigem bibliotecas adicionais em tempo
+de execução.

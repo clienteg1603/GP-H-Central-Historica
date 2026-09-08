@@ -1,0 +1,219 @@
+REVISÃO v0.35.0 — LABORATÓRIO SOMBRA VISÍVEL / COLETA AUTOMÁTICA
+- Nova página Laboratório Sombra no menu de estudos.
+- Ranking prospectivo de Centenas e seletores de bicho por horário, escopo e janela.
+- Puxada Combinada aparece explicitamente na comparação de Bichos/Puxadas.
+- Seca do Dia permanece camada separada e exclusivamente de 1º prêmio.
+- Após a entrada/auditoria de um novo resultado, a Central congela silenciosamente a leitura da próxima rodada, sem depender de uma aposta oficial.
+- Abrir o Laboratório também garante o congelamento da próxima leitura quando ela ainda não existe.
+- Nenhum resultado sombra é mostrado como “se tivesse jogado”.
+- Nenhum método é promovido automaticamente e nenhuma fórmula oficial foi alterada.
+- O sistema de atualização online, backup e rollback permanece igual ao validado na v0.34.2.
+
+GP-H CENTRAL HISTÓRICA
+VERSÃO ATUAL: v0.35.0
+=============================================
+
+OBJETIVO
+--------
+Central local para histórico, pesquisa, estatísticas, puxadas, métodos, geração,
+bilhetes, financeiro, sincronização multi-PC e apoio à decisão do projeto GP-H.
+
+REVISÃO v0.35.0 — LABORATÓRIO SOMBRA VISÍVEL / COLETA AUTOMÁTICA
+-----------------------------------------------------------------------
+- Laboratório Sombra ganha página própria no menu lateral, separada de Jogar e dos jogos oficiais.
+- A tela permite escolher rodada futura, escopo 1º ou 1º–5º e janela de 30, 60 ou 120 leituras.
+- Painéis mostram a melhor evidência prospectiva para Centenas, Puxadas/Bichos e Seca do Dia 1º.
+- Ranking de Bichos compara Reset Cobertura, Puxada Combinada e Similaridade usando somente snapshots congelados antes do resultado.
+- Ranking de Centenas compara 3+1, Reset + Histórica, Puxada + Histórica e Similaridade + Histórica.
+- A Seca do Dia continua sendo medida exclusivamente no 1º prêmio e não é misturada à cobertura 1º–5º.
+- Coleta sombra passa a ser independente da aposta oficial: após novos resultados/auditorias, a próxima rodada é congelada automaticamente.
+- Abrir o Laboratório também cria a leitura da próxima rodada quando ainda não existir, preservando a proteção contra reconstrução retroativa.
+- A recomendação continua baseada em evidência e amostra; não é probabilidade de prêmio e não troca método oficial automaticamente.
+- Métodos, fórmulas, financeiro, banco histórico e lógica dos jogos oficiais permanecem inalterados.
+
+REVISÃO v0.31.0 — POLIMENTO VISUAL / JOGAR / BILHETES
+---------------------------------------------------------
+- Nova aposta: Recomendação da Rodada exibe apenas a melhor indicação aplicável ao jogo atual, sem listar todos os métodos concorrentes.
+- A recomendação principal ganhou fonte semibold maior e contraste mais alto; amostra, métrica e aviso permanecem em linha secundária discreta.
+- Rodada da Nova aposta foi reorganizada em bloco próprio no topo, sem disputar a mesma linha com o texto de contexto.
+- Abas Nova aposta / Jogo manual / Bilhetes / Financeiro agora transferem corretamente o destaque visual conforme a seção ativa e respeitam a paleta escolhida.
+- Menu lateral ganhou contorno da cor de destaque na seção ativa, reforçando a localização do usuário em todas as paletas.
+- Bilhetes: a tabela de jogos da seleção passa para a segunda linha operacional, logo após Rodadas; a lista de bilhetes fica abaixo.
+- Home: miniaturas dos 25 bichos foram ampliadas sem aumentar a grade 5×5.
+- Novo pacote visual Natural com 25 animais mais fiéis à espécie; escolhas anteriores de pacote continuam preservadas.
+- Aparência reorganiza os quatro pacotes em grade 2×2 para não espremer os cartões.
+- Nenhuma fórmula, método, auditoria, financeiro ou sincronização foi alterado nesta revisão.
+
+REVISÃO v0.30.0 — LABORATÓRIO SOMBRA / RECOMENDAÇÃO DA RODADA
+-----------------------------------------------------------------
+- Novo Laboratório Sombra prospectivo: ao gerar um jogo real para a próxima rodada, a Central congela silenciosamente leituras alternativas da mesma rodada.
+- Nenhum resultado sombra aparece como mensagem retrospectiva do tipo “se tivesse jogado...”. A finalidade é somente alimentar decisões futuras.
+- Jogos-sombra de Centena: 3+1, Reset + Histórica, Puxada + Histórica e Similaridade + Histórica, com 20 Centenas quando disponíveis.
+- Puxadas de Bicho passam a ser acompanhadas como camada própria: Reset Cobertura, Puxada Combinada e Similaridade são comparados pela cobertura prospectiva dos 5 bichos.
+- Seca do Dia é auditada em camada separada e EXCLUSIVAMENTE contra o 1º prêmio. Não é misturada à cobertura 1º–5º.
+- Nova Recomendação da Rodada na tela Jogar, usando somente snapshots sombra já auditados do MESMO horário; para Centenas/Bichos, respeita se a colocação atual é 1º ou 1º–5º.
+- A recomendação informa “melhor evidência”, nunca transforma o índice em probabilidade garantida de acerto.
+- Rótulos de evidência: amostra insuficiente, baixa, moderada e forte; exigem amostra mínima e vantagem/estabilidade antes de subir de nível.
+- Puxada Combinada agora também pode ser escolhida diretamente na tela Jogar como método experimental, tornando a recomendação acionável.
+- Laboratório Sombra é idempotente: gerar mais de uma vez para a mesma base/alvo não duplica o snapshot.
+- Se o resultado-alvo já estiver na base, a Central se recusa a criar uma nova sombra retroativa.
+- Auditoria sombra ocorre silenciosamente junto das auditorias normais quando o resultado chega.
+- Snapshots sombra entram na sincronização multi-PC para que a inteligência acumulada acompanhe a mesma conta.
+
+REVISÃO v0.29.0 — CENTRAL DE DECISÃO / ETAPA 3
+------------------------------------------------
+- Novo Simulador Walk-Forward dentro da tela Decisão.
+- Janelas disponíveis: 30, 60, 120 e 240 transições operacionais recentes.
+- Cada rodada histórica é refeita usando somente dados que existiam antes da extração-base; o resultado seguinte é usado apenas para auditoria.
+- O simulador executa exatamente os métodos atuais, sem otimizar parâmetros no meio do teste: Reset Cobertura, Puxada Combinada e Similaridade.
+- Reset mantém a configuração oficial congelada last240 | pull | pair3 | probability.
+- A simulação roda em thread separada para não travar a interface; há barra de progresso e botão Cancelar.
+- Métricas: cobertura média, frequência de 2+, 3+, 4+ e 5/5, acerto posicional da Similaridade e comparação contra sobreposição aleatória esperada com o mesmo nº de grupos únicos.
+- Comparação pareada usa somente rodadas em que todos os métodos estavam disponíveis.
+- Relatório de robustez divide cronologicamente o recorte em primeira e segunda metade e mostra a variação de cobertura/2+.
+- A robustez em metades é diagnóstico descritivo; não é teste de significância e não troca método automaticamente.
+- Resultado completo pode ser exportado para CSV, incluindo resumo, robustez e detalhe rodada a rodada.
+- O walk-forward não altera o método oficial e não promete ganho futuro; serve para detectar desempenho histórico fora de amostra e reduzir risco de overfitting.
+
+REVISÃO v0.28.0 — CENTRAL DE DECISÃO / ETAPA 2
+------------------------------------------------
+- Desempenho prospectivo separado por horário da rodada.
+- Desempenho prospectivo separado por dia da semana.
+- Painel Campeão × Desafiante compara Reset Cobertura contra Puxada Combinada e Similaridade somente nas MESMAS rodadas.
+- Reset Cobertura permanece método oficial; nenhum desafiante é promovido automaticamente.
+- Um desafiante só recebe rótulo de candidato forte após amostra mínima e vantagem consistente nas métricas pareadas.
+- Detector de mudança de comportamento compara as 12 leituras recentes com as 30 anteriores e sinaliza estabilidade, atenção, queda forte ou melhora.
+- O detector é um alerta estatístico simples e não afirma que o sorteio mudou.
+- Índice de concentração dos jogos mede dependência excessiva dos mesmos bichos/grupos.
+- A tela Jogar mostra a concentração ANTES de registrar o jogo, inclusive alerta quando muitos palpites dependem dos mesmos bichos.
+- A Central de Decisão mostra também a concentração dos jogos já congelados para a rodada-alvo.
+- Todos esses recursos usam as previsões prospectivas congeladas; fórmulas dos métodos existentes permanecem intactas.
+
+
+REVISÃO v0.27.1 — CORREÇÃO DE REFRESH / CENTRAL DE DECISÃO
+------------------------------------------------
+- Corrigido o refresh visual periódico da sincronização multi-PC: a tela ativa não é mais reconstruída a cada 60 segundos.
+- Scroll, palpites/Centenas gerados e Bilhete em montagem permanecem intactos durante sincronização automática.
+- Sincronização silenciosa continua atualizando o banco e o badge de resultados em segundo plano.
+- Refresh explícito da tela Jogar também protege geração ou Bilhete ainda não salvos.
+- Nova tela Decisão no menu principal.
+- Índice de consistência dos sinais de 0 a 100. NÃO representa probabilidade de prêmio.
+- Componentes visíveis: convergência, força do Reset, suporte/contexto e evidência prospectiva.
+- O índice fica limitado enquanto existir pouca amostra prospectiva, evitando confiança artificial.
+- Compara três fontes independentes disponíveis: Reset Cobertura, Puxada Combinada e Similaridade.
+- Mostra os 5 bichos do Reset e permite clicar para entender em quais métodos cada bicho aparece.
+- Toda leitura da próxima rodada é congelada antes do resultado e não é reescrita retroativamente.
+- Quando o resultado chega, a Central audita automaticamente a cobertura dos métodos.
+- Comparação prospectiva por janelas 30, 60, 120 ou Todas as rodadas congeladas.
+- Métricas iniciais: cobertura média dos 5 prêmios, frequência de 2+ e 3+ bichos e, para Similaridade, acerto posicional.
+- Leituras congeladas também entram na sincronização multi-PC.
+- Métodos e fórmulas existentes não foram alterados.
+
+REVISÃO v0.26.1 — SINCRONIZAÇÃO MULTI-PC
+-------------------------------------------
+- Perfil simples, sem senha, com código GPH-XXXX-XXXX.
+- Cada computador mantém seu próprio SQLite local.
+- A Central troca snapshots independentes por pasta compartilhada OneDrive/Google Drive/Dropbox.
+- Sincroniza histórico, bilhetes, jogos, financeiro, cotações, banca e agora leituras da Central de Decisão.
+- Merge bidirecional preserva IDs locais e evita duplicação de Bilhetes/Jogos equivalentes.
+
+DADOS PERSISTENTES
+------------------
+No Windows:
+%LOCALAPPDATA%\GP-H_Central_Historica\dados
+
+Principais arquivos/pastas:
+- gph_historico.db
+- visual_settings.json
+- account_profile.json
+- backups_automaticos\
+- logs\
+- exportacoes\
+
+DISTRIBUIÇÃO / EXE
+------------------
+- GP-H_Central.spec usa console=False: o executável final abre somente a interface gráfica.
+- Dados do usuário ficam separados da instalação.
+- A pasta final Windows deve ser limpa, sem previews, screenshots, caches, temporários ou builds intermediárias.
+
+VALIDAÇÃO v0.31.0
+-----------------
+- py_compile: OK
+- self_test.py completo: OK
+- Nova aposta em 1280x760: OK
+- Financeiro/abas em 1050x650 e paleta Vinho Escuro: OK
+- destaque ativo das abas internas acompanha a paleta: OK
+- Bilhetes: ordem Rodadas → Jogos → Bilhetes: OK
+- pacote Natural: 25/25 imagens presentes: OK
+- recomendação: somente uma indicação principal por vez: OK
+- congelamento prospectivo: OK
+- segunda abertura não sobrescreve a leitura congelada: OK
+- auditoria após resultado: OK
+- comparação prospectiva: OK
+- inclusão das leituras no snapshot multi-PC: OK
+- interface Decisão em 1280x760 e 1050x650: OK
+- regressão completa dos métodos anteriores: OK
+- regressão do sync automático sem reconstrução visual: OK
+- proteção de montagem ativa na tela Jogar: OK
+- desempenho por horário e dia da semana: OK
+- Campeão × Desafiante pareado: OK
+- detector 12 recentes × 30 anteriores: OK
+- concentração em jogos congelados: OK
+- concentração da geração antes de registrar: OK
+- interface da Etapa 2 em 1280x760 e 1050x650: OK
+- Simulador Walk-Forward: OK
+- Janelas 30/60/120/240: OK
+- corte temporal sem look-ahead: OK
+- comparação pareada: OK
+- baseline aleatório equivalente: OK
+- robustez primeira metade × segunda metade: OK
+- progresso/cancelamento em thread separada: OK
+- exportação CSV do Walk-Forward: OK
+- interface da Etapa 3 em ambiente Tkinter/Xvfb: OK
+- criação prospectiva do Laboratório Sombra: OK
+- proteção contra sombra retroativa após resultado: OK
+- 20 Centenas sombra por 3+1 / Reset / Puxada / Similaridade quando disponíveis: OK
+- Puxadas de Bicho auditadas por cobertura: OK
+- Seca auditada exclusivamente no 1º prêmio: OK
+- recomendação por horário sem mensagem retrospectiva: OK
+- Puxada Combinada disponível na tela Jogar: OK
+- sincronização dos snapshots sombra entre PCs: OK
+- interface Jogar / Recomendação em Tkinter/Xvfb: OK
+
+IMPORTANTE
+----------
+O índice de consistência não é probabilidade de acerto nem garantia de resultado.
+A comparação de métodos é construída com previsões congeladas antes dos resultados para evitar look-ahead.
+
+
+REVISÃO v0.32.3 — HOME
+- Mantém abertura maximizada.
+- Adiciona Atrasos atuais: Bicho, Centena e Dezena.
+- Atraso medido em extrações completas desde a última aparição em qualquer um dos cinco prêmios.
+- Empates são preservados e o mouse mostra a última ocorrência.
+
+
+REVISÃO v0.32.3 — BUSCA DE RESULTADOS
+- Buscar atualizações relê os últimos 30 dias quando a base já possui resultados.
+- A janela mensal também é usada para reler datas recentes durante a atualização completa.
+- O objetivo é recuperar resultados ausentes e absorver correções tardias sem rebaixar todo o histórico.
+
+REVISÃO v0.34.0 — SERVIDOR DE ATUALIZAÇÕES
+--------------------------------------------
+- Cliente preparado para hospedagem HTTPS estática, sem depender do provedor.
+- update_manifest.json pode apontar para pacote por URL relativa; a mesma pasta de release pode ser movida para outro host sem refazer o ZIP.
+- Canais Estável e Teste são mantidos simultaneamente no manifesto.
+- Suporte a espelhos de download para contingência.
+- HTTP remoto é bloqueado; HTTP só é aceito em localhost para testes.
+- Manifesto limitado a 1 MiB e pacote a 600 MiB.
+- Configurações permite informar/testar o endereço do servidor uma única vez; o valor fica salvo em %LOCALAPPDATA%.
+- CRIAR_PACOTE_ATUALIZACAO.py gera a estrutura pronta para publicação: update_manifest.json + releases/GP-H_update_vX.Y.Z.zip.
+- Teste fim a fim local validado: manifesto via HTTP localhost -> resolução da URL relativa -> download -> SHA-256 -> leitura do pacote -> instalação -> backup -> rollback.
+- Interface abriu em smoke test Tkinter/Xvfb sem erro de inicialização.
+
+
+REVISÃO v0.34.2
+- O manifesto oficial padrão passa a ser:
+  https://raw.githubusercontent.com/clienteg1603/GP-H-Central-Historica/main/update_manifest.json
+- Objetivo: validar atualização real da v0.34.1 para v0.34.2 pela internet.
+- Métodos e fórmulas permanecem inalterados.
