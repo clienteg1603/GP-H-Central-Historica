@@ -15,6 +15,7 @@ Novidades v0.35.2:
 - Mostra convergência transparente entre os métodos disponíveis, sem criar desempates artificiais.
 - Exibe separadamente a Seca do Dia focada exclusivamente no 1º prêmio.
 - Nenhum método, fórmula ou jogo oficial foi alterado.
+- Publicação automática pelo código-fonte oficial em source/.
 
 Novidades v0.35.1:
 - Busca/atualização de resultados passa a reler os últimos 7 dias em vez de 30.
