@@ -15,6 +15,7 @@ Novidades v0.36.0:
 - Rolamento inteligente vira padrão global da interface e alcança as principais abas antigas, janelas e widgets futuros.
 - A roda prioriza controles roláveis e depois a página; Combobox/Spinbox ficam protegidos contra alterações acidentais pela roda.
 - Nenhum método, fórmula ou jogo oficial foi alterado.
+- Publicação automática pelo código-fonte oficial em source/.
 
 Novidades v0.35.3:
 - Recomendação da Rodada passa a explicar o desempenho prospectivo daquele horário.
