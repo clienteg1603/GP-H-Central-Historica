@@ -1,0 +1,61 @@
+name: Repetir validacao v0.38.0
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/retry2-v0.38.0.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Corrigir script temporario
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p=Path('.github/scripts/patch_v0380.py')
+          s=p.read_text(encoding='utf-8')
+          s=s.replace("text=text.replace(end_anchor,''''        self._base_section_widgets = {", "text=text.replace(end_anchor,'''        self._base_section_widgets = {", 1)
+          old="text=text.replace('text=\"Buscar atualizações\", style=\"Accent.TButton\", command=self.start_update_search',\n                  'text=\"Atualizar resultados\", style=\"Accent.TButton\", command=self.start_update_search',1)"
+          new="text=text.replace('text=\"Buscar atualizações\"', 'text=\"Atualizar resultados\"', 1)"
+          if old not in s:
+              raise SystemExit('Troca antiga de Resultados nao encontrada')
+          s=s.replace(old,new,1)
+          p.write_text(s,encoding='utf-8')
+          PY
+      - name: Aplicar v0.38.0
+        run: python .github/scripts/patch_v0380.py
+      - name: Validar Python e invariantes
+        run: |
+          python -m py_compile source/gph_central.py
+          python - <<'PY'
+          from pathlib import Path
+          import ast
+          text=Path('source/gph_central.py').read_text(encoding='utf-8')
+          ast.parse(text)
+          assert 'APP_VERSION = "0.38.0"' in text
+          assert '"Base / Configurações"' not in text
+          assert '"Configurações", self.show_base_config' in text
+          assert 'def _base_scroll_to(self, key):' in text
+          assert 'text="Guia dos métodos"' in text
+          assert 'text="BUSCAR NOVA VERSÃO"' in text
+          assert text.count('text="Atualizar resultados"') >= 2
+          assert 'text="Como funcionam os métodos"' not in text[text.find('def show_base_config'):text.find('def _auto_decision_cycle')]
+          assert '("Tabela de prêmios", lambda: PayoutConfigDialog' not in text
+          print('VALIDAÇÃO v0.38.0 OK')
+          PY
+      - name: Registrar v0.38.0
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add source/gph_central.py source/DOCUMENTACAO_GP-H.txt
+          git diff --cached --stat
+          git commit -m "v0.38.0 polimento geral das telas"
+          git push origin main
