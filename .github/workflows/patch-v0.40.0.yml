@@ -32,13 +32,14 @@ jobs:
       - name: Testar congelamento e auditoria da propria Decisao
         run: |
           python - <<'PY'
-          import json, sqlite3, tempfile
+          import json, sqlite3, tempfile, sys
           from pathlib import Path
           import importlib.util
 
           src=Path('source/gph_central.py')
           spec=importlib.util.spec_from_file_location('gph',src)
           mod=importlib.util.module_from_spec(spec)
+          sys.modules[spec.name]=mod
           spec.loader.exec_module(mod)
           Database=mod.Database
 
