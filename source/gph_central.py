@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-GP-H Central Histórica v0.35.2
+GP-H Central Histórica v0.35.3
 Pesquisa e manutenção do histórico 2026 do Deu no Poste / PT-Rio.
 
 Escopo desta versão:
@@ -86,7 +86,7 @@ def write_crash_log(exc: BaseException):
 
 
 APP_NAME = "GP-H Central Histórica"
-APP_VERSION = "0.35.2"
+APP_VERSION = "0.35.3"
 START_DATE = date(2026, 1, 2)
 BASE_URL = "https://brasildeunoposte.com.br/resultado-do-jogo-do-bicho-deu-no-poste-{date}/"
 # Ao buscar/atualizar resultados, relê os últimos 7 dias para absorver
@@ -13742,6 +13742,7 @@ class App(tk.Tk):
             f"Última sincronização: {(self.account_profile or {}).get('last_sync_at') or 'nunca'}\n\n"
             "Atualizações recentes:\n"
             "• v0.35.1 — Busca/atualização de resultados passa a reler somente os últimos 7 dias, em vez de 30.\n"
+            "• v0.35.3 — Recomendação da Rodada explica desempenho do horário, convergência atual e Seca do 1º.\n"
             "• v0.35.0 — Laboratório Sombra visível, coleta prospectiva automática após novos resultados e painel separado para Puxadas/Seca 1º.\n"
             "• v0.34.1 — versão de teste da primeira publicação real pelo GitHub; métodos e fórmulas permanecem inalterados.\n"
             "• v0.34.0 — cliente de atualização pronto para servidor HTTPS estático, URLs relativas, espelhos e configuração do servidor.\n"
@@ -15613,6 +15614,79 @@ class App(tk.Tk):
                 pass
         threading.Thread(target=worker, daemon=True).start()
 
+    def _shadow_recommendation_current_context(self, target, scope, best_name):
+        # Explica a recomendação com sinais atuais sem mudar o vencedor histórico.
+        try:
+            status = self.db.shadow_lab_status(target)
+            current = (status or {}).get("current") or {}
+            payload = current.get("payload") or {}
+            bpayload = payload.get("bichos") or {}
+
+            method_groups = {}
+            support = Counter()
+            for method in ("Reset Cobertura", "Puxada Combinada", "Similaridade"):
+                rec = bpayload.get(method) or {}
+                groups = []
+                for value in rec.get("groups") or []:
+                    try:
+                        group = int(value)
+                    except Exception:
+                        continue
+                    if 1 <= group <= 25 and group not in groups:
+                        groups.append(group)
+                groups = groups[:5]
+                if groups:
+                    method_groups[method] = groups
+                    support.update(groups)
+
+            parts = []
+            available_count = len(method_groups)
+            convergent = sorted(
+                ((group, count) for group, count in support.items() if count >= 2),
+                key=lambda item: (-item[1], item[0]),
+            )
+            if available_count >= 2:
+                if convergent:
+                    labels = [
+                        f"{BICHOS.get(group, str(group)).title()} {count}/{available_count}"
+                        for group, count in convergent[:5]
+                    ]
+                    parts.append("Convergência atual: " + ", ".join(labels))
+                else:
+                    parts.append(f"Convergência atual: nenhuma coincidência entre {available_count} métodos")
+
+            method_map = {
+                "Reset + Histórica": "Reset Cobertura",
+                "Puxada + Histórica": "Puxada Combinada",
+                "Similaridade + Histórica": "Similaridade",
+            }
+            chosen_method = method_map.get(best_name, best_name if best_name in method_groups else None)
+            if chosen_method in method_groups and available_count >= 2:
+                groups = method_groups[chosen_method]
+                shared = [group for group in groups if support.get(group, 0) >= 2]
+                parts.append(f"Apoio ao recomendado: {len(shared)}/{len(groups)} bichos reforçados por outro método")
+
+            if str(scope or "") == "1º":
+                dry = ((payload.get("seca_1p") or {}).get("Seca do Dia 1º") or {})
+                dry_groups = []
+                for value in dry.get("groups") or []:
+                    try:
+                        group = int(value)
+                    except Exception:
+                        continue
+                    if 1 <= group <= 25 and group not in dry_groups:
+                        dry_groups.append(group)
+                dry_groups = dry_groups[:5]
+                if dry_groups:
+                    dry_names = ", ".join(BICHOS.get(group, str(group)).title() for group in dry_groups)
+                    overlap = [group for group in dry_groups if support.get(group, 0) >= 2]
+                    suffix = f" • {len(overlap)} também na convergência" if convergent else ""
+                    parts.append(f"Seca 1º atual: {dry_names}{suffix}")
+
+            return " • ".join(parts)
+        except Exception:
+            return ""
+
     def _play_refresh_shadow_recommendation(self):
         label = getattr(self, "play_recommendation_label", None)
         note = getattr(self, "play_recommendation_note", None)
@@ -15696,9 +15770,12 @@ class App(tk.Tk):
                 text=f"Melhor indicação agora: {best['name']} • evidência {best['status']}"
             )
             if note is not None:
-                note.configure(
-                    text=f"{best['rounds']} rodadas prospectivas neste horário • {best['detail']}. Evidência histórica, não garantia de acerto."
-                )
+                base_note = f"{best['rounds']} rodadas prospectivas neste horário • {best['detail']}."
+                current_context = self._shadow_recommendation_current_context(target, scope, best.get("name"))
+                if current_context:
+                    base_note += f" • {current_context}."
+                base_note += " Evidência histórica, não garantia de acerto."
+                note.configure(text=base_note)
         except Exception:
             label.configure(text="Ainda não há amostra suficiente para recomendar um método nesta rodada.")
             if note is not None:

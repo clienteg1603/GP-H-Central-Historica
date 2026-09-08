@@ -1,3 +1,12 @@
+REVISÃO v0.35.3 — RECOMENDAÇÃO EXPLICADA / CONTEXTO ATUAL
+- A Recomendação da Rodada continua escolhendo a melhor evidência prospectiva do mesmo horário.
+- A explicação passa a cruzar essa evidência com a convergência atual entre Reset Cobertura, Puxada Combinada e Similaridade.
+- Para o método recomendado, informa quantos dos seus bichos também estão sendo reforçados por outro método.
+- Quando o escopo é 1º prêmio, a Seca do Dia aparece separadamente no contexto atual e indica sobreposição com a convergência quando existir.
+- A convergência atual serve como apoio/discordância e NÃO substitui sozinha o vencedor histórico, evitando promover um método por coincidência de uma única rodada.
+- Empates e ausência de convergência são mostrados sem desempates artificiais.
+- Nenhum método, fórmula, histórico ou jogo oficial foi alterado.
+
 REVISÃO v0.35.2 — LEITURA ATUAL / CONVERGÊNCIA DO LABORATÓRIO
 - O Laboratório Sombra mostra os sinais atuais já congelados para a próxima rodada.
 - Reset Cobertura, Puxada Combinada e Similaridade aparecem com seus 5 bichos atuais.
@@ -21,7 +30,7 @@ REVISÃO v0.35.0 — LABORATÓRIO SOMBRA VISÍVEL / COLETA AUTOMÁTICA
 - O sistema de atualização online, backup e rollback permanece igual ao validado na v0.34.2.
 
 GP-H CENTRAL HISTÓRICA
-VERSÃO ATUAL: v0.35.2
+VERSÃO ATUAL: v0.35.3
 =============================================
 
 OBJETIVO
