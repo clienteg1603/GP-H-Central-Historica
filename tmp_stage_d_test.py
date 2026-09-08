@@ -1,4 +1,5 @@
 import os
+import sys
 import tempfile
 from pathlib import Path
 import importlib.util
@@ -7,6 +8,7 @@ os.environ['GPH_DATA_DIR'] = tempfile.mkdtemp(prefix='gph_stage_d_')
 path = Path('source/gph_central.py').resolve()
 spec = importlib.util.spec_from_file_location('gph_stage_d_module', path)
 mod = importlib.util.module_from_spec(spec)
+sys.modules[spec.name] = mod
 spec.loader.exec_module(mod)
 fn = mod.Database.decision_operational_recommendation
 
