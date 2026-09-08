@@ -1,3 +1,23 @@
+REVISÃO v0.37.2 — PADRÃO GLOBAL DE INTERFACE / ETAPA 2
+- Criada uma fundação visual permanente com constantes centrais para tipografia, espaçamento, padding de cartões, altura de tabela e texto sobre cor de destaque.
+- Escala tipográfica oficial: página 17, hero 18, KPI 15, seção/título de cartão 11, texto normal 9, texto secundário 8, tabela 9 e cabeçalho de tabela 9 Semibold.
+- Regra permanente: nenhum texto explícito da interface deve usar fonte abaixo de 8 pt; ocorrências antigas de 6/7 pt foram elevadas para 8 pt.
+- Treeviews passam a usar fonte 9, cabeçalho 9 Semibold e altura de linha 28 px para leitura mais confortável.
+- Entry, Combobox, Spinbox e Checkbutton passam a obedecer a tipografia global de 9 pt; botões e abas internas também usam o núcleo central de estilos.
+- Oficializados estilos que já apareciam isoladamente na interface: Card2.TFrame, CardTitle.TLabel e Muted.TLabel; adicionado Warning.TLabel para o papel semântico de aviso.
+- As cores de sucesso, perigo, aviso, destaque, texto e texto secundário continuam vindo exclusivamente da paleta ativa; a atualização não muda as cinco paletas disponíveis.
+- Escala oficial de espaçamento para telas atuais e futuras: 4 / 8 / 12 / 16 / 24 px; o conteúdo principal passa a usar 16×12 como respiro-base.
+- Esta etapa não reorganiza telas e não unifica ainda os dois motores de rolagem; isso pertence às etapas seguintes.
+- Reset + 3+1, congelamento persistente, Reset Cobertura, Decisão Contextual e geração em Jogar são validados por AST antes/depois e permanecem sem alteração lógica.
+
+PADRÃO PERMANENTE DE INTERFACE — TIPOGRAFIA, ESPAÇAMENTO E CORES
+- Novas telas devem reutilizar os estilos globais e as constantes UI_FONT_SIZES / UI_SPACING; evitar criar tamanhos, paddings e cores isolados sem necessidade real.
+- Fonte mínima visível: 8 pt. Texto normal: 9 pt. Tabelas: 9 pt com linhas de 28 px.
+- Títulos de página usam 17 pt; títulos de cartão/seção 11 pt; KPIs 15 pt; hero/destaque principal pode usar 18 pt.
+- Espaçamento preferencial: 4 px micro, 8 px pequeno, 12 px padrão, 16 px grande e 24 px para separação forte de seções.
+- Cores funcionais devem vir dos papéis da paleta ativa: accent, success, danger, warning, text e muted. Evitar hexadecimais novos espalhados pelas telas.
+- Exceções visuais devem ser justificadas pelo componente e não virar um novo padrão paralelo.
+
 REVISÃO v0.37.1 — LIMPEZA ESTRUTURAL / SEM ALTERAÇÃO FUNCIONAL
 - Removido o corpo inalcançável da antiga página Gerador; show_generator_page permanece apenas como redirecionamento de compatibilidade para Jogar.
 - Removidas classes antigas comprovadamente órfãs, sem chamadas na aplicação atual: GameGeneratorDialog, MethodsLabDialog, HistoricalPullsDialog e StatisticsDialog.

@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-GP-H Central Histórica v0.37.1
+GP-H Central Histórica v0.37.2
 Pesquisa e manutenção do histórico 2026 do Deu no Poste / PT-Rio.
 
 Escopo desta versão:
@@ -86,7 +86,7 @@ def write_crash_log(exc: BaseException):
 
 
 APP_NAME = "GP-H Central Histórica"
-APP_VERSION = "0.37.1"
+APP_VERSION = "0.37.2"
 START_DATE = date(2026, 1, 2)
 BASE_URL = "https://brasildeunoposte.com.br/resultado-do-jogo-do-bicho-deu-no-poste-{date}/"
 # Ao buscar/atualizar resultados, relê os últimos 7 dias para absorver
@@ -359,6 +359,34 @@ def _read_local_update_package(package_path):
         raise ValueError("Pacote local sem versão.")
     return meta
 
+
+# ------------------------------------------------------------------
+# PADRÃO PERMANENTE DE INTERFACE — tipografia, espaçamento e densidade
+# ------------------------------------------------------------------
+UI_FONT_FAMILY = "Segoe UI"
+UI_FONT_SEMIBOLD = "Segoe UI Semibold"
+UI_FONT_MONO = "Consolas"
+UI_TEXT_ON_ACCENT = "#FFFFFF"
+UI_FONT_SIZES = {
+    "page": 17,
+    "hero": 18,
+    "kpi": 15,
+    "section": 11,
+    "body": 9,
+    "secondary": 8,
+    "table": 9,
+    "table_heading": 9,
+}
+UI_SPACING = {
+    "micro": 4,
+    "small": 8,
+    "normal": 12,
+    "large": 16,
+    "section": 24,
+}
+UI_CARD_PADDING = UI_SPACING["normal"]
+UI_CARD_PADDING_COMPACT = UI_SPACING["small"]
+UI_TABLE_ROWHEIGHT = 28
 
 THEME_PALETTES = {
     "Noturno Azul": {
@@ -12857,6 +12885,7 @@ class App(tk.Tk):
             f"Sincronização: {'ativa' if (self.account_profile or {}).get('sync_enabled') else 'somente local'}\n"
             f"Última sincronização: {(self.account_profile or {}).get('last_sync_at') or 'nunca'}\n\n"
             "Atualizações recentes:\n"
+            "• v0.37.2 — padrão global de interface: tipografia, fonte mínima, tabelas, controles, espaçamento e cores semânticas centralizados.\n"
             "• v0.37.1 — limpeza estrutural: remove Gerador legado inalcançável e diálogos órfãos, sem alterar métodos, apostas ou interface ativa.\n"
             "• v0.37.0 — Decisão Contextual cruza horário, recente, estabilidade, Walk-Forward opcional, dia, convergência e geral sem trocar o método oficial.\n"
             "• v0.35.1 — Busca/atualização de resultados passa a reler somente os últimos 7 dias, em vez de 30.\n"
@@ -12971,6 +13000,11 @@ class App(tk.Tk):
         self.animal_images_tiny = pack.get("tiny", {})
 
     def _build_style(self):
+        """Aplica o padrão visual global da Central.
+
+        Regra permanente: novas telas devem preferir estes estilos e constantes
+        em vez de criar tamanhos, cores e densidades isoladas.
+        """
         style = ttk.Style(self)
         try:
             style.theme_use("clam")
@@ -12981,23 +13015,37 @@ class App(tk.Tk):
         bg, card, card2 = c["bg"], c["card"], c["card2"]
         text, muted, border = c["text"], c["muted"], c["border"]
         accent, accent_hover = c["accent"], c["accent_hover"]
+        body = UI_FONT_SIZES["body"]
+        secondary = UI_FONT_SIZES["secondary"]
+        section = UI_FONT_SIZES["section"]
 
+        # Superfícies
         style.configure("TFrame", background=bg)
         style.configure("Card.TFrame", background=card)
+        style.configure("Card2.TFrame", background=card2)
         style.configure("Toolbar.TFrame", background=card2)
-        style.configure("TLabel", background=bg, foreground=text, font=("Segoe UI", 9))
-        style.configure("Title.TLabel", background=bg, foreground=text, font=("Segoe UI Semibold", 17))
-        style.configure("Sub.TLabel", background=bg, foreground=muted, font=("Segoe UI", 9))
-        style.configure("Card.TLabel", background=card, foreground=text, font=("Segoe UI", 9))
-        style.configure("CardMuted.TLabel", background=card, foreground=muted, font=("Segoe UI", 8))
-        style.configure("Section.TLabel", background=card, foreground=text, font=("Segoe UI Semibold", 11))
-        style.configure("Kpi.TLabel", background=card, foreground=text, font=("Segoe UI Semibold", 15))
-        style.configure("KpiCaption.TLabel", background=card, foreground=muted, font=("Segoe UI", 8))
-        style.configure("Success.TLabel", background=card, foreground=c["success"], font=("Segoe UI Semibold", 10))
-        style.configure("Danger.TLabel", background=card, foreground=c["danger"], font=("Segoe UI Semibold", 10))
 
+        # Tipografia semântica
+        style.configure("TLabel", background=bg, foreground=text, font=(UI_FONT_FAMILY, body))
+        style.configure("Title.TLabel", background=bg, foreground=text, font=(UI_FONT_SEMIBOLD, UI_FONT_SIZES["page"]))
+        style.configure("Sub.TLabel", background=bg, foreground=muted, font=(UI_FONT_FAMILY, body))
+        style.configure("Muted.TLabel", background=bg, foreground=muted, font=(UI_FONT_FAMILY, secondary))
+        style.configure("Card.TLabel", background=card, foreground=text, font=(UI_FONT_FAMILY, body))
+        style.configure("CardMuted.TLabel", background=card, foreground=muted, font=(UI_FONT_FAMILY, secondary))
+        style.configure("Card2.TLabel", background=card2, foreground=text, font=(UI_FONT_FAMILY, body))
+        style.configure("Card2Muted.TLabel", background=card2, foreground=muted, font=(UI_FONT_FAMILY, secondary))
+        style.configure("Section.TLabel", background=card, foreground=text, font=(UI_FONT_SEMIBOLD, section))
+        style.configure("CardTitle.TLabel", background=card, foreground=text, font=(UI_FONT_SEMIBOLD, section))
+        style.configure("Kpi.TLabel", background=card, foreground=text, font=(UI_FONT_SEMIBOLD, UI_FONT_SIZES["kpi"]))
+        style.configure("KpiCaption.TLabel", background=card, foreground=muted, font=(UI_FONT_FAMILY, secondary))
+        style.configure("Recommendation.TLabel", background=card, foreground=text, font=(UI_FONT_SEMIBOLD, section))
+        style.configure("Success.TLabel", background=card, foreground=c["success"], font=(UI_FONT_SEMIBOLD, 10))
+        style.configure("Danger.TLabel", background=card, foreground=c["danger"], font=(UI_FONT_SEMIBOLD, 10))
+        style.configure("Warning.TLabel", background=card, foreground=c["warning"], font=(UI_FONT_SEMIBOLD, 10))
+
+        # Botões
         style.configure(
-            "TButton", font=("Segoe UI Semibold", 9), padding=(10, 6),
+            "TButton", font=(UI_FONT_SEMIBOLD, body), padding=(UI_SPACING["normal"], 6),
             background=card2, foreground=text, bordercolor=border,
             focusthickness=1, focuscolor=accent, relief="flat",
         )
@@ -13007,20 +13055,23 @@ class App(tk.Tk):
             foreground=[("disabled", muted), ("!disabled", text)],
         )
         style.configure(
-            "Accent.TButton", font=("Segoe UI Semibold", 9), padding=(12, 7),
-            background=accent, foreground="#FFFFFF", bordercolor=accent, relief="flat",
+            "Accent.TButton", font=(UI_FONT_SEMIBOLD, body), padding=(UI_SPACING["normal"], 7),
+            background=accent, foreground=UI_TEXT_ON_ACCENT, bordercolor=accent, relief="flat",
         )
         style.map(
             "Accent.TButton",
             background=[("active", accent_hover), ("pressed", accent), ("!disabled", accent)],
-            foreground=[("!disabled", "#FFFFFF")],
+            foreground=[("!disabled", UI_TEXT_ON_ACCENT)],
         )
-        style.configure("Quiet.TButton", font=("Segoe UI", 9), padding=(9, 5), background=card2, foreground=muted, bordercolor=border)
+        style.configure(
+            "Quiet.TButton", font=(UI_FONT_FAMILY, body), padding=(UI_SPACING["small"], 5),
+            background=card2, foreground=muted, bordercolor=border,
+        )
         style.map("Quiet.TButton", background=[("active", c["hover"])])
 
-        # Abas internas: a seleção acompanha a paleta ativa em toda a Central.
+        # Abas internas
         style.configure(
-            "Subnav.TButton", font=("Segoe UI Semibold", 9), padding=(11, 6),
+            "Subnav.TButton", font=(UI_FONT_SEMIBOLD, body), padding=(UI_SPACING["normal"], 6),
             background=card2, foreground=text, bordercolor=border, relief="flat",
         )
         style.map(
@@ -13029,7 +13080,7 @@ class App(tk.Tk):
             foreground=[("!disabled", text)],
         )
         style.configure(
-            "SubnavActive.TButton", font=("Segoe UI Semibold", 9), padding=(11, 6),
+            "SubnavActive.TButton", font=(UI_FONT_SEMIBOLD, body), padding=(UI_SPACING["normal"], 6),
             background=c["selection"], foreground=text, bordercolor=accent, relief="flat",
         )
         style.map(
@@ -13037,27 +13088,51 @@ class App(tk.Tk):
             background=[("active", c["selection"]), ("pressed", c["selection"]), ("!disabled", c["selection"])],
             foreground=[("!disabled", text)],
         )
-        style.configure(
-            "Recommendation.TLabel", background=card, foreground=text,
-            font=("Segoe UI Semibold", 11),
-        )
 
+        # Tabelas: leitura confortável e padrão único em toda a Central.
         style.configure(
-            "Treeview", font=("Segoe UI", 8), rowheight=25,
+            "Treeview", font=(UI_FONT_FAMILY, UI_FONT_SIZES["table"]), rowheight=UI_TABLE_ROWHEIGHT,
             background=c["tree"], fieldbackground=c["tree"], foreground=text,
             bordercolor=border, lightcolor=border, darkcolor=border,
         )
-        style.map("Treeview", background=[("selected", c["selection"])], foreground=[("selected", text)])
-        style.configure("Treeview.Heading", font=("Segoe UI Semibold", 8), background=card2, foreground=text, relief="flat")
+        style.map(
+            "Treeview",
+            background=[("selected", c["selection"])],
+            foreground=[("selected", text)],
+        )
+        style.configure(
+            "Treeview.Heading", font=(UI_FONT_SEMIBOLD, UI_FONT_SIZES["table_heading"]),
+            background=card2, foreground=text, relief="flat",
+        )
         style.map("Treeview.Heading", background=[("active", c["hover"])])
 
-        style.configure("TEntry", padding=5, fieldbackground=c["entry"], foreground=text, insertcolor=text, bordercolor=border)
-        style.configure("TCombobox", padding=4, fieldbackground=c["entry"], background=card2, foreground=text, arrowcolor=muted, bordercolor=border)
-        style.map("TCombobox", fieldbackground=[("readonly", c["entry"])], foreground=[("readonly", text)], selectbackground=[("readonly", c["selection"])])
-        style.configure("TSpinbox", padding=4, fieldbackground=c["entry"], foreground=text, arrowcolor=muted, bordercolor=border)
-        style.configure("TCheckbutton", font=("Segoe UI", 8), background=bg, foreground=text)
-        style.configure("TScrollbar", background=card2, troughcolor=bg, bordercolor=bg, arrowcolor=muted, darkcolor=card2, lightcolor=card2)
+        # Campos e controles
+        style.configure(
+            "TEntry", font=(UI_FONT_FAMILY, body), padding=5,
+            fieldbackground=c["entry"], foreground=text, insertcolor=text, bordercolor=border,
+        )
+        style.configure(
+            "TCombobox", font=(UI_FONT_FAMILY, body), padding=4,
+            fieldbackground=c["entry"], background=card2, foreground=text,
+            arrowcolor=muted, bordercolor=border,
+        )
+        style.map(
+            "TCombobox",
+            fieldbackground=[("readonly", c["entry"])],
+            foreground=[("readonly", text)],
+            selectbackground=[("readonly", c["selection"])],
+        )
+        style.configure(
+            "TSpinbox", font=(UI_FONT_FAMILY, body), padding=4,
+            fieldbackground=c["entry"], foreground=text, arrowcolor=muted, bordercolor=border,
+        )
+        style.configure("TCheckbutton", font=(UI_FONT_FAMILY, body), background=bg, foreground=text)
+        style.configure(
+            "TScrollbar", background=card2, troughcolor=bg, bordercolor=bg,
+            arrowcolor=muted, darkcolor=card2, lightcolor=card2,
+        )
         style.map("TScrollbar", background=[("active", c["hover"]), ("pressed", accent)])
+
 
     def _set_theme(self, theme_name):
         if theme_name not in THEME_PALETTES:
@@ -13191,10 +13266,10 @@ class App(tk.Tk):
         right = ttk.Frame(shell)
         right.pack(side="left", fill="both", expand=True)
 
-        self.content = ttk.Frame(right, padding=(14, 11))
+        self.content = ttk.Frame(right, padding=(UI_SPACING["large"], UI_SPACING["normal"]))
         self.content.pack(fill="both", expand=True)
 
-        status_bar = ttk.Frame(right, padding=(18, 4, 18, 8))
+        status_bar = ttk.Frame(right, padding=(UI_SPACING["large"], UI_SPACING["micro"], UI_SPACING["large"], UI_SPACING["small"]))
         status_bar.pack(fill="x")
         self.status = ttk.Label(status_bar, text="Pronto.", style="Sub.TLabel")
         self.status.pack(side="left")
@@ -13218,7 +13293,7 @@ class App(tk.Tk):
             text=f"v{APP_VERSION}  •  CENTRAL HISTÓRICA",
             bg=self.colors["sidebar"],
             fg=self.colors["muted"],
-            font=("Segoe UI Semibold", 7),
+            font=("Segoe UI Semibold", 8),
             anchor="w",
         ).pack(fill="x", padx=18, pady=(0, 15))
 
@@ -13785,7 +13860,7 @@ class App(tk.Tk):
                     text=f"Centena {p['centena']}  •  Dezena {p['dezena']}",
                     bg=self.colors["card2"],
                     fg=self.colors["muted"],
-                    font=("Segoe UI", 7),
+                    font=("Segoe UI", 8),
                     anchor="w",
                 ).pack(fill="x")
 
@@ -13821,7 +13896,7 @@ class App(tk.Tk):
             delay_head,
             text="extrações desde a última aparição",
             style="CardMuted.TLabel",
-            font=("Segoe UI", 7),
+            font=("Segoe UI", 8),
         ).pack(side="right")
 
         def _delay_text(field, caption):
@@ -13875,7 +13950,7 @@ class App(tk.Tk):
                 text=caption,
                 bg=self.colors["card2"],
                 fg=self.colors["muted"],
-                font=("Segoe UI", 7),
+                font=("Segoe UI", 8),
             )
             cap.pack(anchor="w")
             val = tk.Label(
@@ -13891,7 +13966,7 @@ class App(tk.Tk):
                 text=delay_value,
                 bg=self.colors["card2"],
                 fg=self.colors["accent"],
-                font=("Segoe UI Semibold", 7),
+                font=("Segoe UI Semibold", 8),
             )
             delay_lab.pack(anchor="w")
             for widget in (box, cap, val, delay_lab):
@@ -13992,7 +14067,7 @@ class App(tk.Tk):
             band,
             text=f"{info['grupo']:02d} · {info['bicho']}",
             bg=band_bg, fg=self.colors["text"],
-            font=("Segoe UI Semibold", 7 if compact else 9),
+            font=("Segoe UI Semibold", 8 if compact else 9),
             anchor="center",
         )
         title.pack(fill="x", pady=(2, 0))
@@ -14000,7 +14075,7 @@ class App(tk.Tk):
             band,
             text="  ".join(info["dezenas"]),
             bg=band_bg, fg=self.colors["accent"],
-            font=("Segoe UI Semibold", 7 if compact else 8),
+            font=("Segoe UI Semibold", 8 if compact else 8),
             anchor="center",
         )
         dezenas.pack(fill="x", pady=(0, 2 if compact else 3))
@@ -19882,7 +19957,7 @@ class App(tk.Tk):
                 tile, text="ATUAL" if theme_name == self.theme_name else "Aplicar",
                 bg=self.colors["card2"],
                 fg=self.colors["accent"] if theme_name == self.theme_name else self.colors["muted"],
-                font=("Segoe UI Semibold", 7), anchor="w",
+                font=("Segoe UI Semibold", 8), anchor="w",
             ).pack(fill="x", padx=8, pady=(1, 7))
             for w in (tile, *tile.winfo_children()):
                 w.bind("<Button-1>", lambda _e, n=theme_name: self._set_theme(n))
@@ -19931,13 +20006,13 @@ class App(tk.Tk):
             if selected:
                 tk.Label(
                     head, text="  ATUAL  ", bg=self.colors["accent"], fg="#FFFFFF",
-                    font=("Segoe UI Semibold", 7), padx=4, pady=2,
+                    font=("Segoe UI Semibold", 8), padx=4, pady=2,
                 ).pack(side="right")
 
             tk.Label(
                 tile, text=pack_descriptions[pack_name],
                 bg=self.colors["card2"], fg=self.colors["muted"],
-                font=("Segoe UI", 7), anchor="w", justify="left",
+                font=("Segoe UI", 8), anchor="w", justify="left",
             ).pack(fill="x", padx=10, pady=(0, 5))
 
             # Quatro animais GRANDES. A versão anterior usava miniaturas pequenas demais
@@ -19954,7 +20029,7 @@ class App(tk.Tk):
                     tk.Label(sample, image=img, bg=self.colors["band"], bd=0).pack(pady=(1, 0))
                 tk.Label(
                     sample, text=sample_names[grupo], bg=self.colors["band"],
-                    fg=self.colors["muted"], font=("Segoe UI", 6),
+                    fg=self.colors["muted"], font=("Segoe UI", 8),
                 ).pack(pady=(0, 1))
 
             actions = tk.Frame(tile, bg=self.colors["card2"])
