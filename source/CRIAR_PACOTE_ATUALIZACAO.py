@@ -3,7 +3,7 @@ r"""Cria um pacote de atualização online da GP-H Central Histórica.
 
 Fluxo recomendado após compilar no Windows:
   py -3 CRIAR_PACOTE_ATUALIZACAO.py ^
-      --version 0.35.0 ^
+      --version 0.35.1 ^
       --exe "dist\GP-H Central Historica.exe" ^
       --channel stable ^
       --notes "Resumo da versão" ^

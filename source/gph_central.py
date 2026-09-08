@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-GP-H Central Histórica v0.35.0
+GP-H Central Histórica v0.35.1
 Pesquisa e manutenção do histórico 2026 do Deu no Poste / PT-Rio.
 
 Escopo desta versão:
@@ -86,12 +86,12 @@ def write_crash_log(exc: BaseException):
 
 
 APP_NAME = "GP-H Central Histórica"
-APP_VERSION = "0.35.0"
+APP_VERSION = "0.35.1"
 START_DATE = date(2026, 1, 2)
 BASE_URL = "https://brasildeunoposte.com.br/resultado-do-jogo-do-bicho-deu-no-poste-{date}/"
-# Ao buscar/atualizar resultados, relê aproximadamente um mês para absorver
-# resultados ausentes e correções tardias publicadas pela fonte.
-WEB_RESULT_RECHECK_DAYS = 30
+# Ao buscar/atualizar resultados, relê os últimos 7 dias para absorver
+# resultados ausentes e correções recentes publicadas pela fonte.
+WEB_RESULT_RECHECK_DAYS = 7
 
 ROOT = Path(__file__).resolve().parent
 ASSET_DIR = ROOT / "assets"
@@ -13741,6 +13741,7 @@ class App(tk.Tk):
             f"Sincronização: {'ativa' if (self.account_profile or {}).get('sync_enabled') else 'somente local'}\n"
             f"Última sincronização: {(self.account_profile or {}).get('last_sync_at') or 'nunca'}\n\n"
             "Atualizações recentes:\n"
+            "• v0.35.1 — Busca/atualização de resultados passa a reler somente os últimos 7 dias, em vez de 30.\n"
             "• v0.35.0 — Laboratório Sombra visível, coleta prospectiva automática após novos resultados e painel separado para Puxadas/Seca 1º.\n"
             "• v0.34.1 — versão de teste da primeira publicação real pelo GitHub; métodos e fórmulas permanecem inalterados.\n"
             "• v0.34.0 — cliente de atualização pronto para servidor HTTPS estático, URLs relativas, espelhos e configuração do servidor.\n"
@@ -23539,8 +23540,8 @@ class App(tk.Tk):
                 day = START_DATE + timedelta(days=idx)
 
                 # Em atualizações futuras, datas antigas já presentes são puladas.
-                # O último mês é sempre relido para absorver resultados ausentes e
-                # correções tardias do site. Datas mais antigas já presentes são puladas.
+                # Os últimos 7 dias são sempre relidos para absorver resultados ausentes e
+                # correções recentes do site. Datas mais antigas já presentes são puladas.
                 if day < today - timedelta(days=WEB_RESULT_RECHECK_DAYS) and self.db.has_date(day):
                     skipped += 1
                     self.sync_queue.put(("progress", idx + 1, total_days, day, "já existente"))

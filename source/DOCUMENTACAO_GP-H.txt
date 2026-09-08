@@ -1,3 +1,7 @@
+REVISÃO v0.35.1 — JANELA DE ATUALIZAÇÃO DE RESULTADOS
+- Ao buscar/atualizar resultados, a Central relê os últimos 7 dias em vez de 30.
+- A mudança reduz trabalho de rede sem alterar métodos, fórmulas ou histórico.
+
 REVISÃO v0.35.0 — LABORATÓRIO SOMBRA VISÍVEL / COLETA AUTOMÁTICA
 - Nova página Laboratório Sombra no menu de estudos.
 - Ranking prospectivo de Centenas e seletores de bicho por horário, escopo e janela.
@@ -10,7 +14,7 @@ REVISÃO v0.35.0 — LABORATÓRIO SOMBRA VISÍVEL / COLETA AUTOMÁTICA
 - O sistema de atualização online, backup e rollback permanece igual ao validado na v0.34.2.
 
 GP-H CENTRAL HISTÓRICA
-VERSÃO ATUAL: v0.35.0
+VERSÃO ATUAL: v0.35.1
 =============================================
 
 OBJETIVO
