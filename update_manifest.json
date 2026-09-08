@@ -4,11 +4,11 @@
   "server_name": "GitHub GP-H",
   "channels": {
     "test": {
-      "version": "0.34.2",
-      "url": "https://github.com/clienteg1603/GP-H-Central-Historica/releases/download/v0.34.2-test/GP-H_update_v0.34.2.zip",
-      "sha256": "1166ea58b061ad4d78c5cc5ad805edcda64814d19f888d018ea17c5791f841ee",
-      "notes": "Teste real de atualização v0.34.1 para v0.34.2",
-      "published_at": "2026-09-08T01:51:18+00:00",
+      "version": "0.35.0",
+      "url": "https://github.com/clienteg1603/GP-H-Central-Historica/releases/download/v0.35.0-test/GP-H_update_v0.35.0.zip",
+      "sha256": "0f5a1bb1cd83344378b68d7a4b783e8fdba116d84ad10f00d498c9c3c427d793",
+      "notes": "v0.35.0 Teste — Laboratório Sombra e coleta prospectiva automática",
+      "published_at": "2026-09-08T02:26:47+00:00",
       "mirrors": []
     },
     "stable": {
@@ -20,5 +20,5 @@
       "mirrors": []
     }
   },
-  "updated_at": "2026-09-08T02:22:18+00:00"
+  "updated_at": "2026-09-08T02:26:47+00:00"
 }
