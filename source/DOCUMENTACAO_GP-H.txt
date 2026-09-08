@@ -1,7 +1,7 @@
 REVISÃO v0.37.1 — LIMPEZA ESTRUTURAL / SEM ALTERAÇÃO FUNCIONAL
 - Removido o corpo inalcançável da antiga página Gerador; show_generator_page permanece apenas como redirecionamento de compatibilidade para Jogar.
 - Removidas classes antigas comprovadamente órfãs, sem chamadas na aplicação atual: GameGeneratorDialog, MethodsLabDialog, HistoricalPullsDialog e StatisticsDialog.
-- O controlador generator_* da antiga página é removido somente quando a validação comprova ausência total de referências externas; ManualGroupSelectorDialog também só é removido se ficar sem uso após essa limpeza.
+- Removido o controlador generator_* exclusivo da antiga tela; permanece somente generator_format_31_event, pequeno helper ainda reutilizado pelo painel ativo do Reset + 3+1 em Jogar. ManualGroupSelectorDialog também foi removido após ficar comprovadamente órfão.
 - Jogar continua sendo o único ponto ativo da interface para geração e registro de apostas.
 - Reset + 3+1, congelamento persistente, Decisão Contextual, Puxadas, Similaridade, histórico, bilhetes, financeiro, sincronização e atualização online permanecem sem alteração de lógica.
 - Esta versão inicia a fase de organização/polimento; não adiciona método novo nem muda o visual ativo.
