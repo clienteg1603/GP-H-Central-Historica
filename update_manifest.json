@@ -10,7 +10,15 @@
       "notes": "Teste real de atualização v0.34.1 para v0.34.2",
       "published_at": "2026-09-08T01:51:18+00:00",
       "mirrors": []
+    },
+    "stable": {
+      "version": "0.34.2",
+      "url": "https://github.com/clienteg1603/GP-H-Central-Historica/releases/download/v0.34.2/GP-H_update_v0.34.2.zip",
+      "sha256": "00bd60a10cef4fb7aa755f50cbc57dc70d9b261151c3d33991343534cc99de83",
+      "notes": "GP-H Central Histórica v0.34.2 — primeira versão estável com atualização online validada",
+      "published_at": "2026-09-08T02:22:18+00:00",
+      "mirrors": []
     }
   },
-  "updated_at": "2026-09-08T01:51:18+00:00"
+  "updated_at": "2026-09-08T02:22:18+00:00"
 }
