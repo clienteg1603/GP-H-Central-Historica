@@ -7,4 +7,4 @@ windows_package/
 *.log
 *.tmp
 *.bak
-# build-trigger v0.37.0 decisao contextual
+# build-trigger v0.37.1 limpeza estrutural
