@@ -1,3 +1,12 @@
+REVISÃO v0.43.0 — ETAPA B / CALIBRAÇÃO DA CONFIANÇA DA DECISÃO
+- Retoma a sequência original iniciada na v0.40.0: Etapa A = auditoria prospectiva; Etapa B = medir se os níveis BAIXA/MODERADA/FORTE realmente separam desempenho.
+- Novo painel “CALIBRAÇÃO DA CONFIANÇA — ETAPA B” usa somente Decisões Contextuais congeladas antes do resultado; não há backfill e não há look-ahead.
+- Para cada nível mostra N, taxa de melhor/empate, vitória exclusiva, erro, IC95% de Wilson, índice médio e acertos médios do líder.
+- Mede também correlação descritiva entre índice congelado e desfecho melhor/empate e, quando houver amostra, diferença FORTE − BAIXA.
+- A calibração só considera um nível suficientemente amostrado a partir de 8 casos e permanece “EM FORMAÇÃO” enquanto não houver base adequada; não força conclusão com poucas rodadas.
+- IMPORTANTE: esta etapa NÃO altera pesos, limiares, classificação FORTE/MODERADA/BAIXA, Reset + 3+1 ou qualquer método. Ajuste adaptativo pertence à futura Etapa C.
+- GP-H Meta v0.1 continua congelado exatamente como na v0.41/v0.42. A v0.43.0 não muda suas 20 características, regressão, treinamento, Walk-Forward ou ranking.
+
 REVISÃO v0.42.1 — DESEMPENHO DO WALK-FORWARD META
 - Correção exclusivamente técnica: SIMULAR META deixa de executar o treino CPU-bound em thread do processo da interface e passa a usar processo separado.
 - O worker usa prioridade reduzida quando possível para preservar fluidez da janela principal.
