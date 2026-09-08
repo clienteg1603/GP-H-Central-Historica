@@ -1,0 +1,55 @@
+name: Auditar interface v0.36
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/auditar-interface-v0.36.yml"
+
+jobs:
+  auditar:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Baixar repositorio
+        uses: actions/checkout@v4
+      - name: Auditar telas e rolagem
+        shell: bash
+        run: |
+          python - <<'PY'
+          import ast
+          from pathlib import Path
+
+          p = Path('source/gph_central.py')
+          text = p.read_text(encoding='utf-8')
+          tree = ast.parse(text)
+          lines = text.splitlines()
+
+          print('=== FUNCOES DE TELA ===')
+          for node in ast.walk(tree):
+              if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and (
+                  node.name.startswith('show_') or node.name.startswith('build_') or 'page' in node.name
+              ):
+                  start = node.lineno
+                  end = getattr(node, 'end_lineno', start)
+                  src = '\n'.join(lines[start-1:end])
+                  uses_scroll = '_make_scrollable_page_body' in src
+                  has_canvas = 'tk.Canvas' in src
+                  has_toplevel = 'Toplevel' in src
+                  has_notebook = 'Notebook' in src
+                  print(f'{node.name}|{start}-{end}|scroll={uses_scroll}|canvas={has_canvas}|toplevel={has_toplevel}|notebook={has_notebook}')
+
+          print('=== NAVEGACAO ===')
+          for i,line in enumerate(lines,1):
+              if '_add_nav_button' in line or 'show_shadow_lab_page' in line or 'show_decision_page' in line:
+                  print(f'{i}: {line.strip()}')
+
+          print('=== TOPLEVELS ===')
+          for i,line in enumerate(lines,1):
+              if 'Toplevel(' in line:
+                  print(f'{i}: {line.strip()}')
+
+          print('=== NOTEBOOKS ===')
+          for i,line in enumerate(lines,1):
+              if 'Notebook(' in line:
+                  print(f'{i}: {line.strip()}')
+          PY
