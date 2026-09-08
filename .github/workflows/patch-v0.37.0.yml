@@ -65,7 +65,7 @@ jobs:
           sudo apt-get update -qq
           sudo apt-get install -y python3-tk >/dev/null
           GPH_DATA_DIR=/tmp/gph_v0370 python - <<'PY'
-          import importlib.util, types
+          import importlib.util, types, json
           from pathlib import Path
 
           spec = importlib.util.spec_from_file_location('gph_v0370', Path('source/gph_central.py'))
@@ -75,7 +75,6 @@ jobs:
           spec.loader.exec_module(mod)
           db = object.__new__(mod.Database)
 
-          methods = ['Reset Cobertura', 'Puxada Combinada', 'Similaridade']
           rows = []
           # 24 snapshots auditados do mesmo horário. Puxada é melhor de forma
           # persistente; Similaridade intermediária; Reset abaixo.
@@ -88,11 +87,12 @@ jobs:
               rows.append({
                   'target_data': f'2026-08-{28-(i%20):02d}',
                   'target_hora': '11h',
+                  # Formato real retornado pela camada SQLite.
+                  'signals_json': json.dumps(signals),
                   'signals': signals,
               })
 
           db._decision_audited_rows = types.MethodType(lambda self, window=None, target_hour=None, weekday=None: list(rows), db)
-          # Usa a implementação real para transformar snapshots em métricas.
           db.decision_change_detection = types.MethodType(lambda self, recent_window=12, baseline_window=30: {
               'rows': [
                   {'method':'Reset Cobertura','status':'ESTÁVEL'},
