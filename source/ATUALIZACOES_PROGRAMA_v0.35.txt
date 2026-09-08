@@ -1,4 +1,4 @@
-GP-H CENTRAL HISTÓRICA v0.36.4 — ATUALIZAÇÕES DO PROGRAMA
+GP-H CENTRAL HISTÓRICA v0.36.5 — ATUALIZAÇÕES DO PROGRAMA
 
 Nesta versão o cliente de atualização está pronto para um servidor HTTPS estático.
 
@@ -78,3 +78,8 @@ Novidades v0.36.4:
 - Painel auditável do Reset + 3+1 no Gerador.
 - Mostra LIVRE/CONGELADA, ranking das três dezenas, aplicação 3×+1× e evento do estado.
 - Texto legado de “congelamento por 1 rodada” corrigido para a regra persistente oficial.
+
+Novidades v0.36.5:
+- Estado auditável do Reset + 3+1 também na tela Jogar.
+- Mostra os 5 bichos, LIVRE/CONGELADA, principal/2ª/3ª, aplicação 3×+1× e evento do estado antes da aposta.
+- Nenhuma fórmula do método oficial foi alterada.
