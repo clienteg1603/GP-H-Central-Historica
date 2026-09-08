@@ -14,8 +14,13 @@ on:
       notes:
         description: Notas exibidas pela Central
         required: true
-        default: "v0.35.0 Teste — Laboratório Sombra e coleta prospectiva automática"
+        default: "Atualização de teste do GP-H Central Histórica"
         type: string
+  push:
+    branches:
+      - main
+    paths:
+      - "source/**"
 
 permissions:
   contents: write
@@ -24,31 +29,24 @@ jobs:
   build-and-publish:
     runs-on: windows-latest
     env:
-      CHANNEL: ${{ inputs.channel }}
-      RELEASE_NOTES: ${{ inputs.notes }}
-      SOURCE_ZIP: GP-H_Central_Historica_v0.35.0_Teste_GitHub.zip
+      CHANNEL: ${{ github.event_name == 'workflow_dispatch' && inputs.channel || 'test' }}
+      RELEASE_NOTES: ${{ github.event_name == 'workflow_dispatch' && inputs.notes || 'Atualização de teste automática do GP-H Central Histórica' }}
 
     steps:
       - name: Baixar repositório
         uses: actions/checkout@v4
 
-      - name: Conferir arquivo-fonte
+      - name: Conferir código-fonte
         shell: pwsh
         run: |
-          if (-not (Test-Path "$env:SOURCE_ZIP")) {
-            throw "Arquivo $env:SOURCE_ZIP não encontrado na raiz do repositório."
+          $src = Join-Path $env:GITHUB_WORKSPACE "source"
+          if (-not (Test-Path (Join-Path $src "gph_central.py"))) {
+            throw "Código-fonte não encontrado em source/gph_central.py"
           }
-
-      - name: Extrair versão-fonte
-        shell: pwsh
-        run: |
-          $work = Join-Path $env:RUNNER_TEMP "gph_source"
-          Remove-Item $work -Recurse -Force -ErrorAction SilentlyContinue
-          New-Item -ItemType Directory -Force $work | Out-Null
-          Expand-Archive -Path "$env:SOURCE_ZIP" -DestinationPath $work -Force
-          $src = Get-ChildItem $work -Directory | Select-Object -First 1
-          if (-not $src) { throw "Pasta principal não encontrada dentro do ZIP." }
-          "SOURCE_DIR=$($src.FullName)" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          if (-not (Test-Path (Join-Path $src "gph_updater.py"))) {
+            throw "Código-fonte não encontrado em source/gph_updater.py"
+          }
+          "SOURCE_DIR=$src" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
 
       - name: Preparar Python
         uses: actions/setup-python@v5
@@ -96,6 +94,7 @@ jobs:
         shell: pwsh
         run: |
           Set-Location "$env:SOURCE_DIR"
+          Remove-Item "release_server" -Recurse -Force -ErrorAction SilentlyContinue
           New-Item -ItemType Directory -Force "release_server" | Out-Null
           if (Test-Path "$env:GITHUB_WORKSPACE\update_manifest.json") {
             Copy-Item "$env:GITHUB_WORKSPACE\update_manifest.json" "release_server\update_manifest.json" -Force
@@ -122,6 +121,7 @@ jobs:
           Copy-Item "APACHE-2.0.txt" $full
           Copy-Item "THIRD_PARTY_NOTICES.txt" $full
           $zip = "GP-H_Central_Historica_v$env:VERSION`_Windows.zip"
+          Remove-Item $zip -Force -ErrorAction SilentlyContinue
           Compress-Archive -Path "$full\*" -DestinationPath $zip -CompressionLevel Optimal -Force
           "WINDOWS_ZIP=$($env:SOURCE_DIR)\$zip" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
           "UPDATE_ZIP=$($env:SOURCE_DIR)\release_server\releases\$env:PACKAGE_NAME" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
