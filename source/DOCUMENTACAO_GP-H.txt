@@ -1,3 +1,13 @@
+REVISÃO v0.45.0 — ETAPA D / RECOMENDAÇÃO OPERACIONAL v0.1
+- Fecha a sequência A/B/C/D da Decisão Contextual com uma camada de tradução operacional. A Etapa D NÃO cria novo score, não recalcula pesos e não escolhe um novo líder.
+- A D usa exatamente o líder e o nível final já produzidos por A+B+C: FORTE = priorizar a leitura; MODERADA = priorizar com cautela; BAIXA = sem vantagem clara; AMOSTRA INSUFICIENTE = evidência insuficiente.
+- Enquanto a Etapa C estiver EM FORMAÇÃO, a D preserva a decisão-base e não usa adaptação incompleta como justificativa operacional.
+- Cada recomendação fica armazenada dentro do contextual_json antes do resultado, com líder de referência, fonte BASE/ADAPTATIVO, confiança, vantagem, índice e proteções anti-lookahead.
+- A Auditoria D mede somente recomendações acionáveis: taxa em que o método recomendado terminou melhor/empatado, cobertura média e arrependimento médio contra o melhor método da rodada. Rodadas de “sem vantagem clara” ou “evidência insuficiente” não são transformadas artificialmente em acerto/erro.
+- Novo painel “RECOMENDAÇÃO OPERACIONAL — ETAPA D” mostra conduta, método de referência, confiança, vantagem, origem do líder e auditoria prospectiva acumulada.
+- Proteções permanentes: a Etapa D não altera Reset Cobertura, Puxada Combinada, Similaridade, Histórico Concentrado, 3+1, GP-H Meta v0.1 nem o Reset + 3+1 oficial.
+- REGRA DE CONGELAMENTO: concluída a Etapa D, o Meta/Decisão entra em observação prospectiva por 2–3 dias sem novas mudanças estruturais por desempenho. Corrigir imediatamente apenas erros técnicos; depois fazer checkpoint Meta × Reset × Puxada × Similaridade × Histórico × acaso e preferir 20–30 rodadas antes de nova recalibração relevante.
+
 REVISÃO v0.44.0 — ETAPA C / DECISÃO ADAPTATIVA v0.1
 - A Etapa C passa a usar as auditorias prospectivas das Etapas A/B para fazer uma correção pequena e regularizada na escolha contextual entre Reset Cobertura, Puxada Combinada e Similaridade.
 - A Decisão Contextual BASE continua sendo calculada exatamente como antes. Depois dela, e ainda ANTES do resultado, a camada DECISION_ADAPTIVE_SHRINK_V1 pode ajustar cada índice em no máximo ±3 pontos.
