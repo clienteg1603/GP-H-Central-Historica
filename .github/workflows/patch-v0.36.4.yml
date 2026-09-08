@@ -1,0 +1,58 @@
+name: Aplicar painel Reset 3+1 v0.36.4
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/patch-v0.36.4.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Aplicar patch
+        run: python .github/scripts/patch_v0364.py
+
+      - name: Validar Python e interface
+        run: |
+          python -m py_compile source/gph_central.py
+          python - <<'PY'
+          from pathlib import Path
+          import ast
+
+          text = Path('source/gph_central.py').read_text(encoding='utf-8')
+          assert 'APP_VERSION = "0.36.4"' in text
+          assert 'def generator_render_31_state' in text
+          assert 'ESTADO DO RESET + 3+1' in text
+          assert 'CONGELADA' in text and 'LIVRE' in text
+          assert 'congelamento da principal por 1 rodada' not in text
+          assert 'mesmo bicho reaparecer' in text
+          ast.parse(text)
+          print('Validacao v0.36.4 OK')
+          PY
+
+      - name: Confirmar que a fórmula 3+1 não foi alterada
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          text = Path('source/gph_central.py').read_text(encoding='utf-8')
+          assert 'main_dez = segunda["numero"]' in text
+          assert 'extra_dez = terceira["numero"]' in text
+          assert 'main_dez = principal["numero"]' in text
+          assert 'extra_dez = segunda["numero"]' in text
+          assert 'freeze_rule": "persistente_ate_reaparicao_do_bicho"' in text
+          print('Fórmula oficial preservada')
+          PY
+
+      - name: Publicar source
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add source/gph_central.py source/DOCUMENTACAO_GP-H.txt source/ATUALIZACOES_PROGRAMA_v0.35.txt
+          git commit -m "GP-H v0.36.4: painel auditavel do Reset 3+1"
+          git push
