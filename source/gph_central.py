@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-GP-H Central Histórica v0.42.0
+GP-H Central Histórica v0.42.1
 Pesquisa e manutenção do histórico 2026 do Deu no Poste / PT-Rio.
 
 Escopo desta versão:
@@ -32,6 +32,7 @@ import socket
 import uuid
 import sqlite3
 import threading
+import multiprocessing as mp
 import copy
 import json
 import sys
@@ -87,7 +88,7 @@ def write_crash_log(exc: BaseException):
 
 
 APP_NAME = "GP-H Central Histórica"
-APP_VERSION = "0.42.0"
+APP_VERSION = "0.42.1"
 START_DATE = date(2026, 1, 2)
 BASE_URL = "https://brasildeunoposte.com.br/resultado-do-jogo-do-bicho-deu-no-poste-{date}/"
 # Ao buscar/atualizar resultados, relê os últimos 7 dias para absorver
@@ -22462,7 +22463,7 @@ class App(tk.Tk):
         ttk.Separator(card,orient="horizontal").pack(fill="x",pady=(10,8))
         wf_head=ttk.Frame(card,style="Card.TFrame"); wf_head.pack(fill="x")
         ttk.Label(wf_head,text="WALK-FORWARD RIGOROSO DO META",style="CardTitle.TLabel").pack(side="left")
-        ttk.Label(wf_head,text="v0.42 • cérebro v0.1 congelado",style="CardMuted.TLabel").pack(side="right")
+        ttk.Label(wf_head,text="v0.42.1 • cérebro v0.1 congelado",style="CardMuted.TLabel").pack(side="right")
         ttk.Label(
             card,
             text="Treina somente nas rodadas anteriores, prevê a próxima sem ver o resultado e avança no tempo. Compara Meta, Reset, Puxada, Similaridade, Histórico Concentrado e o acaso esperado.",
@@ -22528,54 +22529,128 @@ class App(tk.Tk):
     def _meta_walk_forward_start(self):
         if getattr(self,"_meta_wf_running",False):
             return
-        try: window=int(self.meta_wf_window.get())
-        except Exception: window=30
+        try:
+            window=int(self.meta_wf_window.get())
+        except Exception:
+            window=30
+
         self._meta_wf_running=True
-        self._meta_wf_cancel_event=threading.Event(); self._meta_wf_queue=queue.Queue()
         self._meta_wf_progress_state=(0,1,"Preparando o histórico do Meta…")
+        self._meta_wf_dead_polls=0
         if self._meta_walk_forward_ui_alive():
-            self.meta_wf_run_btn.configure(state="disabled"); self.meta_wf_cancel_btn.configure(state="normal")
-            self.meta_wf_export_btn.configure(state="disabled"); self.meta_wf_progress.configure(value=0)
-            self.meta_wf_status.configure(text="Reconstruindo sinais históricos sem look-ahead…")
-        q=self._meta_wf_queue; cancel_event=self._meta_wf_cancel_event
-        def progress(done,total,info):
-            phase=info.get("phase") or "PROCESSANDO"
-            suffix=f"{info.get('data') or '—'} {info.get('sorteio') or ''} {info.get('hora') or ''}".strip()
-            q.put(("progress",done,total,f"{phase} • {done}/{total} • {suffix}"))
-        def worker():
-            try:
-                q.put(("done",self.db.meta_walk_forward(window=window,progress_callback=progress,cancel_event=cancel_event)))
-            except Exception as exc:
-                q.put(("error",str(exc)))
-        threading.Thread(target=worker,daemon=True,name="GPH-MetaWalkForward").start()
+            self.meta_wf_run_btn.configure(state="disabled")
+            self.meta_wf_cancel_btn.configure(state="normal")
+            self.meta_wf_export_btn.configure(state="disabled")
+            self.meta_wf_progress.configure(value=0)
+            self.meta_wf_status.configure(text="Iniciando processo isolado do Walk-Forward…")
+
+        try:
+            # v0.42.1: CPU-bound Meta sai do processo do Tk. Em thread, o treino
+            # Python puro disputava o GIL com a interface e causava microtravadas.
+            ctx=mp.get_context("spawn")
+            self._meta_wf_queue=ctx.Queue()
+            self._meta_wf_cancel_event=ctx.Event()
+            proc=ctx.Process(
+                target=_meta_walk_forward_process_worker,
+                args=(str(self.db.path),window,self._meta_wf_queue,self._meta_wf_cancel_event),
+                daemon=True,
+                name="GPH-MetaWalkForward",
+            )
+            self._meta_wf_process=proc
+            proc.start()
+        except Exception as exc:
+            self._meta_wf_running=False
+            self._meta_wf_process=None
+            if self._meta_walk_forward_ui_alive():
+                self.meta_wf_status.configure(text="Falha ao iniciar o processo do Walk-Forward: "+str(exc))
+                self.meta_wf_run_btn.configure(state="normal")
+                self.meta_wf_cancel_btn.configure(state="disabled")
+            return
         self.after(120,self._meta_walk_forward_poll)
 
     def _meta_walk_forward_cancel(self):
         event=getattr(self,"_meta_wf_cancel_event",None)
-        if event is not None: event.set()
-        if self._meta_walk_forward_ui_alive(): self.meta_wf_status.configure(text="Cancelamento solicitado…")
+        if event is not None:
+            try:
+                event.set()
+            except Exception:
+                pass
+        if self._meta_walk_forward_ui_alive():
+            self.meta_wf_status.configure(text="Cancelamento solicitado…")
+
+    def _meta_walk_forward_process_cleanup(self):
+        proc=getattr(self,"_meta_wf_process",None)
+        if proc is not None:
+            try:
+                proc.join(timeout=0.15)
+            except Exception:
+                pass
+        self._meta_wf_process=None
+        q=getattr(self,"_meta_wf_queue",None)
+        if q is not None:
+            try:
+                q.close()
+            except Exception:
+                pass
+        self._meta_wf_queue=None
+        self._meta_wf_cancel_event=None
 
     def _meta_walk_forward_poll(self):
         q=getattr(self,"_meta_wf_queue",None)
-        if q is None: return
+        if q is None:
+            return
         finished=False
         while True:
-            try: msg=q.get_nowait()
-            except queue.Empty: break
+            try:
+                msg=q.get_nowait()
+            except queue.Empty:
+                break
+            except (EOFError,OSError):
+                break
             kind=msg[0]
             if kind=="progress":
-                _k,done,total,label=msg; self._meta_wf_progress_state=(done,total,label)
+                _k,done,total,label=msg
+                self._meta_wf_progress_state=(done,total,label)
                 if self._meta_walk_forward_ui_alive():
-                    self.meta_wf_progress.configure(value=(done/max(1,total))*100.0); self.meta_wf_status.configure(text=label)
+                    self.meta_wf_progress.configure(value=(done/max(1,total))*100.0)
+                    self.meta_wf_status.configure(text=label)
             elif kind=="done":
-                self.meta_walk_forward_last_result=msg[1]; self._meta_wf_running=False; finished=True
-                if self._meta_walk_forward_ui_alive(): self._meta_walk_forward_render(msg[1])
+                self.meta_walk_forward_last_result=msg[1]
+                self._meta_wf_running=False
+                finished=True
+                if self._meta_walk_forward_ui_alive():
+                    self._meta_walk_forward_render(msg[1])
             elif kind=="error":
-                self._meta_wf_running=False; finished=True
+                self._meta_wf_running=False
+                finished=True
                 if self._meta_walk_forward_ui_alive():
                     self.meta_wf_status.configure(text="Falha no Walk-Forward Meta: "+str(msg[1]))
-                    self.meta_wf_run_btn.configure(state="normal"); self.meta_wf_cancel_btn.configure(state="disabled")
-        if getattr(self,"_meta_wf_running",False) and not finished:
+                    self.meta_wf_run_btn.configure(state="normal")
+                    self.meta_wf_cancel_btn.configure(state="disabled")
+
+        proc=getattr(self,"_meta_wf_process",None)
+        if finished:
+            self._meta_walk_forward_process_cleanup()
+            return
+
+        # Se o worker caiu sem conseguir enviar a mensagem de erro, não deixa a
+        # interface presa para sempre em "processando". Exit 0 recebe alguns polls
+        # extras para a fila terminar de descarregar o resultado.
+        if proc is not None and not proc.is_alive():
+            exitcode=proc.exitcode
+            self._meta_wf_dead_polls=int(getattr(self,"_meta_wf_dead_polls",0))+1
+            if exitcode not in (None,0) or self._meta_wf_dead_polls>=5:
+                self._meta_wf_running=False
+                if self._meta_walk_forward_ui_alive():
+                    self.meta_wf_status.configure(text=f"O processo do Walk-Forward encerrou inesperadamente (código {exitcode}).")
+                    self.meta_wf_run_btn.configure(state="normal")
+                    self.meta_wf_cancel_btn.configure(state="disabled")
+                self._meta_walk_forward_process_cleanup()
+                return
+        else:
+            self._meta_wf_dead_polls=0
+
+        if getattr(self,"_meta_wf_running",False):
             self.after(120,self._meta_walk_forward_poll)
 
     def _meta_walk_forward_render(self, result):
@@ -24799,7 +24874,43 @@ class App(tk.Tk):
         )
 
 
+def _meta_walk_forward_process_worker(db_path, window, out_queue, cancel_event):
+    """Worker CPU-bound do Meta em processo separado; não toca na interface."""
+    try:
+        # Prioridade menor preserva fluidez do processo principal mesmo em PCs
+        # com poucos núcleos. Isso não altera cálculo, ordem ou dados do modelo.
+        try:
+            if os.name == "nt":
+                import ctypes
+                BELOW_NORMAL_PRIORITY_CLASS=0x00004000
+                kernel32=ctypes.windll.kernel32
+                kernel32.SetPriorityClass(kernel32.GetCurrentProcess(),BELOW_NORMAL_PRIORITY_CLASS)
+            else:
+                os.nice(5)
+        except Exception:
+            pass
+
+        db=Database(Path(db_path))
+        def progress(done,total,info):
+            phase=(info or {}).get("phase") or "PROCESSANDO"
+            suffix=f"{(info or {}).get('data') or '—'} {(info or {}).get('sorteio') or ''} {(info or {}).get('hora') or ''}".strip()
+            out_queue.put(("progress",done,total,f"{phase} • {done}/{total} • {suffix}"))
+        result=db.meta_walk_forward(
+            window=window,
+            progress_callback=progress,
+            cancel_event=cancel_event,
+        )
+        out_queue.put(("done",result))
+    except BaseException as exc:
+        try:
+            out_queue.put(("error",f"{type(exc).__name__}: {exc}"))
+        except Exception:
+            pass
+
+
+
 if __name__ == "__main__":
+    mp.freeze_support()
     try:
         app = App()
         if not getattr(app, "_startup_cancelled", False):

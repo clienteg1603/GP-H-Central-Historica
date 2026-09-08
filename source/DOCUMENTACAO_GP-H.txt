@@ -1,3 +1,10 @@
+REVISÃO v0.42.1 — DESEMPENHO DO WALK-FORWARD META
+- Correção exclusivamente técnica: SIMULAR META deixa de executar o treino CPU-bound em thread do processo da interface e passa a usar processo separado.
+- O worker usa prioridade reduzida quando possível para preservar fluidez da janela principal.
+- Barra de progresso, Cancelar, 20/30/60 rodadas, comparação e CSV permanecem.
+- O cérebro GP-H Meta v0.1 continua congelado: nenhuma característica, peso, regressão, janela de treino, método ou métrica foi alterada.
+- A regra de observação permanece: após a correção técnica, usar normalmente por 2–3 dias e evitar otimização por desempenho antes do checkpoint prospectivo.
+
 REVISÃO v0.42.0 — WALK-FORWARD RIGOROSO DO GP-H META
 - O cérebro GP-H Meta v0.1 da v0.41.0 permanece CONGELADO: mesmas 20 características, regressão logística nativa L2, treino mínimo de 20 snapshots e limite prospectivo de 160.
 - A v0.42.0 acrescenta SOMENTE avaliação: para cada rodada histórica avaliada, treina nas rodadas anteriores, prevê o Top 5 sem ver o alvo, mede depois e avança uma rodada.
