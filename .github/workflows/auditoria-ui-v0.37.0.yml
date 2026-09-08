@@ -1,0 +1,90 @@
+name: Auditoria visual e estrutural v0.37.0
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/auditoria-ui-v0.37.0.yml"
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Auditar interface e regras globais
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import ast, re, collections
+
+          p = Path('source/gph_central.py')
+          text = p.read_text(encoding='utf-8')
+          lines = text.splitlines()
+          tree = ast.parse(text)
+
+          print('TOTAL_LINHAS', len(lines))
+
+          print('\n=== FUNCOES/METODOS DE INTERFACE ===')
+          names=[]
+          for node in ast.walk(tree):
+              if isinstance(node,(ast.FunctionDef, ast.AsyncFunctionDef)):
+                  n=node.name.lower()
+                  if any(k in n for k in ('build','page','tab','screen','dialog','window','scroll','wheel','style','theme','decision','jogar','pesquisa','resultado','estat','puxada','metodo','config','base','inicio','home')):
+                      names.append((node.lineno,node.name))
+          for ln,n in sorted(names):
+              print(f'{ln}: {n}')
+
+          print('\n=== MENU / NAVEGACAO / ROTULOS PRINCIPAIS ===')
+          for i,line in enumerate(lines,1):
+              if any(k in line for k in ['Início','Pesquisa','Resultados','Estatísticas','Puxadas','Métodos','Jogar','Decisão','Base / Configurações','Configurações','Laboratório','Gerador']):
+                  if len(line.strip()) < 300:
+                      print(f'{i}: {line.strip()}')
+
+          print('\n=== FONTES EXPLICITAS ===')
+          font_patterns=[]
+          for i,line in enumerate(lines,1):
+              if 'font=' in line or 'Font' in line or 'font =' in line:
+                  s=line.strip()
+                  if len(s)<260:
+                      font_patterns.append((i,s))
+          for x in font_patterns[:250]: print(f'{x[0]}: {x[1]}')
+          print('TOTAL_FONT_LINES',len(font_patterns))
+
+          print('\n=== CORES HEX ===')
+          colors=collections.Counter(re.findall(r'#[0-9A-Fa-f]{6}', text))
+          for c,n in colors.most_common(): print(c,n)
+
+          print('\n=== GEOMETRIA / TAMANHOS / WIDTH HEIGHT ===')
+          hits=[]
+          for i,line in enumerate(lines,1):
+              low=line.lower()
+              if any(k in low for k in ('.geometry(', '.minsize(', '.maxsize(', 'width=', 'height=', 'rowheight', 'padding=', 'padx=', 'pady=')):
+                  s=line.strip()
+                  if len(s)<240:
+                      hits.append((i,s))
+          for x in hits[:320]: print(f'{x[0]}: {x[1]}')
+          print('TOTAL_SIZE_LINES',len(hits))
+
+          print('\n=== ROLAMENTO / MOUSEWHEEL ===')
+          scroll_hits=[]
+          for i,line in enumerate(lines,1):
+              low=line.lower()
+              if any(k in low for k in ('mousewheel','button-4','button-5','scroll','yview','xview','combobox','spinbox')):
+                  s=line.strip()
+                  if len(s)<300:
+                      scroll_hits.append((i,s))
+          for x in scroll_hits[:300]: print(f'{x[0]}: {x[1]}')
+          print('TOTAL_SCROLL_LINES',len(scroll_hits))
+
+          print('\n=== POSSIVEIS TEXTOS REPETIDOS DE UI ===')
+          strings=[]
+          for node in ast.walk(tree):
+              if isinstance(node,ast.Constant) and isinstance(node.value,str):
+                  s=node.value.strip()
+                  if 4 <= len(s) <= 80 and ('\n' not in s) and any(ch.isalpha() for ch in s):
+                      strings.append(s)
+          cnt=collections.Counter(strings)
+          for s,n in cnt.most_common(120):
+              if n>=3:
+                  print(n, repr(s))
+          PY
