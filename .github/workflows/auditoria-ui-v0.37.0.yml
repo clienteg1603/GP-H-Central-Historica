@@ -11,80 +11,69 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Auditar interface e regras globais
+      - name: Auditar duplicidades e estruturas legadas
         run: |
           python - <<'PY'
           from pathlib import Path
-          import ast, re, collections
+          import ast, collections, re
 
-          p = Path('source/gph_central.py')
-          text = p.read_text(encoding='utf-8')
-          lines = text.splitlines()
-          tree = ast.parse(text)
+          text=Path('source/gph_central.py').read_text(encoding='utf-8')
+          lines=text.splitlines()
+          tree=ast.parse(text)
 
-          print('TOTAL_LINHAS', len(lines))
+          print('=== CLASSES DE INTERFACE ===')
+          classes=[]
+          for node in tree.body:
+              if isinstance(node,ast.ClassDef):
+                  classes.append((node.lineno,node.end_lineno,node.name))
+          for a,b,n in classes:
+              if a>=9500:
+                  refs=[i for i,l in enumerate(lines,1) if re.search(rf'\b{re.escape(n)}\b',l)]
+                  print(f'{n}: linhas {a}-{b}; referencias={refs}')
 
-          print('\n=== FUNCOES/METODOS DE INTERFACE ===')
-          names=[]
+          print('\n=== ROTAS / METODOS LEGADOS IMPORTANTES ===')
+          targets=['show_generator_page','show_shadow_lab_page','show_base','show_methods_page','show_pulls_page','show_statistics_page','show_play_page','show_decision_page']
+          for target in targets:
+              refs=[]
+              for i,l in enumerate(lines,1):
+                  if target in l:
+                      refs.append((i,l.strip()))
+              print('\n',target)
+              for i,l in refs: print(f'{i}: {l}')
+
+          print('\n=== METODOS DE PAGINA E TAMANHO ===')
+          funcs=[]
           for node in ast.walk(tree):
-              if isinstance(node,(ast.FunctionDef, ast.AsyncFunctionDef)):
-                  n=node.name.lower()
-                  if any(k in n for k in ('build','page','tab','screen','dialog','window','scroll','wheel','style','theme','decision','jogar','pesquisa','resultado','estat','puxada','metodo','config','base','inicio','home')):
-                      names.append((node.lineno,node.name))
-          for ln,n in sorted(names):
-              print(f'{ln}: {n}')
+              if isinstance(node,ast.FunctionDef) and node.name.startswith('show_'):
+                  funcs.append((node.lineno,node.end_lineno,node.name,node.end_lineno-node.lineno+1))
+          for a,b,n,size in sorted(funcs):
+              if a>=14000:
+                  print(f'{n}: {a}-{b} ({size} linhas)')
 
-          print('\n=== MENU / NAVEGACAO / ROTULOS PRINCIPAIS ===')
-          for i,line in enumerate(lines,1):
-              if any(k in line for k in ['Início','Pesquisa','Resultados','Estatísticas','Puxadas','Métodos','Jogar','Decisão','Base / Configurações','Configurações','Laboratório','Gerador']):
-                  if len(line.strip()) < 300:
-                      print(f'{i}: {line.strip()}')
+          print('\n=== CRIACAO DE TOPLEVELS ===')
+          for i,l in enumerate(lines,1):
+              if 'Toplevel(' in l or '.geometry(' in l:
+                  if i>=13000:
+                      print(f'{i}: {l.strip()}')
 
-          print('\n=== FONTES EXPLICITAS ===')
-          font_patterns=[]
-          for i,line in enumerate(lines,1):
-              if 'font=' in line or 'Font' in line or 'font =' in line:
-                  s=line.strip()
-                  if len(s)<260:
-                      font_patterns.append((i,s))
-          for x in font_patterns[:250]: print(f'{x[0]}: {x[1]}')
-          print('TOTAL_FONT_LINES',len(font_patterns))
+          print('\n=== ESTILOS TTK DECLARADOS ===')
+          styles=collections.Counter()
+          for m in re.finditer(r'style\.configure\([\"\']([^\"\']+)',text):
+              styles[m.group(1)]+=1
+          for n,c in sorted(styles.items()): print(c,n)
 
-          print('\n=== CORES HEX ===')
-          colors=collections.Counter(re.findall(r'#[0-9A-Fa-f]{6}', text))
-          for c,n in colors.most_common(): print(c,n)
+          print('\n=== ESTILOS USADOS EXPLICITAMENTE ===')
+          used=collections.Counter(re.findall(r'style=[\"\']([^\"\']+)[\"\']',text))
+          for n,c in used.most_common(): print(c,n)
 
-          print('\n=== GEOMETRIA / TAMANHOS / WIDTH HEIGHT ===')
-          hits=[]
-          for i,line in enumerate(lines,1):
-              low=line.lower()
-              if any(k in low for k in ('.geometry(', '.minsize(', '.maxsize(', 'width=', 'height=', 'rowheight', 'padding=', 'padx=', 'pady=')):
-                  s=line.strip()
-                  if len(s)<240:
-                      hits.append((i,s))
-          for x in hits[:320]: print(f'{x[0]}: {x[1]}')
-          print('TOTAL_SIZE_LINES',len(hits))
+          print('\n=== POSSIVEIS FONTES MINUSCULAS ===')
+          for i,l in enumerate(lines,1):
+              m=re.search(r'font=\([^\)]*,\s*(\d+)',l)
+              if m and int(m.group(1))<=7:
+                  print(f'{i}: {l.strip()}')
 
-          print('\n=== ROLAMENTO / MOUSEWHEEL ===')
-          scroll_hits=[]
-          for i,line in enumerate(lines,1):
-              low=line.lower()
-              if any(k in low for k in ('mousewheel','button-4','button-5','scroll','yview','xview','combobox','spinbox')):
-                  s=line.strip()
-                  if len(s)<300:
-                      scroll_hits.append((i,s))
-          for x in scroll_hits[:300]: print(f'{x[0]}: {x[1]}')
-          print('TOTAL_SCROLL_LINES',len(scroll_hits))
-
-          print('\n=== POSSIVEIS TEXTOS REPETIDOS DE UI ===')
-          strings=[]
-          for node in ast.walk(tree):
-              if isinstance(node,ast.Constant) and isinstance(node.value,str):
-                  s=node.value.strip()
-                  if 4 <= len(s) <= 80 and ('\n' not in s) and any(ch.isalpha() for ch in s):
-                      strings.append(s)
-          cnt=collections.Counter(strings)
-          for s,n in cnt.most_common(120):
-              if n>=3:
-                  print(n, repr(s))
+          print('\n=== PAGINAS COM SCROLL PADRAO ===')
+          for i,l in enumerate(lines,1):
+              if '_make_scrollable_page_body(self.content' in l:
+                  print(f'{i}: {l.strip()}')
           PY
