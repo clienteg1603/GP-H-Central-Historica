@@ -6,9 +6,9 @@
     "test": {
       "version": "0.35.0",
       "url": "https://github.com/clienteg1603/GP-H-Central-Historica/releases/download/v0.35.0-test/GP-H_update_v0.35.0.zip",
-      "sha256": "0f5a1bb1cd83344378b68d7a4b783e8fdba116d84ad10f00d498c9c3c427d793",
-      "notes": "v0.35.0 Teste — Laboratório Sombra e coleta prospectiva automática",
-      "published_at": "2026-09-08T02:26:47+00:00",
+      "sha256": "8839c0ca9eef1df555bdb29c91eb25c1dd4885d3b547ab71e6ce24144b308c5e",
+      "notes": "v0.35.0 Teste — compilação direta do código-fonte do GitHub",
+      "published_at": "2026-09-08T02:35:36+00:00",
       "mirrors": []
     },
     "stable": {
@@ -20,5 +20,5 @@
       "mirrors": []
     }
   },
-  "updated_at": "2026-09-08T02:26:47+00:00"
+  "updated_at": "2026-09-08T02:35:36+00:00"
 }
