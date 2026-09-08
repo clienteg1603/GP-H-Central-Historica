@@ -1,0 +1,213 @@
+name: Auditoria prospectiva da Decisao v0.40.0
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/patch-v0.40.0.yml"
+      - ".github/scripts/patch_v0400.py"
+
+permissions:
+  contents: write
+
+jobs:
+  patch-and-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Aplicar v0.40.0
+        run: python .github/scripts/patch_v0400.py
+
+      - name: Validar sintaxe
+        run: python -m py_compile source/gph_central.py
+
+      - name: Preparar Tk para testes de modulo
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq python3-tk
+
+      - name: Testar congelamento e auditoria da propria Decisao
+        run: |
+          python - <<'PY'
+          import json, sqlite3, tempfile
+          from pathlib import Path
+          import importlib.util
+
+          src=Path('source/gph_central.py')
+          spec=importlib.util.spec_from_file_location('gph',src)
+          mod=importlib.util.module_from_spec(spec)
+          spec.loader.exec_module(mod)
+          Database=mod.Database
+
+          # 1) Migração aditiva sobre um decision_snapshots antigo.
+          tmp=Path(tempfile.mkdtemp())
+          old_db=tmp/'old.db'
+          con=sqlite3.connect(old_db)
+          con.execute('''
+              CREATE TABLE decision_snapshots (
+                  id INTEGER PRIMARY KEY AUTOINCREMENT,
+                  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                  base_data TEXT NOT NULL, base_sorteio TEXT NOT NULL, base_hora TEXT NOT NULL,
+                  target_data TEXT NOT NULL, target_sorteio TEXT NOT NULL, target_hora TEXT NOT NULL,
+                  status TEXT NOT NULL DEFAULT 'PENDENTE', confidence_score REAL NOT NULL DEFAULT 0,
+                  confidence_label TEXT, recommendation TEXT,
+                  components_json TEXT NOT NULL DEFAULT '{}', signals_json TEXT NOT NULL DEFAULT '{}',
+                  result_groups_json TEXT, audited_at TEXT, note TEXT,
+                  UNIQUE(base_data,base_sorteio,base_hora,target_data,target_sorteio,target_hora)
+              )
+          ''')
+          con.commit(); con.close()
+          migrated=Database(old_db)
+          with migrated.connect() as c:
+              cols={r[1] for r in c.execute('PRAGMA table_info(decision_snapshots)').fetchall()}
+          assert {'contextual_json','contextual_frozen_at','contextual_audit_json'} <= cols, cols
+
+          # 2) Primeiro congelamento é canônico e não é reescrito.
+          db=Database(tmp/'test.db')
+          signals={
+              'Reset Cobertura': {'available':True,'groups':[1,2,3,4,5]},
+              'Puxada Combinada': {'available':True,'groups':[6,7,8,9,10]},
+              'Similaridade': {'available':True,'groups':[11,12,13,14,15]},
+          }
+          with db.connect() as c:
+              cur=c.execute('''
+                  INSERT INTO decision_snapshots
+                  (base_data,base_sorteio,base_hora,target_data,target_sorteio,target_hora,signals_json)
+                  VALUES(?,?,?,?,?,?,?)
+              ''',('2026-09-08','PT','14h','2026-09-08','PTV','16h',json.dumps(signals)))
+              row=c.execute('SELECT * FROM decision_snapshots WHERE id=?',(cur.lastrowid,)).fetchone()
+          snap=db._decision_row_to_dict(row)
+          db.get_draw=lambda *args: None
+          def contextual_a(**kwargs):
+              return {
+                  'target':{'data':'2026-09-08','sorteio':'PTV','hora':'16h'},
+                  'hour':'16h','weekday':'Terça','window':120,'recent_window':12,
+                  'official_method':'Reset Cobertura','official_game':'Reset + 3+1',
+                  'rows':[
+                      {'method':'Puxada Combinada','index':71.0,'hour_rounds':15,'factors':{}},
+                      {'method':'Reset Cobertura','index':65.0,'hour_rounds':15,'factors':{}},
+                      {'method':'Similaridade','index':60.0,'hour_rounds':15,'factors':{}},
+                  ],
+                  'best':{'method':'Puxada Combinada','index':71.0,'hour_rounds':15,'factors':{}},
+                  'lead':6.0,'status':'MODERADA','recommendation':'teste',
+                  'walk_forward_used':False,'base_weights':{},'note':'teste',
+              }
+          db.decision_contextual_evidence=contextual_a
+          snap,created=db.freeze_decision_contextual(snap)
+          assert created is True
+          assert snap['contextual']['evidence_leader']=='Puxada Combinada'
+          first_json=snap['contextual_json']
+
+          db.decision_contextual_evidence=lambda **kwargs: {
+              **contextual_a(**kwargs),
+              'best':{'method':'Reset Cobertura','index':99.0},
+              'status':'FORTE',
+          }
+          snap2,created2=db.freeze_decision_contextual(snap)
+          assert created2 is False
+          assert snap2['contextual_json']==first_json
+          assert snap2['contextual']['evidence_leader']=='Puxada Combinada'
+
+          # 3) Anti-lookahead: se o alvo existe, nem force cria a leitura.
+          with db.connect() as c:
+              cur=c.execute('''
+                  INSERT INTO decision_snapshots
+                  (base_data,base_sorteio,base_hora,target_data,target_sorteio,target_hora,signals_json)
+                  VALUES(?,?,?,?,?,?,?)
+              ''',('2026-09-08','PTV','16h','2026-09-08','PTN','18h',json.dumps(signals)))
+              row=c.execute('SELECT * FROM decision_snapshots WHERE id=?',(cur.lastrowid,)).fetchone()
+          old=db._decision_row_to_dict(row)
+          db.get_draw=lambda *args: {'prizes':[{'grupo':1}]*5}
+          old2,created=db.freeze_decision_contextual(old,force=True)
+          assert created is False
+          assert not old2.get('contextual')
+
+          # 4) Vereditos puros: exclusiva, empate e incorreta.
+          base_ctx={'evidence_leader':'Puxada Combinada','status':'MODERADA','best':{'method':'Puxada Combinada','index':71},'lead':6}
+          s={
+              'Reset Cobertura': {'available':True,'coverage_hits':1},
+              'Puxada Combinada': {'available':True,'coverage_hits':3},
+              'Similaridade': {'available':True,'coverage_hits':1},
+          }
+          a=Database._decision_contextual_audit_payload(base_ctx,s,[1,6,7,8,20])
+          assert a['classification']=='CORRETA_EXCLUSIVA' and a['is_sole_best']
+
+          s['Reset Cobertura']['coverage_hits']=3
+          a=Database._decision_contextual_audit_payload(base_ctx,s,[1,2,6,7,8])
+          assert a['classification']=='CORRETA_EMPATE' and a['is_best_or_tied'] and not a['is_sole_best']
+
+          s['Reset Cobertura']['coverage_hits']=4
+          s['Puxada Combinada']['coverage_hits']=2
+          a=Database._decision_contextual_audit_payload(base_ctx,s,[1,2,3,4,6])
+          assert a['classification']=='INCORRETA' and not a['is_best_or_tied']
+
+          # 5) Resumo conta empate separadamente e não usa linhas antigas sem contextual.
+          db.get_draw=lambda *args: None
+          rows=[
+              ('2026-09-09','PPT','09h','CORRETA_EXCLUSIVA'),
+              ('2026-09-09','PTM','11h','CORRETA_EMPATE'),
+              ('2026-09-09','PT','14h','INCORRETA'),
+          ]
+          with db.connect() as c:
+              for idx,(d,sorteio,hora,klass) in enumerate(rows,1):
+                  ctx={**base_ctx,'best':{'method':'Puxada Combinada','index':70+idx}}
+                  audit={
+                      'schema':1,'leader':'Puxada Combinada','context_status':'MODERADA',
+                      'leader_index':70+idx,'lead_index':5,'hits':{},'leader_hits':2,
+                      'best_hits':2,'best_methods':['Puxada Combinada'],
+                      'classification':klass,'is_best_or_tied':klass!='INCORRETA',
+                      'is_sole_best':klass=='CORRETA_EXCLUSIVA','result_groups':[1,2,3,4,5],
+                  }
+                  c.execute('''
+                      INSERT INTO decision_snapshots
+                      (base_data,base_sorteio,base_hora,target_data,target_sorteio,target_hora,status,
+                       contextual_json,contextual_frozen_at,contextual_audit_json,signals_json,result_groups_json)
+                      VALUES(?,?,?,?,?,?,?,?,?,?,?,?)
+                  ''',(
+                      '2026-09-08','BASE'+str(idx),hora,d,sorteio,hora,'AUDITADO',
+                      json.dumps(ctx),'2026-09-08T10:00:00',json.dumps(audit),json.dumps(signals),json.dumps([1,2,3,4,5])
+                  ))
+              # linha histórica antiga: auditada, mas sem contextual; deve ficar fora.
+              c.execute('''
+                  INSERT INTO decision_snapshots
+                  (base_data,base_sorteio,base_hora,target_data,target_sorteio,target_hora,status,signals_json)
+                  VALUES(?,?,?,?,?,?,?,?)
+              ''',('2026-08-01','OLD','09h','2026-08-01','OLD2','11h','AUDITADO',json.dumps(signals)))
+          summary=db.decision_contextual_audit_summary(120)
+          assert summary['evaluated']==3, summary
+          assert summary['sole_correct']==1 and summary['tied_best']==1 and summary['incorrect']==1
+          assert abs(summary['best_or_tied_rate']-(2/3*100)) < 0.01
+
+          print('TESTES v0.40.0 OK')
+          PY
+
+      - name: Validar invariantes e documentacao
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import ast
+          text=Path('source/gph_central.py').read_text(encoding='utf-8')
+          ast.parse(text)
+          assert 'APP_VERSION = "0.40.0"' in text
+          assert 'AUTO_SEM_WALK_FORWARD' in text
+          assert 'CORRETA_EXCLUSIVA' in text
+          assert 'CORRETA_EMPATE' in text
+          assert 'contextual_frozen_at' in text
+          assert 'AUDITORIA DA PRÓPRIA DECISÃO' in text
+          assert 'Reset + 3+1 oficial' in text
+          doc=Path('source/DOCUMENTACAO_GP-H.txt').read_text(encoding='utf-8')
+          assert doc.startswith('REVISÃO v0.40.0')
+          print('VALIDAÇÃO ESTRUTURAL v0.40.0 OK')
+          PY
+
+      - name: Registrar v0.40.0
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add source/gph_central.py source/DOCUMENTACAO_GP-H.txt
+          git diff --cached --stat
+          git commit -m "v0.40.0 auditoria prospectiva da propria Decisao"
+          git push origin main
