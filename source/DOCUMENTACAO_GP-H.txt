@@ -1,3 +1,12 @@
+REVISÃO v0.42.0 — WALK-FORWARD RIGOROSO DO GP-H META
+- O cérebro GP-H Meta v0.1 da v0.41.0 permanece CONGELADO: mesmas 20 características, regressão logística nativa L2, treino mínimo de 20 snapshots e limite prospectivo de 160.
+- A v0.42.0 acrescenta SOMENTE avaliação: para cada rodada histórica avaliada, treina nas rodadas anteriores, prevê o Top 5 sem ver o alvo, mede depois e avança uma rodada.
+- Compara GP-H Meta v0.1, Reset Cobertura, Puxada Combinada, Similaridade, Histórico Concentrado e baseline matemático de Top 5 aleatório.
+- O baseline do acaso usa distribuição hipergeométrica e respeita a quantidade de bichos distintos realmente presentes nos cinco prêmios.
+- O Walk-Forward Meta é diagnóstico, roda em segundo plano, pode ser cancelado, oferece janelas de 20/30/60 rodadas e CSV. Ele não alimenta o Meta prospectivo e não promove método.
+- REGRA DE EVOLUÇÃO CONGELADA: após v0.42.0, usar a Central normalmente por 2–3 dias antes de mudar o cérebro do Meta. Erros técnicos podem ser corrigidos, mas desempenho não deve ser otimizado rodada a rodada. Fazer primeiro checkpoint com a coleta real e preferir 20–30 rodadas prospectivas antes de discutir v0.43 (calibração/confiança/drift).
+- Reset + 3+1 continua oficial.
+
 REVISÃO v0.41.0 — GP-H META v0.1 / MOTOR ADAPTATIVO EM SOMBRA
 - Cria o GP-H Meta v0.1, exclusivamente SOMBRA: ele não altera Reset + 3+1, apostas, recomendações oficiais ou pesos da Decisão Contextual.
 - O Meta usa regressão logística L2 nativa da biblioteca padrão, evitando nova dependência e aumento desnecessário do executável.
