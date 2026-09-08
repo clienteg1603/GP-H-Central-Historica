@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-GP-H Central Histórica v0.36.1
+GP-H Central Histórica v0.36.2
 Pesquisa e manutenção do histórico 2026 do Deu no Poste / PT-Rio.
 
 Escopo desta versão:
@@ -86,7 +86,7 @@ def write_crash_log(exc: BaseException):
 
 
 APP_NAME = "GP-H Central Histórica"
-APP_VERSION = "0.36.1"
+APP_VERSION = "0.36.2"
 START_DATE = date(2026, 1, 2)
 BASE_URL = "https://brasildeunoposte.com.br/resultado-do-jogo-do-bicho-deu-no-poste-{date}/"
 # Ao buscar/atualizar resultados, relê os últimos 7 dias para absorver
@@ -7977,6 +7977,51 @@ class Database:
         return {
             "ticket_id": ticket_id,
             "game_ids": created,
+        }
+
+    def delete_ticket(self, ticket_id):
+        """Exclui um bilhete registrado e todos os jogos/itens ligados a ele."""
+        ticket_id = int(ticket_id)
+        with self.connect() as con:
+            row = con.execute(
+                "SELECT * FROM bilhetes WHERE id=?",
+                (ticket_id,),
+            ).fetchone()
+            if row is None:
+                return {
+                    "deleted": False,
+                    "ticket_id": ticket_id,
+                    "games_deleted": 0,
+                }
+
+            game_ids = [
+                int(r["id"])
+                for r in con.execute(
+                    "SELECT id FROM jogos_congelados WHERE bilhete_id=? ORDER BY id",
+                    (ticket_id,),
+                ).fetchall()
+            ]
+
+            if game_ids:
+                con.executemany(
+                    "DELETE FROM jogos_itens WHERE jogo_id=?",
+                    [(gid,) for gid in game_ids],
+                )
+                con.execute(
+                    "DELETE FROM jogos_congelados WHERE bilhete_id=?",
+                    (ticket_id,),
+                )
+
+            con.execute(
+                "DELETE FROM bilhetes WHERE id=?",
+                (ticket_id,),
+            )
+
+        return {
+            "deleted": True,
+            "ticket_id": ticket_id,
+            "games_deleted": len(game_ids),
+            "ticket": dict(row),
         }
 
     def play_round_summaries(self, limit=200):
@@ -16647,18 +16692,38 @@ class App(tk.Tk):
                 ),
             )
 
+        multi_targets = getattr(self, "play_ticket_multi_targets", []) or []
         if hasattr(self, "play_ticket_target_label"):
             if self.play_ticket_draft:
-                target = self.play_ticket_draft[0]["generation"].get("intended_target")
-                self.play_ticket_target_label.configure(text=self._format_target(target))
+                if multi_targets:
+                    formatted = [self._format_target(target) for target in multi_targets]
+                    self.play_ticket_target_label.configure(
+                        text=(
+                            f"VÁRIOS HORÁRIOS • {len(formatted)} rodadas selecionadas\n"
+                            + "  •  ".join(formatted)
+                        )
+                    )
+                else:
+                    target = self.play_ticket_draft[0]["generation"].get("intended_target")
+                    self.play_ticket_target_label.configure(text=self._format_target(target))
             else:
                 self.play_ticket_target_label.configure(text="Nenhuma modalidade adicionada")
 
-        self.play_ticket_summary_label.configure(
-            text=(
-                f"{len(self.play_ticket_draft)} modalidade(s)  •  TOTAL {self._money(total)}"
+        if multi_targets and self.play_ticket_draft:
+            self.play_ticket_summary_label.configure(
+                text=(
+                    f"{len(self.play_ticket_draft)} modalidade(s)  •  "
+                    f"{self._money(total)} por rodada  •  "
+                    f"{len(multi_targets)} rodadas  •  "
+                    f"TOTAL {self._money(total * len(multi_targets))}"
+                )
             )
-        )
+        else:
+            self.play_ticket_summary_label.configure(
+                text=(
+                    f"{len(self.play_ticket_draft)} modalidade(s)  •  TOTAL {self._money(total)}"
+                )
+            )
 
     def play_remove_ticket_item(self):
         sel = self.play_ticket_tree.selection()
@@ -16667,6 +16732,8 @@ class App(tk.Tk):
         idx = int(sel[0])
         if 0 <= idx < len(self.play_ticket_draft):
             self.play_ticket_draft.pop(idx)
+            if not self.play_ticket_draft:
+                self.play_ticket_multi_targets = []
             self.play_refresh_ticket()
 
     def play_clear_ticket(self):
@@ -16679,14 +16746,15 @@ class App(tk.Tk):
             parent=self,
         ):
             self.play_ticket_draft.clear()
+            self.play_ticket_multi_targets = []
             self.play_refresh_ticket()
 
     def play_register_ticket_multi(self):
-        """Registra o mesmo bilhete em várias rodadas, sempre como bilhetes separados."""
+        """Seleciona rodadas para o rascunho; não registra nada no banco."""
         if not self.play_ticket_draft:
             messagebox.showinfo(
                 "Vários horários",
-                "Adicione pelo menos uma modalidade ao bilhete antes de repetir em vários horários.",
+                "Adicione pelo menos uma modalidade ao bilhete antes de escolher os horários.",
                 parent=self,
             )
             return
@@ -16719,8 +16787,11 @@ class App(tk.Tk):
                 base_idx = idx
                 break
 
+        existing_targets = getattr(self, "play_ticket_multi_targets", []) or []
+        existing_keys = {target_key(target) for target in existing_targets}
+
         dialog = tk.Toplevel(self)
-        dialog.title("Registrar em vários horários")
+        dialog.title("Selecionar vários horários")
         dialog.transient(self)
         dialog.grab_set()
         dialog.minsize(510, 390)
@@ -16730,14 +16801,14 @@ class App(tk.Tk):
         body.pack(fill="both", expand=True)
         ttk.Label(
             body,
-            text="Escolha as rodadas que receberão este mesmo bilhete.",
+            text="Escolha as rodadas deste bilhete.",
             style="Section.TLabel",
         ).pack(anchor="w")
         ttk.Label(
             body,
             text=(
-                "Cada horário será registrado como um bilhete separado. "
-                "Os 5 horários a partir da rodada original já vêm marcados."
+                "CONTINUAR apenas prepara os horários no bilhete em montagem. "
+                "Nada será registrado até você clicar em REGISTRAR BILHETE."
             ),
             wraplength=500,
             justify="left",
@@ -16761,9 +16832,15 @@ class App(tk.Tk):
         for label, _target in options:
             listbox.insert("end", label)
 
-        end_default = min(len(options), base_idx + 5)
-        for idx in range(base_idx, end_default):
-            listbox.selection_set(idx)
+        if existing_keys:
+            for idx, (_label, target) in enumerate(options):
+                if target_key(target) in existing_keys:
+                    listbox.selection_set(idx)
+        else:
+            end_default = min(len(options), base_idx + 5)
+            for idx in range(base_idx, end_default):
+                listbox.selection_set(idx)
+
         if base_idx < len(options):
             listbox.see(base_idx)
 
@@ -16807,59 +16884,20 @@ class App(tk.Tk):
             return
 
         selected = [options[idx] for idx in indices]
-        total_per_ticket = sum(
-            len(entry["generation"]["rows"]) * float(entry["stake_per_item"])
-            for entry in self.play_ticket_draft
-        )
-        grand_total = total_per_ticket * len(selected)
-        labels_text = "\n".join(f"• {label}" for label, _target in selected)
-
-        if not messagebox.askyesno(
-            "Confirmar vários horários",
-            (
-                f"Serão registrados {len(selected)} bilhetes separados com o mesmo jogo:\n\n"
-                f"{labels_text}\n\n"
-                f"Valor por bilhete: {self._money(total_per_ticket)}\n"
-                f"Total dos {len(selected)} bilhetes: {self._money(grand_total)}\n\n"
-                "Confirmar?"
-            ),
-            parent=self,
-        ):
-            return
-
-        base_draw = self.db.latest_operational_draw()
-        registered = []
-        try:
-            for _label, target in selected:
-                entries = copy.deepcopy(self.play_ticket_draft)
-                for entry in entries:
-                    entry["generation"]["intended_target"] = dict(target)
-                    entry["origem_jogada"] = "Repetição manual multi-horário"
-                report = self.db.register_ticket(entries, base_draw=base_draw)
-                registered.append(report["ticket_id"])
-        except Exception as exc:
-            self._update_results_nav_badge()
-            messagebox.showerror(
-                "Vários horários",
-                (
-                    f"Foram registrados {len(registered)} bilhete(s) antes de ocorrer um erro.\n\n"
-                    f"{exc}"
-                ),
-                parent=self,
-            )
-            return
-
-        self.play_ticket_draft.clear()
+        self.play_ticket_multi_targets = [dict(target) for _label, target in selected]
         self.play_refresh_ticket()
-        self._update_results_nav_badge()
         self.status.configure(
-            text=f"{len(registered)} bilhetes registrados em horários diferentes."
+            text=(
+                f"Bilhete preparado para {len(selected)} rodada(s). "
+                "Ainda não foi registrado."
+            )
         )
         messagebox.showinfo(
-            "Bilhetes registrados",
+            "Horários preparados",
             (
-                f"Pronto: {len(registered)} bilhetes separados foram registrados.\n\n"
-                f"Total: {self._money(grand_total)}"
+                f"{len(selected)} rodada(s) foram adicionadas ao bilhete em montagem.\n\n"
+                "Nenhum bilhete foi registrado ainda.\n"
+                "Revise o bilhete e clique em REGISTRAR BILHETE quando quiser confirmar."
             ),
             parent=self,
         )
@@ -16873,80 +16911,137 @@ class App(tk.Tk):
             )
             return
 
-        target = self.play_ticket_draft[0]["generation"].get(
+        base_target = self.play_ticket_draft[0]["generation"].get(
             "intended_target"
         )
-        target_text = self._format_target(target)
+        multi_targets = [
+            dict(target)
+            for target in (getattr(self, "play_ticket_multi_targets", []) or [])
+            if target
+        ]
+        targets = multi_targets or ([dict(base_target)] if base_target else [])
+        if not targets:
+            messagebox.showerror(
+                "Bilhete",
+                "Não foi possível identificar a rodada do bilhete.",
+                parent=self,
+            )
+            return
 
-        total = sum(
+        total_per_ticket = sum(
             len(e["generation"]["rows"])
             * float(e["stake_per_item"])
             for e in self.play_ticket_draft
         )
+        grand_total = total_per_ticket * len(targets)
 
         lines = []
-
         for entry in self.play_ticket_draft:
             generation = entry["generation"]
             kind = generation["kind"]
-
             if generation.get("submodalidade"):
-                kind += (
-                    f"/{generation['submodalidade']}"
-                )
-
+                kind += f"/{generation['submodalidade']}"
             lines.append(
                 f"• {kind} • {generation['scope']} • "
                 f"{len(generation['rows'])} palpites • "
                 f"{self._money(len(generation['rows']) * float(entry['stake_per_item']))}"
             )
 
-        if not messagebox.askyesno(
-            "Registrar bilhete",
-            (
-                f"{target_text}\n\n"
+        if multi_targets:
+            target_lines = "\n".join(
+                f"• {self._format_target(target)}"
+                for target in targets
+            )
+            confirm_text = (
+                f"MESMO BILHETE EM {len(targets)} RODADAS:\n\n"
+                f"{target_lines}\n\n"
                 + "\n".join(lines)
                 + (
-                    f"\n\nTOTAL DO BILHETE: "
-                    f"{self._money(total)}\n\n"
+                    f"\n\nVALOR POR RODADA: {self._money(total_per_ticket)}\n"
+                    f"TOTAL GERAL: {self._money(grand_total)}\n\n"
+                    "Registrar agora todos esses bilhetes como jogadas REAIS?"
+                )
+            )
+        else:
+            confirm_text = (
+                f"{self._format_target(targets[0])}\n\n"
+                + "\n".join(lines)
+                + (
+                    f"\n\nTOTAL DO BILHETE: {self._money(total_per_ticket)}\n\n"
                     "Registrar todas como jogadas REAIS?"
                 )
-            ),
+            )
+
+        if not messagebox.askyesno(
+            "Registrar bilhete",
+            confirm_text,
             parent=self,
         ):
             return
 
+        base_draw = self.db.latest_operational_draw()
+        registered = []
+        game_ids = []
         try:
-            report = self.db.register_ticket(
-                self.play_ticket_draft,
-                base_draw=self.db.latest_operational_draw(),
-            )
+            for target in targets:
+                entries = copy.deepcopy(self.play_ticket_draft)
+                for entry in entries:
+                    entry["generation"]["intended_target"] = dict(target)
+                    if multi_targets:
+                        entry["origem_jogada"] = "Bilhete multi-horário"
+                report = self.db.register_ticket(
+                    entries,
+                    base_draw=base_draw,
+                )
+                registered.append(int(report["ticket_id"]))
+                game_ids.extend(report["game_ids"])
         except Exception as exc:
+            # Multi-horário deve ser tudo ou nada. Se alguma rodada falhar,
+            # remove os bilhetes já criados nesta tentativa.
+            for ticket_id in registered:
+                try:
+                    self.db.delete_ticket(ticket_id)
+                except Exception:
+                    pass
+            self._update_results_nav_badge()
             messagebox.showerror(
                 "Bilhete",
-                str(exc),
+                (
+                    "Não foi possível concluir o registro. "
+                    "Os bilhetes desta tentativa foram desfeitos.\n\n"
+                    f"{exc}"
+                ),
                 parent=self,
             )
             return
 
-        ticket_id = report["ticket_id"]
-        game_ids = report["game_ids"]
-
         self.play_ticket_draft.clear()
+        self.play_ticket_multi_targets = []
         self._update_results_nav_badge()
 
-        messagebox.showinfo(
-            "Bilhete registrado",
-            (
-                f"Bilhete #{ticket_id} registrado.\n"
-                f"{len(game_ids)} modalidade(s).\n"
-                f"Total apostado: {self._money(total)}."
-            ),
-            parent=self,
-        )
+        if multi_targets:
+            messagebox.showinfo(
+                "Bilhetes registrados",
+                (
+                    f"{len(registered)} bilhetes separados foram registrados.\n"
+                    f"{len(game_ids)} modalidade(s) no total.\n"
+                    f"Total apostado: {self._money(grand_total)}."
+                ),
+                parent=self,
+            )
+        else:
+            messagebox.showinfo(
+                "Bilhete registrado",
+                (
+                    f"Bilhete #{registered[0]} registrado.\n"
+                    f"{len(game_ids)} modalidade(s).\n"
+                    f"Total apostado: {self._money(total_per_ticket)}."
+                ),
+                parent=self,
+            )
 
         self.play_show_games(
-            select_ticket_id=ticket_id
+            select_ticket_id=registered[0]
         )
 
     def play_controls_changed(self, _event=None):
@@ -18458,6 +18553,11 @@ class App(tk.Tk):
             text="Copiar bilhete",
             command=self.play_copy_selected_ticket,
         ).pack(side="left")
+        ttk.Button(
+            head_actions,
+            text="Excluir bilhete",
+            command=self.play_delete_selected_ticket,
+        ).pack(side="left", padx=(5, 0))
 
         today = self.db.financial_summary("today")
         today_label = ttk.Label(
@@ -18982,6 +19082,63 @@ class App(tk.Tk):
             self.play_round_tree.focus(iid)
             self.play_round_selected()
             return
+
+    def play_delete_selected_ticket(self):
+        ticket_id = getattr(self, "play_selected_ticket_id", None)
+        if not ticket_id:
+            messagebox.showinfo(
+                "Excluir bilhete",
+                "Selecione um bilhete na lista antes de excluir.",
+                parent=self,
+            )
+            return
+
+        games = self.db.games_for_ticket(ticket_id)
+        total = sum(float(game.get("valor_total") or 0) for game in games)
+        if not messagebox.askyesno(
+            "Excluir bilhete",
+            (
+                f"Excluir permanentemente o bilhete #{ticket_id}?\n\n"
+                f"Modalidades: {len(games)}\n"
+                f"Valor registrado: {self._money(total)}\n\n"
+                "As jogadas e os palpites ligados a este bilhete também serão removidos.\n"
+                "Esta ação não pode ser desfeita."
+            ),
+            parent=self,
+        ):
+            return
+
+        try:
+            report = self.db.delete_ticket(ticket_id)
+        except Exception as exc:
+            messagebox.showerror(
+                "Excluir bilhete",
+                str(exc),
+                parent=self,
+            )
+            return
+
+        if not report.get("deleted"):
+            messagebox.showinfo(
+                "Excluir bilhete",
+                "Esse bilhete já não existe na base.",
+                parent=self,
+            )
+        else:
+            messagebox.showinfo(
+                "Bilhete excluído",
+                (
+                    f"Bilhete #{ticket_id} excluído.\n"
+                    f"{report.get('games_deleted', 0)} modalidade(s) removida(s)."
+                ),
+                parent=self,
+            )
+
+        self.play_selected_ticket_id = None
+        self.play_selected_game_id = None
+        self._update_results_nav_badge()
+        self.play_refresh_games()
+        self.status.configure(text=f"Bilhete #{ticket_id} excluído.")
 
     def play_ticket_history_selected(self, _event=None):
         sel = self.play_ticket_history_tree.selection()

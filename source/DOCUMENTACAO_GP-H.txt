@@ -261,3 +261,9 @@ v0.36.1 — Bilhete multi-horário
 - Adicionado 'VÁRIOS HORÁRIOS...' para registrar o mesmo bilhete em várias rodadas, sempre como bilhetes separados.
 - Os cinco horários a partir da rodada original vêm pré-selecionados.
 - A nova janela possui rolagem pela roda do mouse.
+
+v0.36.2 — Bilhete multi-horário seguro e exclusão de bilhetes
+- 'CONTINUAR' em Vários Horários apenas prepara a seleção; nada é gravado antes de REGISTRAR BILHETE.
+- O rascunho mostra as rodadas selecionadas, valor por rodada e total geral.
+- REGISTRAR BILHETE é o único comando que efetiva os bilhetes multi-horário.
+- Adicionado Excluir bilhete no histórico, com confirmação e remoção de jogos/itens ligados.
