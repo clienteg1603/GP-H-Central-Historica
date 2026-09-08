@@ -1,0 +1,141 @@
+name: Aplicar Decisao Contextual v0.37.0
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/patch-v0.37.0.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Aplicar patch
+        run: python .github/scripts/patch_v0370.py
+
+      - name: Validar Python e estrutura
+        run: |
+          python -m py_compile source/gph_central.py
+          python - <<'PY'
+          from pathlib import Path
+          import ast
+          text = Path('source/gph_central.py').read_text(encoding='utf-8')
+          assert 'APP_VERSION = "0.37.0"' in text
+          assert 'def decision_contextual_evidence(' in text
+          assert 'def _decision_build_contextual(self, body, snapshot):' in text
+          assert 'self._decision_build_contextual(body, snapshot)' in text
+          assert '"hour": 0.35' in text
+          assert '"recent": 0.20' in text
+          assert '"stability": 0.15' in text
+          assert '"walk_forward": 0.10' in text
+          assert '"weekday": 0.08' in text
+          assert '"convergence": 0.07' in text
+          assert '"overall": 0.05' in text
+          assert 'AMOSTRA INSUFICIENTE' in text
+          assert 'Reset + 3+1 permanece oficial' in text
+          ast.parse(text)
+          print('Estrutura v0.37.0 OK')
+          PY
+
+      - name: Confirmar métodos oficiais preservados
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          text = Path('source/gph_central.py').read_text(encoding='utf-8')
+          checks = [
+              'main_dez = segunda["numero"]',
+              'extra_dez = terceira["numero"]',
+              'main_dez = principal["numero"]',
+              'extra_dez = segunda["numero"]',
+              'freeze_rule": "persistente_ate_reaparicao_do_bicho"',
+              'last240', 'pair3', 'probability',
+          ]
+          for item in checks:
+              assert item in text, item
+          print('Reset + 3+1 e configuração oficial preservados')
+          PY
+
+      - name: Teste sintético do índice contextual
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y python3-tk >/dev/null
+          GPH_DATA_DIR=/tmp/gph_v0370 python - <<'PY'
+          import importlib.util, types
+          from pathlib import Path
+
+          spec = importlib.util.spec_from_file_location('gph_v0370', Path('source/gph_central.py'))
+          mod = importlib.util.module_from_spec(spec)
+          import sys
+          sys.modules[spec.name] = mod
+          spec.loader.exec_module(mod)
+          db = object.__new__(mod.Database)
+
+          methods = ['Reset Cobertura', 'Puxada Combinada', 'Similaridade']
+          rows = []
+          # 24 snapshots auditados do mesmo horário. Puxada é melhor de forma
+          # persistente; Similaridade intermediária; Reset abaixo.
+          for i in range(24):
+              signals = {
+                  'Reset Cobertura': {'groups':[1,2,3,4,5], 'coverage_hits': 1 + (1 if i % 5 == 0 else 0)},
+                  'Puxada Combinada': {'groups':[2,3,6,7,8], 'coverage_hits': 3 + (1 if i % 6 == 0 else 0)},
+                  'Similaridade': {'groups':[3,4,8,9,10], 'coverage_hits': 2 + (1 if i % 7 == 0 else 0), 'position_hits': 1},
+              }
+              rows.append({
+                  'target_data': f'2026-08-{28-(i%20):02d}',
+                  'target_hora': '11h',
+                  'signals': signals,
+              })
+
+          db._decision_audited_rows = types.MethodType(lambda self, window=None, target_hour=None, weekday=None: list(rows), db)
+          # Usa a implementação real para transformar snapshots em métricas.
+          db.decision_change_detection = types.MethodType(lambda self, recent_window=12, baseline_window=30: {
+              'rows': [
+                  {'method':'Reset Cobertura','status':'ESTÁVEL'},
+                  {'method':'Puxada Combinada','status':'ESTÁVEL'},
+                  {'method':'Similaridade','status':'ESTÁVEL'},
+              ]
+          }, db)
+          db.latest_decision_snapshot = types.MethodType(lambda self: None, db)
+          db.next_operational_target = types.MethodType(lambda self: {'data':'2026-09-08','sorteio':'PTM','hora':'11h'}, db)
+
+          snapshot = {
+              'target_data':'2026-09-08','target_sorteio':'PTM','target_hora':'11h',
+              'signals': {
+                  'Reset Cobertura': {'groups':[1,2,3,4,5]},
+                  'Puxada Combinada': {'groups':[2,3,6,7,8]},
+                  'Similaridade': {'groups':[3,4,8,9,10]},
+              },
+          }
+          result = db.decision_contextual_evidence(
+              target={'data':'2026-09-08','sorteio':'PTM','hora':'11h'},
+              snapshot=snapshot,
+          )
+          assert result['best']['method'] == 'Puxada Combinada', result
+          assert result['status'] in ('MODERADA','FORTE','BAIXA'), result
+          assert result['walk_forward_used'] is False
+          assert all(0 <= r['index'] <= 100 for r in result['rows'])
+
+          # Com somente 5 observações do horário, não pode anunciar confiança.
+          small = rows[:5]
+          db._decision_audited_rows = types.MethodType(lambda self, window=None, target_hour=None, weekday=None: list(small), db)
+          result2 = db.decision_contextual_evidence(
+              target={'data':'2026-09-08','sorteio':'PTM','hora':'11h'},
+              snapshot=snapshot,
+          )
+          assert result2['status'] == 'AMOSTRA INSUFICIENTE', result2
+          assert result2['best']['index'] <= 64.0, result2
+          print('Teste sintético contextual OK:', result['best']['method'], result['status'])
+          PY
+
+      - name: Publicar source
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add source/gph_central.py source/DOCUMENTACAO_GP-H.txt source/ATUALIZACOES_PROGRAMA_v0.35.txt
+          git commit -m "GP-H v0.37.0: Decisão Contextual"
+          git push
