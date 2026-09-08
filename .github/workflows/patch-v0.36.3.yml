@@ -15,6 +15,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Preparar Tkinter para o teste
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y python3-tk
+
       - name: Aplicar patch
         run: python .github/scripts/patch_v0363.py
 
