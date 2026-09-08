@@ -80,16 +80,14 @@ jobs:
           # persistente; Similaridade intermediária; Reset abaixo.
           for i in range(24):
               signals = {
-                  'Reset Cobertura': {'groups':[1,2,3,4,5], 'coverage_hits': 1 + (1 if i % 5 == 0 else 0)},
-                  'Puxada Combinada': {'groups':[2,3,6,7,8], 'coverage_hits': 3 + (1 if i % 6 == 0 else 0)},
-                  'Similaridade': {'groups':[3,4,8,9,10], 'coverage_hits': 2 + (1 if i % 7 == 0 else 0), 'position_hits': 1},
+                  'Reset Cobertura': {'available':True, 'groups':[1,2,3,4,5], 'coverage_hits': 1 + (1 if i % 5 == 0 else 0)},
+                  'Puxada Combinada': {'available':True, 'groups':[2,3,6,7,8], 'coverage_hits': 3 + (1 if i % 6 == 0 else 0)},
+                  'Similaridade': {'available':True, 'groups':[3,4,8,9,10], 'coverage_hits': 2 + (1 if i % 7 == 0 else 0), 'position_hits': 1},
               }
               rows.append({
                   'target_data': f'2026-08-{28-(i%20):02d}',
                   'target_hora': '11h',
-                  # Formato real retornado pela camada SQLite.
                   'signals_json': json.dumps(signals),
-                  'signals': signals,
               })
 
           db._decision_audited_rows = types.MethodType(lambda self, window=None, target_hour=None, weekday=None: list(rows), db)
@@ -120,7 +118,6 @@ jobs:
           assert result['walk_forward_used'] is False
           assert all(0 <= r['index'] <= 100 for r in result['rows'])
 
-          # Com somente 5 observações do horário, não pode anunciar confiança.
           small = rows[:5]
           db._decision_audited_rows = types.MethodType(lambda self, window=None, target_hour=None, weekday=None: list(small), db)
           result2 = db.decision_contextual_evidence(
