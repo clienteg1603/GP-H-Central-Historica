@@ -1,0 +1,50 @@
+name: Rolamento e janelas v0.37.3
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/patch-v0.37.3.yml"
+      - ".github/scripts/patch_v0373.py"
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Aplicar v0.37.3
+        run: python .github/scripts/patch_v0373.py
+      - name: Validar Python e invariantes
+        run: |
+          python -m py_compile source/gph_central.py
+          python - <<'PY'
+          from pathlib import Path
+          import ast
+          text=Path('source/gph_central.py').read_text(encoding='utf-8')
+          ast.parse(text)
+          assert 'APP_VERSION = "0.37.3"' in text
+          assert 'def fit_toplevel_to_screen(' in text
+          assert 'tag = "GPHSmartWheel"' in text
+          assert 'GPHPlayWheel' not in text
+          assert 'GPHScroll_' not in text
+          assert text.count('"<MouseWheel>"') == 1
+          assert 'def generate_centenas_3plus1(' in text
+          assert 'def centena_31_freeze_state(' in text
+          assert 'def decision_contextual_evidence(' in text
+          assert 'def method_reset_coverage_v1(' in text
+          assert 'def play_generate(' in text
+          print('VALIDAÇÃO v0.37.3 OK')
+          PY
+      - name: Registrar v0.37.3
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add source/gph_central.py source/DOCUMENTACAO_GP-H.txt
+          git diff --cached --stat
+          git commit -m "v0.37.3 rolamento inteligente e janelas adaptativas"
+          git push origin main
