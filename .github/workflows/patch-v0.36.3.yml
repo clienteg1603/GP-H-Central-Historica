@@ -43,10 +43,12 @@ jobs:
         run: |
           python - <<'PY'
           import importlib.util
+          import sys
           from pathlib import Path
 
           spec = importlib.util.spec_from_file_location('gph', Path('source/gph_central.py'))
           mod = importlib.util.module_from_spec(spec)
+          sys.modules[spec.name] = mod
           spec.loader.exec_module(mod)
 
           def draw(day, hour, prizes):
