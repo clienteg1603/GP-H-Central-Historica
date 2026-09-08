@@ -11,33 +11,21 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Mapear Decisao e recomendacao
+      - name: Mostrar funções de auditoria
         run: |
           python - <<'PY'
           from pathlib import Path
           p=Path('source/gph_central.py')
           lines=p.read_text(encoding='utf-8').splitlines()
-          needles=[
-            'decision', 'Decisão', 'DECISÃO', 'champion', 'challenger',
-            'Campeão', 'Desafiante', 'walk_forward', 'Walk-Forward',
-            'recommendation', 'Recomendação', 'shadow', 'context'
-          ]
-          hits=[]
-          for i,line in enumerate(lines,1):
-              low=line.lower()
-              if any(n.lower() in low for n in needles):
-                  hits.append(i)
-          print('HITS', hits)
-          # agrupa faixas proximas para evitar log gigante
-          groups=[]
-          for i in hits:
-              if not groups or i-groups[-1][-1] > 18:
-                  groups.append([i])
-              else:
-                  groups[-1].append(i)
-          for g in groups:
-              a=max(1,g[0]-10); b=min(len(lines),g[-1]+16)
-              print(f'--- {a}-{b} ---')
-              for j in range(a,b+1):
-                  print(f'{j}: {lines[j-1]}')
+          names=['def _decision_audited_rows', 'def _decision_performance_from_rows', 'def _decision_signal_payload']
+          for name in names:
+              for i,line in enumerate(lines):
+                  if name in line:
+                      print('\n===', name, 'linha', i+1, '===')
+                      end=min(len(lines), i+120)
+                      for j in range(i,end):
+                          if j > i and lines[j].startswith('    def ') and j > i+2:
+                              break
+                          print(f'{j+1}: {lines[j]}')
+                      break
           PY
