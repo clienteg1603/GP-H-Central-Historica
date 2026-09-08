@@ -1,3 +1,16 @@
+REVISÃO v0.39.0 — GP-H HISTÓRICO CONCENTRADO / COMBINAÇÕES DE GRUPO
+- Recuperado como método próprio o GP-H Histórico v0.1 usado na fase de Ternos. Ele não é um simples alias da Puxada Combinada atual.
+- O Histórico v0.1 percorre as cinco posições da extração-base; se o mesmo bicho aparece repetido, sua fonte histórica contribui novamente. Cada posição consulta a puxada Geral do bicho e fornece seus 3 alvos mais fortes, sempre com corte prospectivo anterior à base.
+- Ranking: quantidade de indicações, soma das probabilidades históricas, lift médio e grupo apenas como desempate final.
+- Nova variação em Jogar → Grupo → Fechamento, com método “Histórico • Concentrado”.
+- Usuário escolhe de 2 a 15 bichos mais fortes e quantos jogos deseja de cada modalidade: Dupla, Terno, Quadra e Quina. Quantidade 0 desativa a modalidade.
+- A Central calcula em tempo real quantas combinações distintas existem e o mínimo de bichos necessário para o pedido. O botão USAR MÍNIMO ajusta o número de bichos ao menor valor matematicamente suficiente.
+- Fechamento concentrado: primeiro esgota o menor núcleo de líderes capaz de produzir jogos distintos e depois abre para o próximo bicho. Com A>B>C>D>E e pedido de 5 Ternos, preserva ABC, ABD, ACD, BCD, ABE.
+- Exemplos de validação: 2 Duplas com 3 bichos → AB/AC; 3 Duplas → AB/AC/BC; 3 Quinas com 6 bichos → ABCDE/ABCDF/ABCEF.
+- Terno é a estrutura histórica recuperada. Dupla, Quadra e Quina são extensões prospectivas da mesma regra e devem acumular avaliação própria daqui em diante.
+- Ao adicionar um fechamento ao bilhete, cada modalidade é registrada separadamente para manter cotações, auditoria, retorno e financeiro corretos. O usuário pode misturar as quatro modalidades num único bilhete.
+- Reset + 3+1, Reset Cobertura, Puxada Combinada atual, Similaridade, Decisão Contextual, sincronização e atualizador não foram alterados.
+
 REVISÃO v0.38.0 — POLIMENTO GERAL DAS TELAS / ETAPA 4
 - A navegação lateral passa a usar apenas “Configurações”; o nome antigo “Base / Configurações” foi eliminado da interface.
 - Configurações ganha navegação interna fixa para Conta e Sync, Aparência, Atualizações e Base de dados, usando a rolagem inteligente já padronizada.

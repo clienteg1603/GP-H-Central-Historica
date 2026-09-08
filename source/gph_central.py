@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-GP-H Central Histórica v0.38.0
+GP-H Central Histórica v0.39.0
 Pesquisa e manutenção do histórico 2026 do Deu no Poste / PT-Rio.
 
 Escopo desta versão:
@@ -42,6 +42,7 @@ import urllib.request
 import zipfile
 from collections import Counter
 from itertools import combinations, permutations
+from math import comb
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta
 from html.parser import HTMLParser
@@ -86,7 +87,7 @@ def write_crash_log(exc: BaseException):
 
 
 APP_NAME = "GP-H Central Histórica"
-APP_VERSION = "0.38.0"
+APP_VERSION = "0.39.0"
 START_DATE = date(2026, 1, 2)
 BASE_URL = "https://brasildeunoposte.com.br/resultado-do-jogo-do-bicho-deu-no-poste-{date}/"
 # Ao buscar/atualizar resultados, relê os últimos 7 dias para absorver
@@ -718,6 +719,15 @@ PLAY_METHOD_LABELS = {
 }
 
 METHOD_GUIDE = [
+    {
+        "name": "GP-H Histórico Concentrado v0.1",
+        "status": "Histórico recuperado para combinações de Grupo; Terno preserva a lógica original e Dupla/Quadra/Quina são extensões prospectivas.",
+        "base": "Usa as cinco posições da extração-base. Se um bicho aparece duas vezes, ele contribui duas vezes, como no Histórico v0.1 original.",
+        "history": "Para cada posição da base consulta a puxada Geral daquele bicho, somente com transições anteriores à base, e usa os 3 alvos históricos mais fortes.",
+        "does": "Soma indicações e percentuais para rankear os bichos. Depois monta combinações concentradas: primeiro esgota o menor núcleo de líderes capaz de produzir jogos distintos e só então abre para o próximo bicho.",
+        "output": "Um ranking A > B > C... e quantidades escolhidas de Duplas, Ternos, Quadras e Quinas, sem repetir combinações.",
+        "note": "Com 5 bichos e 5 Ternos, a ordem preservada é ABC, ABD, ACD, BCD, ABE. O método continua prospectivo: a base usada é anterior à rodada-alvo.",
+    },
     {
         "name": "GP-H Reset Cobertura v1",
         "status": "OFICIAL — seletor principal dos 5 bichos",
@@ -7849,6 +7859,203 @@ class Database:
         text = str(number)
         return len(set(permutations(text)))
 
+    def method_historico_concentrado_v01(self, draw_date, sorteio, hora, top_n=5):
+        """
+        Recupera a leitura do GP-H Histórico v0.1 usada nos Ternos.
+
+        Diferença essencial para a Puxada Combinada atual: percorre as CINCO
+        posições da extração-base. Portanto, uma fonte repetida contribui de
+        novo para suas três indicações históricas. Usa sempre a tabela Geral,
+        sem estados ×1/×2/×3+, e nunca olha transições posteriores à base.
+        """
+        top_n = max(1, min(15, int(top_n)))
+        base = self.get_draw(draw_date, sorteio, hora)
+        if not base:
+            raise ValueError("Extração-base não encontrada.")
+
+        cutoff = (draw_date, sorteio, hora)
+        signals = {g: {
+            "grupo": g,
+            "bicho": BICHOS[g],
+            "indication_count": 0,
+            "sum_prob": 0.0,
+            "avg_lift": 0.0,
+            "sources": [],
+        } for g in range(1, 26)}
+
+        source_details = []
+        for prize_index, prize in enumerate(base.get("prizes") or [], start=1):
+            source_group = int(prize["grupo"])
+            pull = self.historical_pulls(
+                source_group,
+                state="Geral",
+                before_draw_key=cutoff,
+            )
+            top3 = list(pull.get("ranking") or [])[:3]
+            source_details.append({
+                "premio": prize_index,
+                "grupo": source_group,
+                "bicho": BICHOS[source_group],
+                "support": int(pull.get("support") or 0),
+                "top3": [dict(r) for r in top3],
+            })
+            for row in top3:
+                target = signals[int(row["grupo"])]
+                target["indication_count"] += 1
+                target["sum_prob"] += float(row.get("prob") or 0.0)
+                target["sources"].append({
+                    "premio": prize_index,
+                    "grupo": source_group,
+                    "bicho": BICHOS[source_group],
+                    "prob": float(row.get("prob") or 0.0),
+                    "lift": float(row.get("lift") or 0.0),
+                    "support": int(pull.get("support") or 0),
+                })
+
+        ranking = []
+        for rec in signals.values():
+            if not rec["indication_count"]:
+                continue
+            rec["avg_lift"] = (
+                sum(float(s.get("lift") or 0.0) for s in rec["sources"])
+                / rec["indication_count"]
+            )
+            ranking.append(rec)
+
+        ranking.sort(key=lambda r: (
+            -r["indication_count"],
+            -r["sum_prob"],
+            -r["avg_lift"],
+            r["grupo"],
+        ))
+        for idx, rec in enumerate(ranking, start=1):
+            rec["rank"] = idx
+
+        return {
+            "method": "GP-H Histórico Concentrado v0.1",
+            "base": base,
+            "ranking": ranking,
+            "selected": ranking[:top_n],
+            "source_details": source_details,
+            "top_n": top_n,
+            "lookahead_safe": True,
+            "repeated_sources_count_again": True,
+        }
+
+    @staticmethod
+    def minimum_animals_for_combinations(size, quantity, max_animals=15):
+        size = int(size)
+        quantity = max(0, int(quantity))
+        max_animals = max(size, int(max_animals))
+        if quantity == 0:
+            return 0
+        for animals in range(size, max_animals + 1):
+            if comb(animals, size) >= quantity:
+                return animals
+        return None
+
+    @staticmethod
+    def generate_historical_concentrated_bundle(ranking, top_animals, requests, scope="1º–5º"):
+        """Monta Duplas/Ternos/Quadras/Quinas com concentração progressiva nos líderes."""
+        top_animals = max(2, min(15, int(top_animals)))
+        selected = [dict(r) for r in list(ranking or [])[:top_animals]]
+        if len(selected) < top_animals:
+            raise ValueError(
+                f"O Histórico v0.1 produziu somente {len(selected)} bichos com sinal; "
+                f"foram solicitados {top_animals}."
+            )
+
+        definitions = (
+            ("Dupla de Grupo", 2, "Dupla"),
+            ("Terno de Grupo", 3, "Terno"),
+            ("Quadra de Grupo", 4, "Quadra"),
+            ("Quina de Grupo", 5, "Quina"),
+        )
+        bundle = []
+        preview_rows = []
+
+        for kind, size, short_name in definitions:
+            qty = max(0, int((requests or {}).get(kind, 0)))
+            if qty == 0:
+                continue
+            if top_animals < size:
+                raise ValueError(f"{short_name} precisa de pelo menos {size} bichos.")
+            available = comb(top_animals, size)
+            if qty > available:
+                minimum = Database.minimum_animals_for_combinations(size, qty, max_animals=15)
+                extra = (
+                    f" Use pelo menos {minimum} bichos."
+                    if minimum is not None else
+                    " O pedido excede o limite do método."
+                )
+                raise ValueError(
+                    f"{qty} {short_name.lower()}(s) distintos não cabem em {top_animals} bichos: "
+                    f"existem somente {available}.{extra}"
+                )
+
+            # Cada combinação trabalha com índices do ranking. A primeira chave
+            # (maior índice usado) faz o método esgotar o menor núcleo de líderes
+            # antes de abrir para o próximo bicho. A segunda concentra ainda mais
+            # nos primeiros colocados. Isso reproduz ABC, ABD, ACD, BCD, ABE.
+            candidates = []
+            for idx_combo in combinations(range(top_animals), size):
+                rows = [selected[i] for i in idx_combo]
+                candidates.append((
+                    max(idx_combo),
+                    sum(idx_combo),
+                    -sum(int(r.get("indication_count") or 0) for r in rows),
+                    -sum(float(r.get("sum_prob") or 0.0) for r in rows),
+                    tuple(int(r["grupo"]) for r in rows),
+                    idx_combo,
+                ))
+            candidates.sort()
+
+            game_rows = []
+            for order, candidate in enumerate(candidates[:qty], start=1):
+                idx_combo = candidate[-1]
+                combo = [selected[i] for i in idx_combo]
+                groups = [int(r["grupo"]) for r in combo]
+                row = {
+                    "grupo": None,
+                    "bicho": " + ".join(BICHOS[g] for g in groups),
+                    "numero": "-".join(f"{g:02d}" for g in groups),
+                    "dezena_base": "—",
+                    "regra": "GP-H Histórico Concentrado v0.1",
+                    "modalidade": short_name,
+                    "combo_groups": groups,
+                    "combo_ranks": [int(selected[i].get("rank") or (i + 1)) for i in idx_combo],
+                    "ordem_forca": order,
+                }
+                game_rows.append(row)
+                preview_rows.append(dict(row))
+
+            bundle.append({
+                "kind": kind,
+                "strategy": "Histórico • Concentrado",
+                "scope": scope,
+                "selector": "GP-H Histórico Concentrado v0.1",
+                "groups": [int(r["grupo"]) for r in selected],
+                "rows": game_rows,
+                "historical_concentrated": True,
+            })
+
+        if not bundle:
+            raise ValueError("Escolha pelo menos uma Dupla, Terno, Quadra ou Quina.")
+
+        return {
+            "kind": "Fechamento de Grupo",
+            "strategy": "Histórico • Concentrado",
+            "scope": scope,
+            "selector": "GP-H Histórico Concentrado v0.1",
+            "groups": [int(r["grupo"]) for r in selected],
+            "rows": preview_rows,
+            "bundle_generations": bundle,
+            "ranking": selected,
+            "requests": {k: int(v) for k, v in (requests or {}).items()},
+            "top_animals": top_animals,
+            "historical_concentrated": True,
+        }
+
     def generate_group_combinations(
         self,
         groups,
@@ -12934,6 +13141,7 @@ class App(tk.Tk):
             f"Sincronização: {'ativa' if (self.account_profile or {}).get('sync_enabled') else 'somente local'}\n"
             f"Última sincronização: {(self.account_profile or {}).get('last_sync_at') or 'nunca'}\n\n"
             "Atualizações recentes:\n"
+            "• v0.39.0 — GP-H Histórico Concentrado v0.1: fechamento configurável de Duplas, Ternos, Quadras e Quinas por ranking histórico.\n"
             "• v0.38.0 — polimento geral: papéis das telas mais claros, Configurações simplificadas, redundâncias removidas e ações ambíguas renomeadas.\n"
             "• v0.37.3 — um único rolamento inteligente global e janelas secundárias adaptativas ao monitor.\n"
             "• v0.37.2 — padrão global de interface: tipografia, fonte mínima, tabelas, controles, espaçamento e cores semânticas centralizados.\n"
@@ -14641,6 +14849,11 @@ class App(tk.Tk):
         self.play_scope = tk.StringVar(value="1º–5º")
         self.play_method = tk.StringVar(value="Oficial • Reset + 3+1")
         self.play_total = tk.StringVar(value="20")
+        self.play_hc_base_animals = tk.StringVar(value="5")
+        self.play_hc_duplas = tk.StringVar(value="0")
+        self.play_hc_ternos = tk.StringVar(value="5")
+        self.play_hc_quadras = tk.StringVar(value="0")
+        self.play_hc_quinas = tk.StringVar(value="0")
         self.play_value_mode = tk.StringVar(value="Por palpite")
         self.play_stake = tk.StringVar(value="0,20")
         self.play_target_var = tk.StringVar()
@@ -14764,12 +14977,55 @@ class App(tk.Tk):
         )
         self.play_method_badge.grid(row=2, column=5, sticky="w", pady=(2, 0))
 
+        # FECHAMENTO HISTÓRICO CONCENTRADO (visível apenas na variação Fechamento)
+        self.play_hc_card = ttk.Frame(self.play_body, style="Card.TFrame", padding=(12, 10))
+        ttk.Label(
+            self.play_hc_card, text="HISTÓRICO CONCENTRADO", style="CardMuted.TLabel"
+        ).grid(row=0, column=0, columnspan=8, sticky="w", pady=(0, 5))
+
+        ttk.Label(self.play_hc_card, text="Bichos mais fortes", style="Card.TLabel").grid(row=1, column=0, sticky="w")
+        self.play_hc_base_spin = ttk.Spinbox(
+            self.play_hc_card, from_=2, to=15, textvariable=self.play_hc_base_animals, width=7
+        )
+        self.play_hc_base_spin.grid(row=2, column=0, sticky="w", padx=(0, 12), pady=(2, 0))
+
+        hc_fields = (
+            ("Duplas", self.play_hc_duplas),
+            ("Ternos", self.play_hc_ternos),
+            ("Quadras", self.play_hc_quadras),
+            ("Quinas", self.play_hc_quinas),
+        )
+        for col, (label, variable) in enumerate(hc_fields, start=1):
+            ttk.Label(self.play_hc_card, text=label, style="Card.TLabel").grid(row=1, column=col, sticky="w")
+            ttk.Spinbox(
+                self.play_hc_card, from_=0, to=100, textvariable=variable, width=7
+            ).grid(row=2, column=col, sticky="w", padx=(0, 12), pady=(2, 0))
+
+        ttk.Button(
+            self.play_hc_card, text="USAR MÍNIMO", command=self.play_hc_use_minimum
+        ).grid(row=2, column=5, sticky="w", padx=(4, 12), pady=(2, 0))
+
+        self.play_hc_status = ttk.Label(
+            self.play_hc_card, text="", style="CardMuted.TLabel", wraplength=1000, justify="left"
+        )
+        self.play_hc_status.grid(row=3, column=0, columnspan=7, sticky="ew", pady=(7, 0))
+        self.play_hc_card.grid_columnconfigure(6, weight=1)
+        self.play_hc_card.pack_forget()
+
+        for variable in (
+            self.play_hc_base_animals, self.play_hc_duplas, self.play_hc_ternos,
+            self.play_hc_quadras, self.play_hc_quinas,
+        ):
+            variable.trace_add("write", lambda *_a: self.play_hc_refresh())
+
         # 3) APOSTA / VALOR
         stake_card = ttk.Frame(self.play_body, style="Card.TFrame", padding=(12, 10))
+        self.play_stake_card = stake_card
         stake_card.pack(fill="x", pady=(0, 6))
         ttk.Label(stake_card, text="APOSTA", style="CardMuted.TLabel").grid(row=0, column=0, columnspan=8, sticky="w", pady=(0, 4))
 
-        ttk.Label(stake_card, text="Quantidade", style="Card.TLabel").grid(row=1, column=0, sticky="w")
+        self.play_total_label = ttk.Label(stake_card, text="Quantidade", style="Card.TLabel")
+        self.play_total_label.grid(row=1, column=0, sticky="w")
         self.play_total_spin = ttk.Spinbox(stake_card, from_=1, to=100, textvariable=self.play_total, width=8)
         self.play_total_spin.grid(row=2, column=0, sticky="w", padx=(0, 10), pady=(2, 0))
 
@@ -14827,6 +15083,20 @@ class App(tk.Tk):
             self.play_31_state_card, style="Card.TFrame"
         )
         self.play_31_state_rows.pack(fill="x")
+
+        # ESTADO DO HISTÓRICO CONCENTRADO (oculto até gerar)
+        self.play_hc_state_card = ttk.Frame(self.play_body, style="Card.TFrame", padding=(10, 8))
+        hc_state_head = ttk.Frame(self.play_hc_state_card, style="Card.TFrame")
+        hc_state_head.pack(fill="x", pady=(0, 4))
+        ttk.Label(
+            hc_state_head, text="RANKING DO HISTÓRICO CONCENTRADO", style="Section.TLabel"
+        ).pack(side="left")
+        self.play_hc_state_note = ttk.Label(
+            hc_state_head, text="", style="CardMuted.TLabel", wraplength=780, justify="left"
+        )
+        self.play_hc_state_note.pack(side="left", fill="x", expand=True, padx=(12, 0))
+        self.play_hc_state_rows = ttk.Frame(self.play_hc_state_card, style="Card.TFrame")
+        self.play_hc_state_rows.pack(fill="x")
 
         # 5) PALPITES
         generation_card = ttk.Frame(self.play_body, style="Card.TFrame", padding=(10, 8))
@@ -15549,9 +15819,129 @@ class App(tk.Tk):
         )
         self.play_show_games(select_ticket_id=ticket_id)
 
+    def play_hc_requested_counts(self):
+        values = (
+            ("Dupla de Grupo", self.play_hc_duplas),
+            ("Terno de Grupo", self.play_hc_ternos),
+            ("Quadra de Grupo", self.play_hc_quadras),
+            ("Quina de Grupo", self.play_hc_quinas),
+        )
+        out = {}
+        for kind, variable in values:
+            try:
+                out[kind] = max(0, int(str(variable.get()).strip() or "0"))
+            except Exception:
+                out[kind] = 0
+        return out
+
+    def play_hc_minimum_needed(self):
+        requests = self.play_hc_requested_counts()
+        sizes = {
+            "Dupla de Grupo": 2, "Terno de Grupo": 3,
+            "Quadra de Grupo": 4, "Quina de Grupo": 5,
+        }
+        needed = 2
+        for kind, qty in requests.items():
+            if qty <= 0:
+                continue
+            value = self.db.minimum_animals_for_combinations(sizes[kind], qty, max_animals=15)
+            if value is None:
+                return None
+            needed = max(needed, value)
+        return needed
+
+    def play_hc_use_minimum(self):
+        minimum = self.play_hc_minimum_needed()
+        if minimum is None:
+            messagebox.showerror(
+                "Histórico Concentrado",
+                "A quantidade pedida excede o limite de 15 bichos com sinal do método.",
+                parent=self,
+            )
+            return
+        self.play_hc_base_animals.set(str(minimum))
+
+    def play_hc_refresh(self):
+        if not hasattr(self, "play_hc_status"):
+            return
+        requests = self.play_hc_requested_counts()
+        try:
+            animals = max(2, min(15, int(str(self.play_hc_base_animals.get()).strip() or "2")))
+        except Exception:
+            animals = 2
+        total = sum(requests.values())
+        self.play_total.set(str(max(1, total)))
+        maxima = {
+            "Dupla": comb(animals, 2) if animals >= 2 else 0,
+            "Terno": comb(animals, 3) if animals >= 3 else 0,
+            "Quadra": comb(animals, 4) if animals >= 4 else 0,
+            "Quina": comb(animals, 5) if animals >= 5 else 0,
+        }
+        minimum = self.play_hc_minimum_needed()
+        if total <= 0:
+            status = "Escolha pelo menos um jogo. "
+        elif minimum is None:
+            status = "Pedido acima do limite do método. "
+        elif animals < minimum:
+            status = f"Pedido exige no mínimo {minimum} bichos. "
+        else:
+            status = f"Pedido válido com {animals} bichos. "
+        status += (
+            f"Disponíveis: {maxima['Dupla']} Duplas • {maxima['Terno']} Ternos • "
+            f"{maxima['Quadra']} Quadras • {maxima['Quina']} Quinas. "
+            "As combinações mais concentradas nos líderes vêm primeiro."
+        )
+        self.play_hc_status.configure(text=status)
+        if hasattr(self, "play_financial_label"):
+            self.play_financial_refresh()
+
+    def play_hide_hc_state(self):
+        card = getattr(self, "play_hc_state_card", None)
+        if card is not None:
+            try:
+                card.pack_forget()
+            except Exception:
+                pass
+
+    def play_render_hc_state(self, generation):
+        self.play_hide_hc_state()
+        if not generation or not generation.get("historical_concentrated"):
+            return
+        card = getattr(self, "play_hc_state_card", None)
+        rows_host = getattr(self, "play_hc_state_rows", None)
+        note = getattr(self, "play_hc_state_note", None)
+        before = getattr(self, "play_generation_card", None)
+        if card is None or rows_host is None or note is None or before is None:
+            return
+        for child in rows_host.winfo_children():
+            child.destroy()
+        ranking = list(generation.get("ranking") or [])
+        requests = generation.get("requests") or {}
+        requested_text = " • ".join(
+            f"{int(qty)} {label}"
+            for kind, label in (("Dupla de Grupo","Duplas"),("Terno de Grupo","Ternos"),("Quadra de Grupo","Quadras"),("Quina de Grupo","Quinas"))
+            if (qty := int(requests.get(kind, 0))) > 0
+        )
+        note.configure(text=(
+            f"{len(ranking)} bichos-base • {requested_text} • repetição na extração-base conta novamente, como no Histórico v0.1"
+        ))
+        for idx, row in enumerate(ranking, start=1):
+            letter = chr(64 + idx) if idx <= 26 else str(idx)
+            label = ttk.Label(
+                rows_host,
+                text=(
+                    f"{letter}  {BICHOS[int(row['grupo'])]} · G{int(row['grupo']):02d}  "
+                    f"• {int(row.get('indication_count') or 0)} indicação(ões)  "
+                    f"• soma {float(row.get('sum_prob') or 0.0)*100:.2f}%"
+                ),
+                style="Card.TLabel" if idx <= 3 else "CardMuted.TLabel",
+            )
+            label.pack(anchor="w", pady=(0, 1))
+        card.pack(fill="x", pady=(0, 6), before=before)
+
     def play_family_changed(self, _event=None):
         variants = {
-            "Grupo": ["Simples", "Dupla", "Terno", "Quadra", "Quina", "Passe vai", "Passe vai e vem"],
+            "Grupo": ["Simples", "Dupla", "Terno", "Quadra", "Quina", "Fechamento", "Passe vai", "Passe vai e vem"],
             "Dezena": ["Normal", "Duque", "Terno", "Invertida"],
             "Centena": ["Normal", "Invertida"],
             "Milhar": ["Normal", "Invertida"],
@@ -15570,6 +15960,7 @@ class App(tk.Tk):
             ("Grupo", "Terno"): "Terno de Grupo",
             ("Grupo", "Quadra"): "Quadra de Grupo",
             ("Grupo", "Quina"): "Quina de Grupo",
+            ("Grupo", "Fechamento"): "Fechamento de Grupo",
             ("Grupo", "Passe vai"): "Passe vai",
             ("Grupo", "Passe vai e vem"): "Passe vai e vem",
             ("Dezena", "Normal"): "Dezena",
@@ -15775,20 +16166,31 @@ class App(tk.Tk):
                 )
                 return
 
-        self.play_ticket_draft.append({
-            "generation": generation,
-            "stake_per_item": values["stake_per_item"],
-            "value_mode": values["mode"],
-            "input_value": values["input_value"],
-            "origem_jogada": (
-                "Manual"
-                if generation.get("strategy") == "Manual"
-                else "Gerada"
-            ),
-        })
+        if generation.get("historical_concentrated"):
+            for sub in generation.get("bundle_generations") or []:
+                self.play_ticket_draft.append({
+                    "generation": copy.deepcopy(sub),
+                    "stake_per_item": values["stake_per_item"],
+                    "value_mode": values["mode"],
+                    "input_value": values["input_value"],
+                    "origem_jogada": "Gerada • Histórico Concentrado",
+                })
+        else:
+            self.play_ticket_draft.append({
+                "generation": generation,
+                "stake_per_item": values["stake_per_item"],
+                "value_mode": values["mode"],
+                "input_value": values["input_value"],
+                "origem_jogada": (
+                    "Manual"
+                    if generation.get("strategy") == "Manual"
+                    else "Gerada"
+                ),
+            })
 
         self.play_generation = None
         self.play_hide_31_state()
+        self.play_hide_hc_state()
         self.play_refresh_ticket()
 
         for child in self.play_grid_container.winfo_children():
@@ -16182,12 +16584,15 @@ class App(tk.Tk):
 
     def play_controls_changed(self, _event=None):
         self.play_hide_31_state()
+        self.play_hide_hc_state()
         kind = self.play_kind.get()
         method = self.play_method.get()
 
-        fixed = kind in FIXED_PLACEMENT_MODALITIES
+        fixed = kind in FIXED_PLACEMENT_MODALITIES or kind == "Fechamento de Grupo"
 
-        if kind == "Centena":
+        if kind == "Fechamento de Grupo":
+            methods = ["Histórico • Concentrado"]
+        elif kind == "Centena":
             methods = [
                 "Oficial • Reset + 3+1",
                 "Oficial • Reset + Histórica",
@@ -16252,11 +16657,20 @@ class App(tk.Tk):
         else:
             self.play_scope_cb.configure(state="readonly")
 
-        if kind == "Centena" and method == "Oficial • Reset + 3+1":
-            self.play_total.set("20")
-            self.play_total_spin.configure(state="disabled")
+        if kind == "Fechamento de Grupo":
+            self.play_hc_card.pack(fill="x", pady=(0, 6), before=self.play_stake_card)
+            self.play_total_label.grid_remove()
+            self.play_total_spin.grid_remove()
+            self.play_hc_refresh()
         else:
-            self.play_total_spin.configure(state="normal")
+            self.play_hc_card.pack_forget()
+            self.play_total_label.grid()
+            self.play_total_spin.grid()
+            if kind == "Centena" and method == "Oficial • Reset + 3+1":
+                self.play_total.set("20")
+                self.play_total_spin.configure(state="disabled")
+            else:
+                self.play_total_spin.configure(state="normal")
 
         if kind == "Grupo" and self.play_total.get() == "20":
             self.play_total.set("5")
@@ -16274,6 +16688,12 @@ class App(tk.Tk):
         if method.startswith("Oficial"):
             badge = ("OFICIAL", "#124A7A", "#DCEEFF")
             help_text = "Reset é o seletor oficial. Métodos oficiais geram apenas para a próxima rodada operacional."
+        elif method.startswith("Histórico"):
+            badge = ("HISTÓRICO", "#155E63", "#D9FAF5")
+            help_text = (
+                "Recupera o GP-H Histórico v0.1 que teve o melhor resultado nos Ternos. "
+                "Terno preserva o fechamento concentrado; Dupla, Quadra e Quina são extensões prospectivas da mesma regra."
+            )
         elif method.startswith("Experimental"):
             badge = ("EXPERIMENTAL", "#4C2A78", "#E9D9FF")
             if "Puxada" in method:
@@ -16288,7 +16708,13 @@ class App(tk.Tk):
             help_text = "Você informa os números. O modo Manual permite preparar qualquer rodada futura exibida."
 
         self.play_method_badge.configure(text=badge[0], bg=badge[1], fg=badge[2])
-        self.play_generate_btn.configure(text="INSERIR NÚMEROS" if method == "Manual" else "GERAR JOGO")
+        self.play_generate_btn.configure(
+            text=(
+                "INSERIR NÚMEROS" if method == "Manual" else
+                "GERAR FECHAMENTO" if method == "Histórico • Concentrado" else
+                "GERAR JOGO"
+            )
+        )
 
         if target and not is_next and method != "Manual" and method != "Especial • Seca do Dia 1º":
             help_text += " O alvo escolhido não é o próximo; selecione Manual ou volte para a próxima rodada."
@@ -16474,6 +16900,47 @@ class App(tk.Tk):
                 )
 
             total = max(1, int(self.play_total.get()))
+
+            if kind == "Fechamento de Grupo" and method == "Histórico • Concentrado":
+                try:
+                    top_animals = max(2, min(15, int(self.play_hc_base_animals.get())))
+                except Exception:
+                    raise ValueError("Informe uma quantidade válida de bichos mais fortes.")
+                requests = self.play_hc_requested_counts()
+                if sum(requests.values()) <= 0:
+                    raise ValueError("Escolha pelo menos uma Dupla, Terno, Quadra ou Quina.")
+                minimum = self.play_hc_minimum_needed()
+                if minimum is None:
+                    raise ValueError("A quantidade pedida excede o limite de 15 bichos do método.")
+                if top_animals < minimum:
+                    raise ValueError(
+                        f"Esse pedido exige no mínimo {minimum} bichos mais fortes. "
+                        f"Você escolheu {top_animals}."
+                    )
+
+                historical = self.db.method_historico_concentrado_v01(
+                    latest["data"], latest["sorteio"], latest["hora"], top_n=top_animals
+                )
+                generation = self.db.generate_historical_concentrated_bundle(
+                    historical.get("selected") or [],
+                    top_animals=top_animals,
+                    requests=requests,
+                    scope="1º–5º",
+                )
+                generation["historical_report"] = historical
+                generation["intended_target"] = target
+                generation["target_mode"] = "ALVO_ESPECIFICO"
+                for sub in generation.get("bundle_generations") or []:
+                    sub["intended_target"] = dict(target)
+                    sub["target_mode"] = "ALVO_ESPECIFICO"
+                    sub["historical_ranking"] = [dict(r) for r in generation.get("ranking") or []]
+
+                self.play_generation = generation
+                self.play_generation_groups = list(generation.get("groups") or [])
+                self._shadow_freeze_async(target, latest)
+                self.play_render_generation()
+                self.play_financial_refresh()
+                return
 
             if method == "Especial • Seca do Dia 1º":
                 if kind not in ("Centena", "Milhar"):
@@ -16694,6 +17161,7 @@ class App(tk.Tk):
 
     def play_render_generation(self):
         self.play_render_31_state(self.play_generation)
+        self.play_render_hc_state(self.play_generation)
         for child in self.play_grid_container.winfo_children():
             child.destroy()
 
@@ -16789,7 +17257,13 @@ class App(tk.Tk):
                 anchor="center",
             ).pack(fill="x")
 
-            if row.get("grupo"):
+            if row.get("modalidade"):
+                subtitle = (
+                    f"{row['modalidade']}\n{row.get('bicho', '')}"
+                    if compact_subtitle
+                    else f"{row['modalidade']} • {row.get('bicho', '')}"
+                )
+            elif row.get("grupo"):
                 subtitle = (
                     f"{row['bicho']}\nG{int(row['grupo']):02d}"
                     if compact_subtitle
@@ -16814,8 +17288,22 @@ class App(tk.Tk):
         # Alerta de concentração ANTES de registrar o jogo.
         label=getattr(self,"play_concentration_label",None)
         if label is not None:
-            conc=self.db.decision_concentration_from_generation(self.play_generation)
-            if conc.get("group_mentions"):
+            if self.play_generation.get("historical_concentrated"):
+                ranking = self.play_generation.get("ranking") or []
+                leaders = " > ".join(
+                    f"{chr(65+i)} {BICHOS[int(r['grupo'])]}"
+                    for i, r in enumerate(ranking[:5])
+                )
+                label.configure(
+                    text=(
+                        f"Concentração histórica: {len(ranking)} bichos-base • {leaders}. "
+                        "O menor núcleo de líderes é esgotado antes de abrir para o próximo bicho."
+                    )
+                )
+                conc = None
+            else:
+                conc=self.db.decision_concentration_from_generation(self.play_generation)
+            if conc is not None and conc.get("group_mentions"):
                 lead=" + ".join(r["bicho"] for r in (conc.get("top") or [])[:2])
                 text=(f"Concentração: {conc.get('label')} • índice {conc.get('score',0):.0f}/100 • "
                       f"dois líderes = {conc.get('top2_share',0):.0f}%")
@@ -16824,13 +17312,59 @@ class App(tk.Tk):
                 if conc.get("label") == "ALTA":
                     text += " • atenção: muitos palpites dependem dos mesmos bichos."
                 label.configure(text=text)
-            else:
+            elif conc is not None:
                 label.configure(text="Concentração: sem leitura para esta modalidade.")
 
         # Atualiza bindtags/rolagem depois que os palpites foram criados.
         self.after_idle(self._play_finalize_layout)
 
     def play_financial_refresh(self, _event=None):
+        special_kind = hasattr(self, "play_kind") and self.play_kind.get() == "Fechamento de Grupo"
+        if self.play_generation and self.play_generation.get("historical_concentrated"):
+            count = len(self.play_generation.get("rows") or [])
+            try:
+                values = self.play_value_details(count)
+                stake = values["stake_per_item"]
+                input_total = values["total"]
+            except Exception:
+                values = {"mode": self.play_value_mode.get(), "input_value": 0.0}
+                stake = 0.0
+                input_total = 0.0
+            if values["mode"] == "Valor total":
+                base_text = (
+                    f"Total {self._money(values['input_value'])} ÷ {count} palpite(s) = "
+                    f"{self._money(stake)} por palpite" if count else "Escolha pelo menos um jogo."
+                )
+            else:
+                base_text = f"{count} palpite(s) × {self._money(stake)} = {self._money(input_total)}"
+            parts = []
+            for sub in self.play_generation.get("bundle_generations") or []:
+                parts.append(f"{len(sub.get('rows') or [])} {sub.get('kind','').replace(' de Grupo','')}")
+            self.play_financial_label.configure(text=base_text)
+            self.play_payout_label.configure(
+                text=(" • ".join(parts) + " • cotações e retornos são calculados separadamente por modalidade no bilhete.")
+            )
+            return
+        elif not self.play_generation and special_kind:
+            requests = self.play_hc_requested_counts() if hasattr(self, "play_hc_duplas") else {}
+            count = sum(requests.values())
+            try:
+                values = self.play_value_details(count) if count else {"mode":self.play_value_mode.get(),"input_value":0.0,"stake_per_item":0.0,"total":0.0}
+                stake = values.get("stake_per_item",0.0)
+                total_value = values.get("total",0.0)
+            except Exception:
+                stake = total_value = 0.0
+                values = {"mode":self.play_value_mode.get(),"input_value":0.0}
+            if count:
+                if values["mode"] == "Valor total":
+                    base_text = f"Total {self._money(values['input_value'])} ÷ {count} palpite(s) = {self._money(stake)} por palpite"
+                else:
+                    base_text = f"{count} palpite(s) × {self._money(stake)} = {self._money(total_value)}"
+            else:
+                base_text = "Escolha quantas Duplas, Ternos, Quadras e Quinas deseja jogar."
+            self.play_financial_label.configure(text=base_text)
+            self.play_payout_label.configure(text="O fechamento gera modalidades separadas dentro do mesmo bilhete.")
+            return
         if self.play_generation:
             count = len(
                 self.play_generation.get("rows", [])
@@ -17020,6 +17554,18 @@ class App(tk.Tk):
                 "Gere a jogada primeiro.",
                 parent=self,
             )
+            return
+
+        if self.play_generation.get("historical_concentrated"):
+            sections = []
+            total = 0
+            for sub in self.play_generation.get("bundle_generations") or []:
+                numbers = [str(r["numero"]) for r in sub.get("rows") or []]
+                total += len(numbers)
+                sections.append(sub.get("kind", "Jogo").upper() + "\n" + ", ".join(numbers))
+            self.clipboard_clear()
+            self.clipboard_append("\n\n".join(sections))
+            self.status.configure(text=f"{total} combinação(ões) copiadas por modalidade.")
             return
 
         numbers = [
