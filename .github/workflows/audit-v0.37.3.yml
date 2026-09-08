@@ -1,0 +1,19 @@
+name: Auditoria rolamento e janelas v0.37.3
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/audit-v0.37.3.yml"
+      - ".github/scripts/audit_v0373.py"
+
+permissions:
+  contents: read
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Auditar estrutura atual
+        run: python .github/scripts/audit_v0373.py
