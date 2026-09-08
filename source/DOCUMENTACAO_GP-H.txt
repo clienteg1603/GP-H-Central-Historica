@@ -1,3 +1,16 @@
+REVISÃO v0.40.0 — AUDITORIA PROSPECTIVA DA PRÓPRIA DECISÃO
+- A Decisão Contextual deixa de existir apenas como cálculo exibido na tela e passa a ser congelada dentro do mesmo decision_snapshot antes da rodada-alvo.
+- O congelamento salva líder de evidência, índices dos três métodos, diferença entre 1º e 2º, nível FORTE/MODERADA/BAIXA/AMOSTRA INSUFICIENTE, fatores ativos e horário/data do congelamento.
+- O congelamento auditável usa modo reproduzível sem Walk-Forward de sessão. Executar Walk-Forward depois continua sendo diagnóstico e nunca reescreve a decisão já congelada.
+- Regra anti-lookahead: se o resultado-alvo já existe na base, a Central não cria contextual_json nem mesmo por force; rodadas antigas sem leitura contextual permanecem sem backfill.
+- Após o resultado, a Central compara a cobertura 1º–5º do líder congelado contra Reset Cobertura, Puxada Combinada e Similaridade na mesma rodada.
+- Vereditos separados: CORRETA_EXCLUSIVA quando o líder foi sozinho o melhor; CORRETA_EMPATE quando terminou empatado entre os melhores; INCORRETA quando outro método teve cobertura maior; SEM_DADOS quando não havia líder avaliável.
+- Novo painel “AUDITORIA DA PRÓPRIA DECISÃO” mostra quantidade de decisões avaliadas, taxa em que o líder foi melhor ou empatado, vitórias exclusivas, erros, histórico recente e recorte por nível de confiança contextual.
+- A coleta é automática após cada novo resultado e também na abertura da Central/tela Decisão; não depende de o usuário abrir a página antes da rodada.
+- Sincronização multi-PC passa a transportar contextual_json/contextual_frozen_at/contextual_audit_json; entre duas leituras do mesmo alvo, o congelamento contextual mais antigo é o canônico.
+- Nenhum peso do Índice de Evidência Contextual foi alterado. Reset + 3+1 continua oficial e nenhum método é promovido automaticamente.
+- Reset Cobertura, Puxada Combinada, Similaridade, Histórico Concentrado, 3+1 e demais motores foram preservados por comparação AST antes/depois.
+
 REVISÃO v0.39.0 — GP-H HISTÓRICO CONCENTRADO / COMBINAÇÕES DE GRUPO
 - Recuperado como método próprio o GP-H Histórico v0.1 usado na fase de Ternos. Ele não é um simples alias da Puxada Combinada atual.
 - O Histórico v0.1 percorre as cinco posições da extração-base; se o mesmo bicho aparece repetido, sua fonte histórica contribui novamente. Cada posição consulta a puxada Geral do bicho e fornece seus 3 alvos mais fortes, sempre com corte prospectivo anterior à base.
