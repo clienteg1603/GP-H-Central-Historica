@@ -15838,6 +15838,7 @@ class App(tk.Tk):
 
         self.var_type = tk.StringVar(value="Todos")
         self.var_value = tk.StringVar()
+        self.var_period_mode = tk.StringVar(value="Qualquer data")
         self.var_date = tk.StringVar()
         self.var_from = tk.StringVar()
         self.var_to = tk.StringVar()
@@ -15857,14 +15858,28 @@ class App(tk.Tk):
         ttk.Label(filt, text="Valor", style="Card.TLabel").grid(row=0,column=1,sticky="w",padx=(0,8))
         ttk.Entry(filt,textvariable=self.var_value,width=16).grid(row=1,column=1,sticky="w",padx=(0,8),pady=(3,0))
 
-        ttk.Label(filt, text="Data", style="Card.TLabel").grid(row=0,column=2,sticky="w",padx=(0,8))
-        CalendarField(filt,self.var_date,width=10,on_change=self.on_exact_date_changed).grid(row=1,column=2,sticky="w",padx=(0,8),pady=(3,0))
+        ttk.Label(filt, text="Período", style="Card.TLabel").grid(row=0,column=2,sticky="w",padx=(0,8))
+        self.search_period_cb = ttk.Combobox(
+            filt, textvariable=self.var_period_mode,
+            values=["Qualquer data", "Data específica", "Entre datas"],
+            width=15, state="readonly",
+        )
+        self.search_period_cb.grid(row=1,column=2,sticky="w",padx=(0,8),pady=(3,0))
+        self.search_period_cb.bind("<<ComboboxSelected>>", self.search_period_mode_changed)
 
-        ttk.Label(filt, text="De", style="Card.TLabel").grid(row=0,column=3,sticky="w",padx=(0,8))
-        CalendarField(filt,self.var_from,width=10,on_change=self.on_range_date_changed).grid(row=1,column=3,sticky="w",padx=(0,8),pady=(3,0))
+        self.search_exact_label = ttk.Label(filt, text="Data", style="Card.TLabel")
+        self.search_exact_field = CalendarField(
+            filt, self.var_date, width=10, on_change=self.on_exact_date_changed
+        )
 
-        ttk.Label(filt, text="Até", style="Card.TLabel").grid(row=0,column=4,sticky="w",padx=(0,8))
-        CalendarField(filt,self.var_to,width=10,on_change=self.on_range_date_changed).grid(row=1,column=4,sticky="w",padx=(0,8),pady=(3,0))
+        self.search_from_label = ttk.Label(filt, text="De", style="Card.TLabel")
+        self.search_from_field = CalendarField(
+            filt, self.var_from, width=10, on_change=self.on_range_date_changed
+        )
+        self.search_to_label = ttk.Label(filt, text="Até", style="Card.TLabel")
+        self.search_to_field = CalendarField(
+            filt, self.var_to, width=10, on_change=self.on_range_date_changed
+        )
 
         ttk.Label(filt, text="Sorteio / Hora", style="Card.TLabel").grid(row=0,column=5,sticky="w",padx=(0,8))
         self.cb_draw = ttk.Combobox(
@@ -15935,8 +15950,48 @@ class App(tk.Tk):
         footer.pack(fill="x")
         ttk.Button(footer,text="Exportar CSV",command=self.export_csv).pack(side="right")
 
+        self.search_period_mode_changed()
         self.refresh_filters()
         self.search()
+
+
+    def search_period_mode_changed(self, _event=None):
+        """Mostra somente os campos de data que pertencem ao modo escolhido."""
+        mode = self.var_period_mode.get() if hasattr(self, "var_period_mode") else "Qualquer data"
+
+        widgets = (
+            getattr(self, "search_exact_label", None),
+            getattr(self, "search_exact_field", None),
+            getattr(self, "search_from_label", None),
+            getattr(self, "search_from_field", None),
+            getattr(self, "search_to_label", None),
+            getattr(self, "search_to_field", None),
+        )
+        for widget in widgets:
+            if widget is not None:
+                try:
+                    widget.grid_remove()
+                except tk.TclError:
+                    pass
+
+        if mode == "Data específica":
+            self.var_from.set("")
+            self.var_to.set("")
+            self.search_exact_label.grid(row=0,column=3,sticky="w",padx=(0,8))
+            self.search_exact_field.grid(row=1,column=3,sticky="w",padx=(0,8),pady=(3,0))
+        elif mode == "Entre datas":
+            self.var_date.set("")
+            self.search_from_label.grid(row=0,column=3,sticky="w",padx=(0,8))
+            self.search_from_field.grid(row=1,column=3,sticky="w",padx=(0,8),pady=(3,0))
+            self.search_to_label.grid(row=0,column=4,sticky="w",padx=(0,8))
+            self.search_to_field.grid(row=1,column=4,sticky="w",padx=(0,8),pady=(3,0))
+        else:
+            self.var_date.set("")
+            self.var_from.set("")
+            self.var_to.set("")
+
+        if hasattr(self, "cb_draw"):
+            self.refresh_search_filter_options()
 
 
     def _csv_text(self, value, width=None):
@@ -21569,29 +21624,15 @@ class App(tk.Tk):
             outer, text="Fechar", command=win.destroy
         ).pack(anchor="e", pady=(10, 0))
 
-    def _base_scroll_to(self, key):
-        """Leva a navegação interna de Configurações ao bloco correspondente."""
-        try:
-            canvas = getattr(self, "_smart_scroll_canvases", {}).get("base")
-            widget = getattr(self, "_base_section_widgets", {}).get(key)
-            if canvas is None or widget is None:
-                return
-            self.update_idletasks()
-            bbox = canvas.bbox("all")
-            if not bbox:
-                return
-            content_h = max(1, int(bbox[3] - bbox[1]))
-            viewport_h = max(1, int(canvas.winfo_height()))
-            max_scroll = max(1, content_h - viewport_h)
-            y = max(0, int(widget.winfo_y()) - UI_SPACING["small"])
-            canvas.yview_moveto(min(1.0, max(0.0, y / max_scroll)))
-        except Exception:
-            return
 
-    def show_base_config(self):
+    def show_base_config(self, section=None):
         self._set_active_nav("Configurações")
         self._clear_content()
         self._page = "base"
+        section = section or getattr(self, "base_section", "account")
+        if section not in {"account", "appearance", "updates", "data"}:
+            section = "account"
+        self.base_section = section
 
         self._page_title(
             "Configurações",
@@ -21607,8 +21648,10 @@ class App(tk.Tk):
             ("Base de dados", "data"),
         )):
             ttk.Button(
-                config_nav, text=label, style="Subnav.TButton",
-                command=lambda k=key: self._base_scroll_to(k),
+                config_nav,
+                text=label,
+                style="SubnavActive.TButton" if section == key else "Subnav.TButton",
+                command=lambda k=key: self.show_base_config(section=k),
             ).pack(side="left", padx=(0 if idx == 0 else UI_SPACING["micro"], 0))
 
         base_body = self._make_scrollable_page_body(self.content, "base")
@@ -22079,11 +22122,14 @@ class App(tk.Tk):
         for col in range(3):
             actions.grid_columnconfigure(col, weight=1, uniform="baseact")
 
-        self._base_section_widgets = {
-            "account": account_box,
-            "appearance": visual_box,
-            "updates": update_box,
-            "data": health_box,
+        # Mantem apenas a secao escolhida visivel. Os controles continuam
+        # sendo construidos uma vez nesta abertura para preservar callbacks e
+        # o comportamento existente, mas deixam de formar uma pagina gigante.
+        top_level = list(base_body.winfo_children())
+        fixed_sections = {
+            "account": [account_box],
+            "appearance": [visual_box],
+            "updates": [update_box],
         }
 
         ttk.Label(
@@ -22097,6 +22143,26 @@ class App(tk.Tk):
             wraplength=930,
             padding=(0, 6, 0, 0),
         ).pack(anchor="w")
+
+        top_level = list(base_body.winfo_children())
+        data_widgets = [
+            widget for widget in top_level
+            if widget not in {account_box, visual_box, update_box}
+        ]
+        visible = set(fixed_sections.get(section, data_widgets))
+        for widget in top_level:
+            if widget not in visible:
+                try:
+                    widget.pack_forget()
+                except tk.TclError:
+                    pass
+
+        self._base_section_widgets = {
+            "account": account_box,
+            "appearance": visual_box,
+            "updates": update_box,
+            "data": health_box,
+        }
 
     def _auto_decision_cycle(self):
         try:
@@ -24815,11 +24881,15 @@ class App(tk.Tk):
     def clear_filters(self):
         self.var_type.set("Todos")
         self.var_value.set("")
+        if hasattr(self, "var_period_mode"):
+            self.var_period_mode.set("Qualquer data")
         self.var_date.set("")
         self.var_from.set("")
         self.var_to.set("")
         self.var_draw.set("Todos")
         self.var_prize.set("Todos")
+        if hasattr(self, "var_period_mode"):
+            self.search_period_mode_changed()
         self.refresh_search_filter_options()
         self.search()
 
