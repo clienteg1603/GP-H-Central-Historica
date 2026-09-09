@@ -1,0 +1,182 @@
+name: Reforma GP-H - Etapa 3 temporaria
+
+on:
+  push:
+    branches:
+      - refactor-ui-limpeza-v045
+    paths:
+      - ".github/workflows/refactor-stage3-temp.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  refactor:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: refactor-ui-limpeza-v045
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Aplicar abas reais em Configuracoes e simplificar Pesquisa
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import ast, re
+
+          path = Path('source/gph_central.py')
+          text = path.read_text(encoding='utf-8')
+          before_tree = ast.parse(text)
+
+          def sensitive_map(tree):
+              tokens = (
+                  'meta', 'reset', 'similar', 'convergencia',
+                  'historico_concentrado', 'decision_contextual',
+                  'decision_operational_recommendation',
+              )
+              out = {}
+              for node in ast.walk(tree):
+                  if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                      low = node.name.lower()
+                      if any(token in low for token in tokens):
+                          out[node.name] = ast.dump(node, include_attributes=False)
+              return out
+
+          sensitive_before = sensitive_map(before_tree)
+
+          # ------------------------------------------------------------
+          # CONFIGURACOES: remover o antigo salto por rolagem e transformar
+          # os quatro botoes em secoes exclusivas da mesma tela.
+          # ------------------------------------------------------------
+          tree = ast.parse(text)
+          scroll_node = next(
+              n for n in ast.walk(tree)
+              if isinstance(n, ast.FunctionDef) and n.name == '_base_scroll_to'
+          )
+          lines = text.splitlines(keepends=True)
+          del lines[scroll_node.lineno - 1:scroll_node.end_lineno]
+          text = ''.join(lines)
+
+          old_sig = '    def show_base_config(self):\n'
+          new_sig = '    def show_base_config(self, section=None):\n'
+          if text.count(old_sig) != 1:
+              raise SystemExit('Assinatura show_base_config inesperada')
+          text = text.replace(old_sig, new_sig, 1)
+
+          old_page = '''        self._page = "base"\n\n        self._page_title(\n'''
+          new_page = '''        self._page = "base"\n        section = section or getattr(self, "base_section", "account")\n        if section not in {"account", "appearance", "updates", "data"}:\n            section = "account"\n        self.base_section = section\n\n        self._page_title(\n'''
+          if text.count(old_page) != 1:
+              raise SystemExit('Inicio de Configuracoes nao localizado')
+          text = text.replace(old_page, new_page, 1)
+
+          old_nav = '''            ttk.Button(\n                config_nav, text=label, style="Subnav.TButton",\n                command=lambda k=key: self._base_scroll_to(k),\n            ).pack(side="left", padx=(0 if idx == 0 else UI_SPACING["micro"], 0))\n'''
+          new_nav = '''            ttk.Button(\n                config_nav,\n                text=label,\n                style="SubnavActive.TButton" if section == key else "Subnav.TButton",\n                command=lambda k=key: self.show_base_config(section=k),\n            ).pack(side="left", padx=(0 if idx == 0 else UI_SPACING["micro"], 0))\n'''
+          if text.count(old_nav) != 1:
+              raise SystemExit('Navegacao antiga de Configuracoes nao localizada')
+          text = text.replace(old_nav, new_nav, 1)
+
+          old_map = '''        self._base_section_widgets = {\n            "account": account_box,\n            "appearance": visual_box,\n            "updates": update_box,\n            "data": health_box,\n        }\n\n        ttk.Label(\n'''
+          new_map = '''        # Mantem apenas a secao escolhida visivel. Os controles continuam\n        # sendo construidos uma vez nesta abertura para preservar callbacks e\n        # o comportamento existente, mas deixam de formar uma pagina gigante.\n        top_level = list(base_body.winfo_children())\n        fixed_sections = {\n            "account": [account_box],\n            "appearance": [visual_box],\n            "updates": [update_box],\n        }\n\n        ttk.Label(\n'''
+          if text.count(old_map) != 1:
+              raise SystemExit('Mapa antigo das Configuracoes nao localizado')
+          text = text.replace(old_map, new_map, 1)
+
+          # O ultimo Label explicativo pertence a Base de dados. Depois de ele
+          # ser empacotado, escondemos todas as secoes que nao sao a ativa.
+          old_tail = '''        ).pack(anchor="w")\n\n    def _auto_decision_cycle(self):\n'''
+          new_tail = '''        ).pack(anchor="w")\n\n        top_level = list(base_body.winfo_children())\n        data_widgets = [\n            widget for widget in top_level\n            if widget not in {account_box, visual_box, update_box}\n        ]\n        visible = set(fixed_sections.get(section, data_widgets))\n        for widget in top_level:\n            if widget not in visible:\n                try:\n                    widget.pack_forget()\n                except tk.TclError:\n                    pass\n\n        self._base_section_widgets = {\n            "account": account_box,\n            "appearance": visual_box,\n            "updates": update_box,\n            "data": health_box,\n        }\n\n    def _auto_decision_cycle(self):\n'''
+          if text.count(old_tail) != 1:
+              raise SystemExit('Cauda de Configuracoes nao localizada de forma unica')
+          text = text.replace(old_tail, new_tail, 1)
+
+          # ------------------------------------------------------------
+          # PESQUISA: um seletor de periodo controla os campos Data ou De/Ate.
+          # ------------------------------------------------------------
+          old_vars = '''        self.var_value = tk.StringVar()\n        self.var_date = tk.StringVar()\n        self.var_from = tk.StringVar()\n        self.var_to = tk.StringVar()\n'''
+          new_vars = '''        self.var_value = tk.StringVar()\n        self.var_period_mode = tk.StringVar(value="Qualquer data")\n        self.var_date = tk.StringVar()\n        self.var_from = tk.StringVar()\n        self.var_to = tk.StringVar()\n'''
+          if text.count(old_vars) != 1:
+              raise SystemExit('Variaveis de Pesquisa nao localizadas')
+          text = text.replace(old_vars, new_vars, 1)
+
+          old_dates = '''        ttk.Label(filt, text="Data", style="Card.TLabel").grid(row=0,column=2,sticky="w",padx=(0,8))\n        CalendarField(filt,self.var_date,width=10,on_change=self.on_exact_date_changed).grid(row=1,column=2,sticky="w",padx=(0,8),pady=(3,0))\n\n        ttk.Label(filt, text="De", style="Card.TLabel").grid(row=0,column=3,sticky="w",padx=(0,8))\n        CalendarField(filt,self.var_from,width=10,on_change=self.on_range_date_changed).grid(row=1,column=3,sticky="w",padx=(0,8),pady=(3,0))\n\n        ttk.Label(filt, text="Até", style="Card.TLabel").grid(row=0,column=4,sticky="w",padx=(0,8))\n        CalendarField(filt,self.var_to,width=10,on_change=self.on_range_date_changed).grid(row=1,column=4,sticky="w",padx=(0,8),pady=(3,0))\n'''
+          new_dates = '''        ttk.Label(filt, text="Período", style="Card.TLabel").grid(row=0,column=2,sticky="w",padx=(0,8))\n        self.search_period_cb = ttk.Combobox(\n            filt, textvariable=self.var_period_mode,\n            values=["Qualquer data", "Data específica", "Entre datas"],\n            width=15, state="readonly",\n        )\n        self.search_period_cb.grid(row=1,column=2,sticky="w",padx=(0,8),pady=(3,0))\n        self.search_period_cb.bind("<<ComboboxSelected>>", self.search_period_mode_changed)\n\n        self.search_exact_label = ttk.Label(filt, text="Data", style="Card.TLabel")\n        self.search_exact_field = CalendarField(\n            filt, self.var_date, width=10, on_change=self.on_exact_date_changed\n        )\n\n        self.search_from_label = ttk.Label(filt, text="De", style="Card.TLabel")\n        self.search_from_field = CalendarField(\n            filt, self.var_from, width=10, on_change=self.on_range_date_changed\n        )\n        self.search_to_label = ttk.Label(filt, text="Até", style="Card.TLabel")\n        self.search_to_field = CalendarField(\n            filt, self.var_to, width=10, on_change=self.on_range_date_changed\n        )\n'''
+          if text.count(old_dates) != 1:
+              raise SystemExit('Campos antigos de data da Pesquisa nao localizados')
+          text = text.replace(old_dates, new_dates, 1)
+
+          old_buttons_span = '        buttons.grid(row=2,column=0,columnspan=7,sticky="w",pady=(8,0))\n'
+          new_buttons_span = '        buttons.grid(row=2,column=0,columnspan=7,sticky="w",pady=(8,0))\n'
+          # intencionalmente mantido: ancora para validar a estrutura
+          if text.count(old_buttons_span) != 1:
+              raise SystemExit('Linha de botoes da Pesquisa nao localizada')
+
+          old_end_search = '''        self.refresh_filters()\n        self.search()\n\n\n    def _csv_text'''
+          new_end_search = '''        self.search_period_mode_changed()\n        self.refresh_filters()\n        self.search()\n\n\n    def search_period_mode_changed(self, _event=None):\n        """Mostra somente os campos de data que pertencem ao modo escolhido."""\n        mode = self.var_period_mode.get() if hasattr(self, "var_period_mode") else "Qualquer data"\n\n        widgets = (\n            getattr(self, "search_exact_label", None),\n            getattr(self, "search_exact_field", None),\n            getattr(self, "search_from_label", None),\n            getattr(self, "search_from_field", None),\n            getattr(self, "search_to_label", None),\n            getattr(self, "search_to_field", None),\n        )\n        for widget in widgets:\n            if widget is not None:\n                try:\n                    widget.grid_remove()\n                except tk.TclError:\n                    pass\n\n        if mode == "Data específica":\n            self.var_from.set("")\n            self.var_to.set("")\n            self.search_exact_label.grid(row=0,column=3,sticky="w",padx=(0,8))\n            self.search_exact_field.grid(row=1,column=3,sticky="w",padx=(0,8),pady=(3,0))\n        elif mode == "Entre datas":\n            self.var_date.set("")\n            self.search_from_label.grid(row=0,column=3,sticky="w",padx=(0,8))\n            self.search_from_field.grid(row=1,column=3,sticky="w",padx=(0,8),pady=(3,0))\n            self.search_to_label.grid(row=0,column=4,sticky="w",padx=(0,8))\n            self.search_to_field.grid(row=1,column=4,sticky="w",padx=(0,8),pady=(3,0))\n        else:\n            self.var_date.set("")\n            self.var_from.set("")\n            self.var_to.set("")\n\n        if hasattr(self, "cb_draw"):\n            self.refresh_search_filter_options()\n\n\n    def _csv_text'''
+          if text.count(old_end_search) != 1:
+              raise SystemExit('Fim de show_search nao localizado')
+          text = text.replace(old_end_search, new_end_search, 1)
+
+          old_clear = '''        self.var_type.set("Todos")\n        self.var_value.set("")\n        self.var_date.set("")\n'''
+          new_clear = '''        self.var_type.set("Todos")\n        self.var_value.set("")\n        if hasattr(self, "var_period_mode"):\n            self.var_period_mode.set("Qualquer data")\n        self.var_date.set("")\n'''
+          if text.count(old_clear) != 1:
+              raise SystemExit('clear_filters nao localizado')
+          text = text.replace(old_clear, new_clear, 1)
+
+          old_clear_end = '''        self.var_prize.set("Todos")\n        self.refresh_search_filter_options()\n        self.search()\n'''
+          new_clear_end = '''        self.var_prize.set("Todos")\n        if hasattr(self, "var_period_mode"):\n            self.search_period_mode_changed()\n        self.refresh_search_filter_options()\n        self.search()\n'''
+          if text.count(old_clear_end) != 1:
+              raise SystemExit('Fim de clear_filters nao localizado')
+          text = text.replace(old_clear_end, new_clear_end, 1)
+
+          after_tree = ast.parse(text)
+          sensitive_after = sensitive_map(after_tree)
+          if sensitive_after != sensitive_before:
+              changed = sorted(
+                  (set(sensitive_before) ^ set(sensitive_after)) |
+                  {n for n in set(sensitive_before) & set(sensitive_after)
+                   if sensitive_before[n] != sensitive_after[n]}
+              )
+              raise SystemExit('Cerebro sensivel alterado: ' + ', '.join(changed[:30]))
+
+          path.write_text(text, encoding='utf-8')
+          print('Etapa 3 aplicada; cerebro sensivel AST-identico.')
+          PY
+
+      - name: Validar Etapa 3
+        shell: bash
+        run: |
+          python -m py_compile source/gph_central.py source/gph_updater.py
+          python - <<'PY'
+          from pathlib import Path
+          import ast
+          text = Path('source/gph_central.py').read_text(encoding='utf-8')
+          tree = ast.parse(text)
+          funcs = {n.name:n for n in ast.walk(tree) if isinstance(n, ast.FunctionDef)}
+          assert '_base_scroll_to' not in funcs
+          assert 'show_base_config' in funcs
+          assert [a.arg for a in funcs['show_base_config'].args.args] == ['self','section']
+          assert 'search_period_mode_changed' in funcs
+          assert 'Data específica' in text and 'Entre datas' in text
+          assert 'command=lambda k=key: self.show_base_config(section=k)' in text
+          assert 'style="SubnavActive.TButton" if section == key else "Subnav.TButton"' in text
+          assert 'widget.pack_forget()' in text
+          print('Config tabs OK')
+          print('Pesquisa periodo OK')
+          PY
+          git diff --check
+          git diff --stat
+
+      - name: Gravar Etapa 3 na branch de reforma
+        shell: bash
+        run: |
+          git config user.name "Gzaraki"
+          git config user.email "112765179+clienteg1603@users.noreply.github.com"
+          git rm .github/workflows/refactor-stage3-temp.yml
+          git add source/gph_central.py
+          git commit -m "Etapa 3: simplificar Configuracoes e Pesquisa"
+          git push origin HEAD:refactor-ui-limpeza-v045
