@@ -1,0 +1,60 @@
+name: Inspecionar auditoria e bilhete v0.47.0
+on:
+  push:
+    branches: [ui-auditoria-bilhete-v0470]
+permissions:
+  contents: read
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ui-auditoria-bilhete-v0470
+      - name: Mapear funções e textos relevantes
+        run: |
+          python - <<'PY'
+          import ast
+          from pathlib import Path
+          p=Path('source/gph_central.py')
+          s=p.read_text(encoding='utf-8')
+          t=ast.parse(s)
+          needles=['audit','auditar','bilhete','ticket','resultado','result','delete','excluir','remover']
+          funcs=[]
+          for node in ast.walk(t):
+              if isinstance(node,(ast.FunctionDef,ast.AsyncFunctionDef)):
+                  seg=ast.get_source_segment(s,node) or ''
+                  low=(node.name+' '+seg[:12000]).lower()
+                  score=sum(1 for x in needles if x in low)
+                  if score>=2 or any(x in node.name.lower() for x in ['audit','ticket','bilhet','result']):
+                      funcs.append((node.lineno,node.name,score))
+          print('FUNCOES RELEVANTES')
+          for item in sorted(funcs): print(item)
+          print('\nTEXTOS AUDITAR / EXCLUIR')
+          for i,line in enumerate(s.splitlines(),1):
+              low=line.lower()
+              if any(x in low for x in ['auditar','auditoria','excluir bilhete','excluir jogo','remover jogo','atualizar resultados']):
+                  print(f'{i}: {line[:240]}')
+          PY
+      - name: Mostrar funções alvo completas
+        run: |
+          python - <<'PY'
+          import ast
+          from pathlib import Path
+          p=Path('source/gph_central.py')
+          s=p.read_text(encoding='utf-8')
+          t=ast.parse(s)
+          keys=('audit','bilhet','ticket','result','delete','remove')
+          wanted=[]
+          for node in ast.walk(t):
+              if isinstance(node,(ast.FunctionDef,ast.AsyncFunctionDef)):
+                  if any(k in node.name.lower() for k in keys):
+                      wanted.append(node)
+          # Imprime só funções de UI/DB menores ou com termos de remoção/auditoria.
+          for node in sorted(wanted,key=lambda n:n.lineno):
+              seg=ast.get_source_segment(s,node) or ''
+              low=seg.lower()
+              if any(x in low for x in ['auditar','auditoria','delete from','bilhete','ticket_id','atualizar resultados','audit_']):
+                  print(f'\n===== {node.name} L{node.lineno} =====')
+                  print(seg[:18000])
+          PY
