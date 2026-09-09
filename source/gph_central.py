@@ -19,6 +19,8 @@ Somente biblioteca padrão do Python.
 
 from __future__ import annotations
 
+import base64
+
 import csv
 import calendar
 import html
@@ -89,7 +91,7 @@ def write_crash_log(exc: BaseException):
 
 
 APP_NAME = "GP-H Central Histórica"
-APP_VERSION = "0.47.0"
+APP_VERSION = "0.47.1"
 START_DATE = date(2026, 1, 2)
 BASE_URL = "https://brasildeunoposte.com.br/resultado-do-jogo-do-bicho-deu-no-poste-{date}/"
 # Ao buscar/atualizar resultados, relê os últimos 7 dias para absorver
@@ -149,6 +151,7 @@ DEFAULT_PROGRAM_UPDATE_MANIFEST_URL = os.environ.get("GPH_UPDATE_MANIFEST_URL", 
 OFFICIAL_PROGRAM_UPDATE_MANIFEST_URLS = (
     "https://raw.githubusercontent.com/clienteg1603/GP-H-Central-Historica/main/update_manifest.json",
     "https://github.com/clienteg1603/GP-H-Central-Historica/raw/refs/heads/main/update_manifest.json",
+    "https://api.github.com/repos/clienteg1603/GP-H-Central-Historica/contents/update_manifest.json?ref=main",
 )
 PROGRAM_UPDATE_MAX_MANIFEST_BYTES = 1024 * 1024
 PROGRAM_UPDATE_MAX_PACKAGE_BYTES = 600 * 1024 * 1024
@@ -257,6 +260,23 @@ def _is_transient_program_update_error(exc):
     ))
 
 
+def _program_update_user_error(exc):
+    """Transforma falhas técnicas do servidor em uma mensagem útil ao usuário."""
+    if _is_transient_program_update_error(exc):
+        return (
+            "Servidor de atualização temporariamente ocupado. "
+            "A Central tentou novamente e também consultou rotas alternativas. "
+            "Tente novamente em alguns instantes."
+        )
+    if isinstance(exc, urllib.error.HTTPError):
+        code = int(getattr(exc, "code", 0) or 0)
+        return f"O servidor de atualização respondeu HTTP {code}. Tente novamente mais tarde."
+    if isinstance(exc, urllib.error.URLError):
+        return "Não foi possível acessar o servidor de atualização. Verifique sua conexão e tente novamente."
+    text = str(exc or "").strip()
+    return text or "Não foi possível consultar o servidor de atualização."
+
+
 def _fetch_json_url_once(url, timeout=12):
     url = _validate_update_manifest_url(url)
     if re.match(r"^https?://", url, flags=re.I):
@@ -277,6 +297,22 @@ def _fetch_json_url_once(url, timeout=12):
     else:
         raw = Path(url).expanduser().read_bytes()
     data = json.loads(raw.decode("utf-8"))
+
+    # v0.47.1 — terceira rota oficial pelo GitHub Contents API. Ela devolve
+    # um envelope JSON cujo campo content contém o manifesto em base64. Essa
+    # decodificação é aceita somente para a URL oficial conhecida.
+    if (
+        isinstance(data, dict)
+        and "api.github.com/repos/clienteg1603/GP-H-Central-Historica/contents/update_manifest.json" in url
+        and str(data.get("encoding") or "").lower() == "base64"
+        and data.get("content")
+    ):
+        try:
+            inner_raw = base64.b64decode(str(data["content"]).encode("ascii"))
+            data = json.loads(inner_raw.decode("utf-8"))
+        except Exception as exc:
+            raise ValueError("Resposta alternativa do servidor de atualização inválida.") from exc
+
     if not isinstance(data, dict):
         raise ValueError("Manifesto de atualização inválido.")
     return data
@@ -371,44 +407,59 @@ def _release_from_manifest(manifest, channel="stable", manifest_url=""):
     return out
 
 
-def _download_update_file(urls, destination, timeout=60):
+def _download_update_file(urls, destination, timeout=60, attempts=3):
     urls = [str(v).strip() for v in urls if str(v).strip()]
     if not urls:
         raise ValueError("Nenhum endereço de download foi informado.")
+    try:
+        attempts = max(1, min(5, int(attempts)))
+    except Exception:
+        attempts = 3
+    delays = (0.50, 1.00, 1.75, 2.50)
     destination = Path(destination)
     last_error = None
+
     for url in urls:
-        try:
-            if re.match(r"^https?://", url, flags=re.I):
-                if re.match(r"^http://", url, flags=re.I) and not _is_local_update_url(url):
-                    raise ValueError("Download remoto sem HTTPS foi bloqueado.")
-                req = urllib.request.Request(url, headers={"User-Agent": f"GP-H-Central/{APP_VERSION}"})
-                with urllib.request.urlopen(req, timeout=timeout) as resp, destination.open("wb") as out:
-                    length = resp.headers.get("Content-Length")
-                    if length and int(length) > PROGRAM_UPDATE_MAX_PACKAGE_BYTES:
-                        raise ValueError("Pacote de atualização maior que o limite permitido.")
-                    total = 0
-                    while True:
-                        chunk = resp.read(1024 * 1024)
-                        if not chunk:
-                            break
-                        total += len(chunk)
-                        if total > PROGRAM_UPDATE_MAX_PACKAGE_BYTES:
-                            raise ValueError("Pacote de atualização maior que o limite permitido.")
-                        out.write(chunk)
-            elif url.startswith("file://"):
-                from urllib.parse import urlparse, unquote
-                src = Path(unquote(urlparse(url).path))
-                shutil.copy2(src, destination)
-            else:
-                shutil.copy2(Path(url), destination)
-            return url
-        except Exception as exc:
-            last_error = exc
+        url_attempts = attempts if re.match(r"^https?://", url, flags=re.I) else 1
+        for attempt in range(url_attempts):
             try:
-                destination.unlink(missing_ok=True)
-            except Exception:
-                pass
+                if re.match(r"^https?://", url, flags=re.I):
+                    if re.match(r"^http://", url, flags=re.I) and not _is_local_update_url(url):
+                        raise ValueError("Download remoto sem HTTPS foi bloqueado.")
+                    req = urllib.request.Request(url, headers={"User-Agent": f"GP-H-Central/{APP_VERSION}"})
+                    with urllib.request.urlopen(req, timeout=timeout) as resp, destination.open("wb") as out:
+                        length = resp.headers.get("Content-Length")
+                        if length and int(length) > PROGRAM_UPDATE_MAX_PACKAGE_BYTES:
+                            raise ValueError("Pacote de atualização maior que o limite permitido.")
+                        total = 0
+                        while True:
+                            chunk = resp.read(1024 * 1024)
+                            if not chunk:
+                                break
+                            total += len(chunk)
+                            if total > PROGRAM_UPDATE_MAX_PACKAGE_BYTES:
+                                raise ValueError("Pacote de atualização maior que o limite permitido.")
+                            out.write(chunk)
+                elif url.startswith("file://"):
+                    from urllib.parse import urlparse, unquote
+                    src = Path(unquote(urlparse(url).path))
+                    shutil.copy2(src, destination)
+                else:
+                    shutil.copy2(Path(url), destination)
+                return url
+            except Exception as exc:
+                last_error = exc
+                try:
+                    destination.unlink(missing_ok=True)
+                except Exception:
+                    pass
+                if (
+                    attempt >= url_attempts - 1
+                    or not _is_transient_program_update_error(exc)
+                ):
+                    break
+                time.sleep(delays[min(attempt, len(delays) - 1)])
+
     raise last_error or RuntimeError("Não foi possível baixar a atualização.")
 
 def _read_local_update_package(package_path):
@@ -14799,7 +14850,7 @@ class App(tk.Tk):
                 release = _release_from_manifest(manifest, channel=channel, manifest_url=used_manifest_url)
                 result = (True, release, None)
             except Exception as exc:
-                result = (False, None, str(exc))
+                result = (False, None, _program_update_user_error(exc))
             self.sync_queue.put(("program_update_check_done", result, manual))
 
         threading.Thread(target=worker, daemon=True).start()

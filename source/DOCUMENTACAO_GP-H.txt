@@ -1,3 +1,11 @@
+REVISÃO v0.47.1 — ATUALIZADOR / FALLBACK INDEPENDENTE
+
+- A consulta de atualização mantém as tentativas automáticas e ganha uma terceira rota oficial pela API do GitHub, independente das duas rotas raw usadas anteriormente.
+- Erros transitórios como HTTP 503 e Backend.max_conn_reached não são mais exibidos como detalhes técnicos ao usuário; somente após todas as rotas falharem aparece uma mensagem simples de servidor temporariamente ocupado.
+- O download do pacote também repete automaticamente falhas transitórias antes de desistir ou avançar para um espelho.
+- Verificação SHA-256, backup, rollback e preservação dos dados continuam inalterados.
+- Nenhum método de Meta, Reset, Puxada, Similaridade, Histórico Concentrado, 3+1 ou Decisão foi alterado.
+
 REVISÃO v0.47.0 — AUDITORIA AUTOMÁTICA / EDIÇÃO DO BILHETE
 - A interface deixa de mostrar os botões redundantes “Auditar este jogo”, “Auditar agora” e “Auditar jogos”. A auditoria NÃO foi removida: Atualizar resultados e Adicionar manual já chamam audit_frozen_games() automaticamente após a gravação.
 - As rotinas internas de auditoria permanecem disponíveis para o sistema e diagnóstico; telas analíticas de Auditoria/Desempenho não foram removidas.
