@@ -11,11 +11,11 @@ new = 'APP_VERSION = "0.47.1"'
 assert old in s, 'versão-base 0.47.0 não encontrada'
 s = s.replace(old, new, 1)
 
-# A rota Contents API usa conteúdo base64.
+# A rota Contents API usa conteúdo base64. O import precisa vir depois de __future__.
 if not re.search(r'^import base64\s*$', s, flags=re.M):
-    m = re.search(r'^(?:from\s+\S+\s+import\s+|import\s+)', s, flags=re.M)
-    assert m, 'bloco de imports não encontrado'
-    s = s[:m.start()] + 'import base64\n' + s[m.start():]
+    future = 'from __future__ import annotations\n'
+    assert future in s, '__future__ esperado não encontrado'
+    s = s.replace(future, future + '\nimport base64\n', 1)
 
 # Terceira rota oficial independente da família raw.
 api_url = 'https://api.github.com/repos/clienteg1603/GP-H-Central-Historica/contents/update_manifest.json?ref=main'
@@ -41,7 +41,6 @@ if 'def _program_update_user_error(exc):' not in s:
 # Download: hoje cada URL é tentada uma única vez. Passa a repetir apenas falhas transitórias.
 start = s.index('def _download_update_file(')
 end = s.index('\ndef _read_local_update_package', start)
-old_download = s[start:end]
 new_download = '''def _download_update_file(urls, destination, timeout=60, attempts=3):\n    urls = [str(v).strip() for v in urls if str(v).strip()]\n    if not urls:\n        raise ValueError("Nenhum endereço de download foi informado.")\n    try:\n        attempts = max(1, min(5, int(attempts)))\n    except Exception:\n        attempts = 3\n    delays = (0.50, 1.00, 1.75, 2.50)\n    destination = Path(destination)\n    last_error = None\n\n    for url in urls:\n        url_attempts = attempts if re.match(r"^https?://", url, flags=re.I) else 1\n        for attempt in range(url_attempts):\n            try:\n                if re.match(r"^https?://", url, flags=re.I):\n                    if re.match(r"^http://", url, flags=re.I) and not _is_local_update_url(url):\n                        raise ValueError("Download remoto sem HTTPS foi bloqueado.")\n                    req = urllib.request.Request(url, headers={"User-Agent": f"GP-H-Central/{APP_VERSION}"})\n                    with urllib.request.urlopen(req, timeout=timeout) as resp, destination.open("wb") as out:\n                        length = resp.headers.get("Content-Length")\n                        if length and int(length) > PROGRAM_UPDATE_MAX_PACKAGE_BYTES:\n                            raise ValueError("Pacote de atualização maior que o limite permitido.")\n                        total = 0\n                        while True:\n                            chunk = resp.read(1024 * 1024)\n                            if not chunk:\n                                break\n                            total += len(chunk)\n                            if total > PROGRAM_UPDATE_MAX_PACKAGE_BYTES:\n                                raise ValueError("Pacote de atualização maior que o limite permitido.")\n                            out.write(chunk)\n                elif url.startswith("file://"):\n                    from urllib.parse import urlparse, unquote\n                    src = Path(unquote(urlparse(url).path))\n                    shutil.copy2(src, destination)\n                else:\n                    shutil.copy2(Path(url), destination)\n                return url\n            except Exception as exc:\n                last_error = exc\n                try:\n                    destination.unlink(missing_ok=True)\n                except Exception:\n                    pass\n                if (\n                    attempt >= url_attempts - 1\n                    or not _is_transient_program_update_error(exc)\n                ):\n                    break\n                time.sleep(delays[min(attempt, len(delays) - 1)])\n\n    raise last_error or RuntimeError("Não foi possível baixar a atualização.")\n'''
 s = s[:start] + new_download + s[end:]
 
