@@ -1,33 +1,41 @@
-name: Inspecionar auditoria e bilhete v0.47.0
+name: Aplicar auditoria e bilhete v0.47.0
 on:
   push:
     branches: [ui-auditoria-bilhete-v0470]
 permissions:
-  contents: read
+  contents: write
 jobs:
-  inspect:
+  aplicar:
+    if: github.event.head_commit.message == 'Executa correção auditoria e bilhete v0.47.0'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
         with:
           ref: ui-auditoria-bilhete-v0470
-      - name: Mostrar construtor e schema relevante
+          fetch-depth: 0
+      - name: Preparar ambiente e baseline
         run: |
-          python - <<'PY'
-          import ast
-          from pathlib import Path
-          s=Path('source/gph_central.py').read_text(encoding='utf-8')
-          t=ast.parse(s)
-          for node in ast.walk(t):
-              if isinstance(node,ast.ClassDef) and node.name=='Database':
-                  for item in node.body:
-                      if isinstance(item,(ast.FunctionDef,ast.AsyncFunctionDef)) and item.name in {'__init__','init_schema','refresh_ticket_totals','delete_ticket'}:
-                          print(f'\n===== {item.name} L{item.lineno} =====')
-                          seg=ast.get_source_segment(s,item) or ''
-                          if item.name=='init_schema':
-                              for line in seg.splitlines():
-                                  if any(x in line.lower() for x in ['create table','bilhetes','jogos_congelados','jogos_itens','sync_uid','foreign key']):
-                                      print(line)
-                          else:
-                              print(seg)
-          PY
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq python3-tk
+          cp source/gph_central.py /tmp/gph_v0469_before.py
+      - name: Aplicar patch
+        run: python _temp_patch_v0470.py
+      - name: Validar Python e comportamento
+        run: |
+          python -m py_compile source/gph_central.py
+          python _temp_test_v0470.py
+      - name: Conferir diff final
+        run: |
+          git diff --check
+          git diff --stat
+          git status --short
+      - name: Limpar temporários e salvar versão validada
+        run: |
+          rm -rf source/__pycache__ __pycache__
+          git rm .github/workflows/inspecionar-auditoria-bilhete-v0470.yml _temp_patch_v0470.py _temp_test_v0470.py
+          git add source/gph_central.py source/DOCUMENTACAO_GP-H.txt
+          git diff --cached --check
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git commit -m 'v0.47.0 Auditoria automática e exclusão parcial de bilhete'
+          git push origin HEAD:ui-auditoria-bilhete-v0470
