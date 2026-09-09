@@ -53,11 +53,13 @@ jobs:
         run: |
           @'
           import importlib.util
+          import sys
           import tempfile
           from pathlib import Path
 
           spec = importlib.util.spec_from_file_location('gph', 'source/gph_central.py')
           gph = importlib.util.module_from_spec(spec)
+          sys.modules['gph'] = gph
           spec.loader.exec_module(gph)
 
           with tempfile.TemporaryDirectory() as td:
