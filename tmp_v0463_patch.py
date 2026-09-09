@@ -45,7 +45,7 @@ new = '''def _atomic_write_json(path, data):
         # fluxo único, com flush/fsync. O SQLite local nunca é tocado aqui.
         for attempt in range(4):
             try:
-                with path.open("w", encoding="utf-8", newline="\n") as fh:
+                with path.open("w", encoding="utf-8") as fh:
                     fh.write(payload)
                     fh.flush()
                     try:
@@ -86,10 +86,10 @@ new_msg = '''        except Exception as exc:
                 detail = str(exc)
                 if isinstance(exc, PermissionError) or "WinError 5" in detail or "Acesso negado" in detail:
                     detail = (
-                        "A pasta compartilhada está temporariamente bloqueando a gravação de um arquivo do GP-H.\n\n"
+                        "A pasta compartilhada está temporariamente bloqueando a gravação de um arquivo do GP-H.\\n\\n"
                         "Isso costuma acontecer enquanto Dropbox/OneDrive está processando o mesmo arquivo. "
-                        "A Central tentou novamente automaticamente e não alterou seu banco local.\n\n"
-                        "Espere a nuvem terminar de sincronizar e tente novamente.\n\nDetalhe técnico: " + detail
+                        "A Central tentou novamente automaticamente e não alterou seu banco local.\\n\\n"
+                        "Espere a nuvem terminar de sincronizar e tente novamente.\\n\\nDetalhe técnico: " + detail
                     )
                 messagebox.showerror("Sincronização entre PCs", detail, parent=self)
 '''
