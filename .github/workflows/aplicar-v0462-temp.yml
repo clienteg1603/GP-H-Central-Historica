@@ -1,0 +1,58 @@
+name: Aplicar v0.46.2 Home responsiva
+
+on:
+  push:
+    branches:
+      - fix-home-hover-scroll-v0462
+    paths:
+      - "tmp_v0462_patch.py"
+      - "tmp_v0462_test.py"
+      - ".github/workflows/aplicar-v0462-temp.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  validar-e-aplicar:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Baixar branch
+        uses: actions/checkout@v4
+        with:
+          ref: fix-home-hover-scroll-v0462
+          fetch-depth: 0
+
+      - name: Preparar Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Guardar baseline v0.46.1
+        run: git show origin/main:source/gph_central.py > /tmp/gph_main_v0461.py
+
+      - name: Aplicar patch v0.46.2
+        run: python tmp_v0462_patch.py
+
+      - name: Validar sintaxe
+        run: python -m py_compile source/gph_central.py source/gph_updater.py
+
+      - name: Instalar Xvfb
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq xvfb
+
+      - name: Testar cérebro, hover e Home reduzida
+        run: xvfb-run -a python tmp_v0462_test.py
+
+      - name: Conferir diff
+        run: git diff --check
+
+      - name: Gravar versão validada e limpar temporários
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add source/gph_central.py source/DOCUMENTACAO_GP-H.txt
+          git rm -f tmp_v0462_patch.py tmp_v0462_test.py .github/workflows/aplicar-v0462-temp.yml
+          git commit -m "v0.46.2 Corrigir hover e rolagem da Home"
+          git push
