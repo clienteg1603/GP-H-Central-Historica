@@ -1,3 +1,15 @@
+GP-H CENTRAL HISTÓRICA — v0.46.0 TESTE
+
+REFORMA DE INTERFACE E LIMPEZA ESTRUTURAL
+- Decisão reorganizada em Resumo, Análise, Auditoria e Laboratório.
+- Jogar separa Decisão da Rodada de Apoio à Construção.
+- Configurações divididas em Conta e Sync, Aparência, Atualizações e Base de dados.
+- Pesquisa usa um seletor único de período: qualquer data, data específica ou entre datas.
+- Menu lateral organizado em Operação, Análise e Sistema.
+- Pop-ups redundantes de sucesso foram reduzidos; confirmações críticas foram preservadas.
+- Código legado sem uso comprovado foi removido.
+- Métodos sensíveis de Meta, Reset, Puxada/Convergência, Similaridade, Histórico Concentrado e Decisão permanecem inalterados.
+
 REVISÃO v0.45.0 — ETAPA D / RECOMENDAÇÃO OPERACIONAL v0.1
 - Fecha a sequência A/B/C/D da Decisão Contextual com uma camada de tradução operacional. A Etapa D NÃO cria novo score, não recalcula pesos e não escolhe um novo líder.
 - A D usa exatamente o líder e o nível final já produzidos por A+B+C: FORTE = priorizar a leitura; MODERADA = priorizar com cautela; BAIXA = sem vantagem clara; AMOSTRA INSUFICIENTE = evidência insuficiente.
