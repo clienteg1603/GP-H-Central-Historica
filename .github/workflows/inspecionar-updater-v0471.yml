@@ -1,36 +1,37 @@
-name: Inspecionar updater v0.47.1
+name: Aplicar updater robusto v0.47.1
 on:
   push:
     branches: [fix-updater-fallback-v0471]
 permissions:
-  contents: read
+  contents: write
 jobs:
-  inspect:
+  aplicar:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
         with:
           ref: fix-updater-fallback-v0471
-      - name: Mapear atualizador
+          fetch-depth: 0
+      - name: Guardar baseline
+        run: cp source/gph_central.py /tmp/gph_v0470_before.py
+      - name: Aplicar correção
+        run: python _temp_patch_v0471.py
+      - name: Validar Python e fallback
         run: |
-          python - <<'PY'
-          import ast
-          from pathlib import Path
-          p=Path('source/gph_central.py')
-          s=p.read_text(encoding='utf-8')
-          t=ast.parse(s)
-          needles=('update_manifest','program_update','atualiza','manifest','download','http','urlopen','mirror','retry','server')
-          print('=== FUNCOES RELEVANTES ===')
-          for node in ast.walk(t):
-              if isinstance(node,(ast.FunctionDef,ast.AsyncFunctionDef)):
-                  seg=ast.get_source_segment(s,node) or ''
-                  low=(node.name+' '+seg[:18000]).lower()
-                  if any(k in low for k in needles) and any(k in low for k in ('update_manifest','program_update','atualiza','manifest')):
-                      print(f'\n===== {node.name} L{node.lineno} =====')
-                      print(seg[:22000])
-          print('\n=== LINHAS DE RETRY/HTTP/MANIFEST ===')
-          for i,line in enumerate(s.splitlines(),1):
-              low=line.lower()
-              if any(k in low for k in ('update_manifest','http error','httperror','urlopen','retry','mirror','backend.max','não foi possível verificar','nao foi possivel verificar')):
-                  print(f'{i}: {line[:320]}')
-          PY
+          python -m py_compile source/gph_central.py
+          python _temp_test_v0471.py
+      - name: Conferir diff
+        run: |
+          git diff --check
+          git diff --stat
+          git status --short
+      - name: Limpar temporários e salvar versão validada
+        run: |
+          rm -rf source/__pycache__ __pycache__
+          git rm .github/workflows/inspecionar-updater-v0471.yml _temp_patch_v0471.py _temp_test_v0471.py
+          git add source/gph_central.py source/DOCUMENTACAO_GP-H.txt
+          git diff --cached --check
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git commit -m 'v0.47.1 Atualizador com fallback independente'
+          git push origin HEAD:fix-updater-fallback-v0471
