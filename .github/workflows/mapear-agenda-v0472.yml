@@ -1,0 +1,54 @@
+name: Mapear agenda semanal v0.47.2
+on:
+  push:
+    branches: [fix-agenda-semanal-v0472]
+permissions:
+  contents: write
+jobs:
+  mapear:
+    if: ${{ !contains(github.event.head_commit.message, '[agenda-excerpt]') }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix-agenda-semanal-v0472
+      - name: Extrair trechos relevantes
+        run: |
+          python - <<'PY'
+          import ast
+          from pathlib import Path
+          s=Path('source/gph_central.py').read_text(encoding='utf-8')
+          t=ast.parse(s)
+          out=[]
+          keywords=('rodada','round','federal','ptn','horario','horário','schedule','slot','proxima','próxima')
+          hard=('18:00','21:00','09:00','11:00','14:00','16:00')
+          for node in ast.walk(t):
+              if isinstance(node,(ast.FunctionDef,ast.AsyncFunctionDef)):
+                  seg=ast.get_source_segment(s,node) or ''
+                  low=(node.name+' '+seg).lower()
+                  # funções que lidem com rodada/schedule ou contenham vários horários conhecidos
+                  score=sum(k in low for k in keywords)
+                  hscore=sum(k in seg for k in hard)
+                  if (score>=2 and ('rodada' in low or 'round' in low or 'federal' in low)) or hscore>=3:
+                      out.append(f'\n===== {node.name} L{node.lineno}-L{getattr(node,"end_lineno",node.lineno)} =====\n{seg[:45000]}\n')
+          out.append('\n===== LINHAS AVULSAS =====\n')
+          for i,line in enumerate(s.splitlines(),1):
+              low=line.lower()
+              if ('federal' in low or 'ptn' in low or 'round_slots' in low or 'round_schedule' in low or 'próxima rodada' in low or 'proxima rodada' in low) and len(line)<800:
+                  out.append(f'{i}: {line}\n')
+          # documentação, só linhas de agenda/federal
+          d=Path('source/DOCUMENTACAO_GP-H.txt').read_text(encoding='utf-8')
+          out.append('\n===== DOCUMENTAÇÃO / FEDERAL-AGENDA =====\n')
+          for i,line in enumerate(d.splitlines(),1):
+              low=line.lower()
+              if any(k in low for k in ('federal','quarta','domingo','sábado','sabado','18h','18:00')):
+                  out.append(f'{i}: {line}\n')
+          Path('_agenda_excerpt.txt').write_text(''.join(out),encoding='utf-8')
+          PY
+      - name: Salvar mapa temporário
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add _agenda_excerpt.txt
+          git commit -m '[agenda-excerpt] mapa temporário de agenda'
+          git push origin HEAD:fix-agenda-semanal-v0472
