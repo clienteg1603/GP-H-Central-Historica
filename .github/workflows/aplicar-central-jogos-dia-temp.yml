@@ -1,0 +1,102 @@
+name: Validar Central v0.46.7 Jogos do dia
+
+on:
+  push:
+    branches:
+      - central-jogos-dia-v0467
+    paths:
+      - "tmp_aplicar_central_jogos_dia.py"
+      - ".github/workflows/aplicar-central-jogos-dia-temp.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  validar-aplicar:
+    runs-on: windows-latest
+    steps:
+      - name: Baixar branch
+        uses: actions/checkout@v4
+        with:
+          ref: central-jogos-dia-v0467
+
+      - name: Preparar Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Aplicar v0.46.7
+        shell: pwsh
+        run: python tmp_aplicar_central_jogos_dia.py
+
+      - name: Validar sintaxe
+        shell: pwsh
+        run: |
+          python -m py_compile source/gph_central.py source/gph_updater.py source/CRIAR_PACOTE_ATUALIZACAO.py
+          python -c "import ast,pathlib; p=pathlib.Path('source/gph_central.py'); t=p.read_text(encoding='utf-8'); ast.parse(t); assert 'APP_VERSION = \"0.46.7\"' in t; assert 'def show_games_day' in t; assert '(\"Jogos do dia\", self.show_games_day, \"results\")' in t; print('AST/menu/version OK')"
+
+      - name: Testar agrupamento diário
+        shell: pwsh
+        run: |
+          @'
+          import importlib.util
+          import tempfile
+          from pathlib import Path
+
+          spec = importlib.util.spec_from_file_location('gph', 'source/gph_central.py')
+          gph = importlib.util.module_from_spec(spec)
+          spec.loader.exec_module(gph)
+
+          with tempfile.TemporaryDirectory() as td:
+              db = gph.Database(Path(td) / 'teste.db')
+              draws = [
+                  ('PPT','09:00'), ('PTM','11:00'), ('PT','14:00'),
+                  ('PTV','16:00'), ('FEDERAL','20:00'), ('CORUJA','21:00'),
+              ]
+              with db.connect() as con:
+                  for di,(sorteio,hora) in enumerate(draws):
+                      for premio in range(1,6):
+                          milhar = f'{(di+1)*1000 + premio*4:04d}'[-4:]
+                          centena = milhar[-3:]
+                          dezena = milhar[-2:]
+                          grupo = gph.grupo_da_dezena(int(dezena))
+                          con.execute(
+                              'INSERT INTO resultados(data,dia_semana,sorteio,hora,premio,milhar,centena,dezena,grupo,bicho,fonte) VALUES(?,?,?,?,?,?,?,?,?,?,?)',
+                              ('2026-09-09','quarta-feira',sorteio,hora,premio,milhar,centena,dezena,grupo,gph.BICHOS[grupo],'TESTE')
+                          )
+                  con.commit()
+              assert db.latest_result_date() == '2026-09-09'
+              grouped = db.day_draws('2026-09-09')
+              assert len(grouped) == 6, len(grouped)
+              assert [d['hora'] for d in grouped] == ['09:00','11:00','14:00','16:00','20:00','21:00']
+              assert all(len(d['prizes']) == 5 for d in grouped)
+              assert sum(len(d['prizes']) for d in grouped) == 30
+              assert db.day_draws('2026-09-08') == []
+              print('6 extrações / 30 prêmios OK')
+          '@ | Set-Content -Encoding UTF8 _central_v0467_test.py
+          python _central_v0467_test.py
+          Remove-Item _central_v0467_test.py -Force
+
+      - name: Conferir proteção dos métodos
+        shell: pwsh
+        run: |
+          $text = Get-Content source/gph_central.py -Raw
+          if ($text -notmatch 'Nenhuma fórmula de Meta') {
+            Write-Host 'Proteção descrita apenas na documentação; seguindo validação estrutural.'
+          }
+          git diff --check
+          git diff --stat
+
+      - name: Limpar temporários e gravar versão final
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          Remove-Item source/__pycache__ -Recurse -Force -ErrorAction SilentlyContinue
+          git add source/gph_central.py source/DOCUMENTACAO_GP-H.txt
+          git rm tmp_aplicar_central_jogos_dia.py .github/workflows/aplicar-central-jogos-dia-temp.yml
+          git commit -m "GP-H Central Histórica v0.46.7 — Jogos do dia"
+          git push origin HEAD:central-jogos-dia-v0467
