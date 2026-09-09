@@ -3,7 +3,6 @@ import importlib.util
 import os
 import sys
 import tempfile
-import time
 from pathlib import Path
 
 BASE = Path('/tmp/gph_main_v0461.py')
@@ -19,7 +18,7 @@ def class_methods(path, class_name):
             out[node.name] = ast.dump(node, include_attributes=False)
     return out
 
-# O banco/motores estatísticos precisam permanecer byte-estruturalmente iguais em AST.
+# O banco/motores estatísticos precisam permanecer estruturalmente iguais em AST.
 base_db = class_methods(BASE, 'Database')
 new_db = class_methods(NEW, 'Database')
 missing = sorted(set(base_db) - set(new_db))
@@ -28,7 +27,7 @@ if missing or changed:
     raise AssertionError(f'Database alterado. missing={missing} changed={changed}')
 print(f'Database protegido: {len(base_db)} métodos AST-idênticos')
 
-# Carrega a aplicação usando pasta temporária, sem tela de login e sem maximização.
+# Carrega a aplicação usando pasta temporária, sem prompts ou tarefas automáticas.
 os.environ['GPH_DATA_DIR'] = tempfile.mkdtemp(prefix='gph_v0462_')
 spec = importlib.util.spec_from_file_location('gph_v0462_module', NEW.resolve())
 mod = importlib.util.module_from_spec(spec)
@@ -38,6 +37,9 @@ assert mod.APP_VERSION == '0.46.2'
 
 mod.App._ensure_profile_login = lambda self: True
 mod.App._maximize_main_window = lambda self: None
+mod.App.first_run_prompt = lambda self: None
+mod.App._auto_decision_cycle = lambda self: None
+mod.App._account_sync_periodic = lambda self: None
 app = mod.App()
 try:
     app.geometry('1100x650+0+0')
