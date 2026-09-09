@@ -49,10 +49,6 @@ jobs:
 
           sensitive_before = sensitive_map(before_tree)
 
-          # ------------------------------------------------------------
-          # DECISAO: quatro visoes reais. Resumo e a entrada padrao;
-          # Analise/Auditoria/Laboratorio deixam de ficar empilhados.
-          # ------------------------------------------------------------
           old_sig = '    def show_decision_page(self, open_lab=False):\n'
           new_sig = '    def show_decision_page(self, open_lab=False, view=None):\n'
           if text.count(old_sig) != 1:
@@ -82,10 +78,6 @@ jobs:
               raise SystemExit('Cauda antiga do Laboratorio nao localizada')
           text = text.replace(old_lab_tail, '', 1)
 
-          # ------------------------------------------------------------
-          # JOGAR: uma recomendacao PRINCIPAL (Etapa D) e, abaixo,
-          # o antigo ranking sombra renomeado como apoio a construcao.
-          # ------------------------------------------------------------
           old_card = '''        ttk.Label(rec_card, text="RECOMENDAÇÃO DA RODADA", style="CardMuted.TLabel").pack(anchor="w")\n        self.play_recommendation_label = ttk.Label(\n            rec_card, text="", style="Recommendation.TLabel", wraplength=1040, justify="left"\n        )\n        self.play_recommendation_label.pack(fill="x", anchor="w", pady=(4, 0))\n        self.play_recommendation_note = ttk.Label(\n            rec_card, text="", style="CardMuted.TLabel", wraplength=1040, justify="left"\n        )\n        self.play_recommendation_note.pack(fill="x", anchor="w", pady=(2, 0))\n        self._bind_wraplength(self.play_recommendation_label, rec_card, margin=12, minimum=240)\n        self._bind_wraplength(self.play_recommendation_note, rec_card, margin=12, minimum=240)\n'''
           new_card = '''        ttk.Label(rec_card, text="DECISÃO DA RODADA", style="CardMuted.TLabel").pack(anchor="w")\n        self.play_recommendation_label = ttk.Label(\n            rec_card, text="", style="Recommendation.TLabel", wraplength=1040, justify="left"\n        )\n        self.play_recommendation_label.pack(fill="x", anchor="w", pady=(4, 0))\n        self.play_recommendation_note = ttk.Label(\n            rec_card, text="", style="CardMuted.TLabel", wraplength=1040, justify="left"\n        )\n        self.play_recommendation_note.pack(fill="x", anchor="w", pady=(2, 0))\n        self._bind_wraplength(self.play_recommendation_label, rec_card, margin=12, minimum=240)\n        self._bind_wraplength(self.play_recommendation_note, rec_card, margin=12, minimum=240)\n\n        ttk.Separator(rec_card, orient="horizontal").pack(fill="x", pady=(8, 7))\n        ttk.Label(\n            rec_card, text="APOIO À CONSTRUÇÃO", style="CardMuted.TLabel"\n        ).pack(anchor="w")\n        self.play_construction_label = ttk.Label(\n            rec_card, text="", style="Card.TLabel",\n            font=(UI_FONT_SEMIBOLD, UI_FONT_SIZES["body"]), wraplength=1040, justify="left"\n        )\n        self.play_construction_label.pack(fill="x", anchor="w", pady=(3, 0))\n        self.play_construction_note = ttk.Label(\n            rec_card, text="", style="CardMuted.TLabel", wraplength=1040, justify="left"\n        )\n        self.play_construction_note.pack(fill="x", anchor="w", pady=(2, 0))\n        self._bind_wraplength(self.play_construction_label, rec_card, margin=12, minimum=240)\n        self._bind_wraplength(self.play_construction_note, rec_card, margin=12, minimum=240)\n'''
           if text.count(old_card) != 1:
@@ -129,7 +121,7 @@ jobs:
           tree = ast.parse(text)
           funcs = {n.name:n for n in ast.walk(tree) if isinstance(n, ast.FunctionDef)}
           assert 'show_decision_page' in funcs
-          assert len(funcs['show_decision_page'].args.args) == 4, [a.arg for a in funcs['show_decision_page'].args.args]
+          assert len(funcs['show_decision_page'].args.args) == 3, [a.arg for a in funcs['show_decision_page'].args.args]
           assert '_play_refresh_decision_recommendation' in funcs
           assert text.count('play_construction_label') >= 3
           assert text.count('DECISÃO DA RODADA') >= 1
