@@ -28,6 +28,16 @@ os.environ['GPH_DATA_DIR'] = str(data_dir)
 (data_dir / 'atualizacoes_programa' / 'settings.json').write_text(
     json.dumps({'auto_check': False, 'channel': 'test'}), encoding='utf-8'
 )
+# Perfil válido evita qualquer diálogo modal de primeiro uso durante o Xvfb.
+(data_dir / 'account_profile.json').write_text(json.dumps({
+    'profile_name': 'Teste UI',
+    'profile_code': 'GPH-TEST-1234',
+    'remember_login': True,
+    'device_id': '00000000-0000-4000-8000-000000000001',
+    'device_name': 'TESTE-XVFB',
+    'sync_enabled': False,
+    'sync_folder': None,
+}, ensure_ascii=False), encoding='utf-8')
 
 spec = importlib.util.spec_from_file_location('gph_v0464_module', CUR.resolve())
 mod = importlib.util.module_from_spec(spec)
@@ -40,6 +50,7 @@ mod.App._maximize_main_window = lambda self: None
 for name in ('showinfo','showwarning','showerror'):
     setattr(mod.messagebox, name, lambda *a, **k: None)
 mod.messagebox.askyesno = lambda *a, **k: False
+mod.simpledialog.askstring = lambda *a, **k: None
 
 app = mod.App()
 app.state('normal')
