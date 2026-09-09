@@ -126,9 +126,10 @@ with tempfile.TemporaryDirectory() as td:
 
     # Recalcula para garantir estado inicial coerente.
     db.refresh_ticket_totals(ticket_id)
-    detail = db.ticket_details(ticket_id)
     assert len(db.games_for_ticket(ticket_id)) == 3
-    assert abs(float(detail['total_apostado']) - 60.0) < 1e-9
+    with db.connect() as con:
+        t0 = con.execute('SELECT total_apostado FROM bilhetes WHERE id=?',(ticket_id,)).fetchone()
+        assert t0 is not None and abs(float(t0[0]) - 60.0) < 1e-9, t0
 
     r1 = db.delete_ticket_game(ticket_id, games[0])
     assert r1['deleted'] and not r1['ticket_deleted'], r1
