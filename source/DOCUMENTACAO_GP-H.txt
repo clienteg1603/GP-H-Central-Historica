@@ -1,3 +1,11 @@
+REVISÃO v0.47.0 — AUDITORIA AUTOMÁTICA / EDIÇÃO DO BILHETE
+- A interface deixa de mostrar os botões redundantes “Auditar este jogo”, “Auditar agora” e “Auditar jogos”. A auditoria NÃO foi removida: Atualizar resultados e Adicionar manual já chamam audit_frozen_games() automaticamente após a gravação.
+- As rotinas internas de auditoria permanecem disponíveis para o sistema e diagnóstico; telas analíticas de Auditoria/Desempenho não foram removidas.
+- No detalhe de uma modalidade pertencente a um bilhete registrado, o espaço do antigo botão “Auditar agora” passa a mostrar “Excluir esta modalidade”.
+- A exclusão parcial remove somente o jogo selecionado e seus palpites, preserva as demais modalidades e recalcula automaticamente total apostado, retorno, líquido e status do bilhete.
+- Se a modalidade removida for a última do bilhete, o bilhete vazio também é removido automaticamente.
+- Meta, Reset, Puxada, Similaridade, Histórico Concentrado, 3+1, Decisão, Walk-Forward e seus cálculos não foram alterados.
+
 REVISÃO v0.46.9 — META JOGÁVEL EM FORMAÇÃO
 - Corrige a v0.46.8: o GP-H Meta passa a poder gerar jogo antes dos 20 snapshots, desde que exista pelo menos 1 snapshot auditado anterior.
 - A trava científica do Meta sombra NÃO foi removida: meta_shadow_prediction continua exigindo 20 snapshots para ficar disponível na avaliação oficial.

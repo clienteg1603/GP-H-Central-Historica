@@ -89,7 +89,7 @@ def write_crash_log(exc: BaseException):
 
 
 APP_NAME = "GP-H Central Histórica"
-APP_VERSION = "0.46.9"
+APP_VERSION = "0.47.0"
 START_DATE = date(2026, 1, 2)
 BASE_URL = "https://brasildeunoposte.com.br/resultado-do-jogo-do-bicho-deu-no-poste-{date}/"
 # Ao buscar/atualizar resultados, relê os últimos 7 dias para absorver
@@ -10553,6 +10553,70 @@ class Database:
             "game_ids": created,
         }
 
+
+    def delete_ticket_game(self, ticket_id, game_id):
+        """Exclui somente uma modalidade de um bilhete e recalcula o restante."""
+        ticket_id = int(ticket_id)
+        game_id = int(game_id)
+
+        with self.connect() as con:
+            ticket = con.execute(
+                "SELECT * FROM bilhetes WHERE id=?",
+                (ticket_id,),
+            ).fetchone()
+            if ticket is None:
+                return {
+                    "deleted": False,
+                    "reason": "ticket_not_found",
+                    "ticket_id": ticket_id,
+                    "game_id": game_id,
+                }
+
+            game = con.execute(
+                "SELECT * FROM jogos_congelados WHERE id=? AND bilhete_id=?",
+                (game_id, ticket_id),
+            ).fetchone()
+            if game is None:
+                return {
+                    "deleted": False,
+                    "reason": "game_not_found",
+                    "ticket_id": ticket_id,
+                    "game_id": game_id,
+                }
+
+            items_deleted = int(con.execute(
+                "SELECT COUNT(*) FROM jogos_itens WHERE jogo_id=?",
+                (game_id,),
+            ).fetchone()[0])
+            con.execute(
+                "DELETE FROM jogos_itens WHERE jogo_id=?",
+                (game_id,),
+            )
+            con.execute(
+                "DELETE FROM jogos_congelados WHERE id=? AND bilhete_id=?",
+                (game_id, ticket_id),
+            )
+
+        # refresh_ticket_totals usa uma nova conexão; por isso roda fora da
+        # transação acima. Se era a última modalidade, ele remove o bilhete.
+        ticket_after = self.refresh_ticket_totals(ticket_id)
+        remaining_games = (
+            len(self.games_for_ticket(ticket_id))
+            if ticket_after is not None
+            else 0
+        )
+
+        return {
+            "deleted": True,
+            "ticket_id": ticket_id,
+            "game_id": game_id,
+            "game": dict(game),
+            "items_deleted": items_deleted,
+            "remaining_games": remaining_games,
+            "ticket_deleted": ticket_after is None,
+            "ticket": ticket_after,
+        }
+
     def delete_ticket(self, ticket_id):
         """Exclui um bilhete registrado e todos os jogos/itens ligados a ele."""
         ticket_id = int(ticket_id)
@@ -13250,10 +13314,6 @@ class FrozenGameDetailsDialog(tk.Toplevel):
 
         footer = ttk.Frame(outer, padding=(0,8,0,0))
         footer.pack(fill="x")
-
-        ttk.Button(
-            footer, text="Auditar este jogo", command=self.audit_this
-        ).pack(side="left")
 
         ttk.Button(
             footer, text="Fechar", command=self.destroy
@@ -21734,11 +21794,14 @@ class App(tk.Tk):
                     command=lambda gid=game_id: self.play_edit_game(gid),
                 ).pack(side="left", padx=(5,0))
 
-        ttk.Button(
-            buttons,
-            text="Auditar agora",
-            command=lambda gid=game_id: self.play_audit_game(gid),
-        ).pack(side="left", padx=(5,0))
+        if game.get("bilhete_id"):
+            ttk.Button(
+                buttons,
+                text="Excluir esta modalidade",
+                command=lambda tid=int(game["bilhete_id"]), gid=int(game_id): (
+                    self.play_delete_game_from_ticket(tid, gid)
+                ),
+            ).pack(side="left", padx=(5,0))
 
         ttk.Button(
             buttons,
@@ -21837,6 +21900,101 @@ class App(tk.Tk):
         self.play_refresh_games()
         self.play_show_game_detail(game_id)
 
+
+    def play_delete_game_from_ticket(self, ticket_id, game_id):
+        ticket_id = int(ticket_id)
+        game_id = int(game_id)
+
+        try:
+            analysis = self.db.play_game_analysis(game_id)
+            game = analysis["game"]
+        except Exception as exc:
+            messagebox.showerror(
+                "Excluir modalidade",
+                str(exc),
+                parent=self,
+            )
+            return
+
+        if int(game.get("bilhete_id") or 0) != ticket_id:
+            messagebox.showerror(
+                "Excluir modalidade",
+                "A modalidade selecionada não pertence a este bilhete.",
+                parent=self,
+            )
+            return
+
+        modality = str(game.get("tipo") or "Jogo")
+        if game.get("submodalidade"):
+            modality += f" / {game['submodalidade']}"
+        scope = str(game.get("escopo") or "")
+        if scope:
+            modality += f" • {scope}"
+
+        games = self.db.games_for_ticket(ticket_id)
+        remaining_after = max(0, len(games) - 1)
+        total = float(game.get("valor_total") or 0)
+        last_note = (
+            "\n\nEsta é a última modalidade; o bilhete também será removido."
+            if remaining_after == 0
+            else f"\n\nAs outras {remaining_after} modalidade(s) do bilhete serão preservadas."
+        )
+
+        if not messagebox.askyesno(
+            "Excluir modalidade",
+            (
+                f"Remover somente esta modalidade do bilhete #{ticket_id}?\n\n"
+                f"{modality}\n"
+                f"Palpites: {int(game.get('total_itens') or 0)}\n"
+                f"Valor registrado: {self._money(total)}"
+                f"{last_note}\n\n"
+                "Esta ação não pode ser desfeita."
+            ),
+            parent=self,
+        ):
+            return
+
+        try:
+            report = self.db.delete_ticket_game(ticket_id, game_id)
+        except Exception as exc:
+            messagebox.showerror(
+                "Excluir modalidade",
+                str(exc),
+                parent=self,
+            )
+            return
+
+        if not report.get("deleted"):
+            messagebox.showinfo(
+                "Excluir modalidade",
+                "A modalidade já não existe neste bilhete.",
+                parent=self,
+            )
+            self.play_refresh_games()
+            return
+
+        self.play_selected_game_id = None
+        self._update_results_nav_badge()
+        self.play_refresh_games()
+
+        if report.get("ticket_deleted"):
+            self.play_selected_ticket_id = None
+            feedback = (
+                f"Última modalidade removida; o bilhete #{ticket_id} também foi excluído."
+            )
+        else:
+            self.play_selected_ticket_id = ticket_id
+            try:
+                self.play_select_ticket_across_rounds(ticket_id)
+            except Exception:
+                pass
+            feedback = (
+                f"{modality} removida do bilhete #{ticket_id} • "
+                f"{int(report.get('remaining_games') or 0)} modalidade(s) permanecem."
+            )
+
+        self.status.configure(text=feedback)
+
     def play_audit_game(self, game_id):
         result = self.db.audit_frozen_game(game_id)
         self._update_results_nav_badge()
@@ -21869,7 +22027,7 @@ class App(tk.Tk):
 
         self._page_title(
             "Resultados",
-            "Atualize os resultados, acompanhe jogos congelados e audite o desempenho prospectivo.",
+            "Atualize os resultados e acompanhe os jogos; a auditoria é feita automaticamente após cada resultado.",
         )
         body = self._make_scrollable_page_body(self.content, "results")
 
@@ -21917,12 +22075,6 @@ class App(tk.Tk):
             actions,
             text="Adicionar manual",
             command=self.open_manual,
-        ).pack(side="left", padx=(5, 0))
-
-        ttk.Button(
-            actions,
-            text="Auditar jogos",
-            command=self.results_audit_games,
         ).pack(side="left", padx=(5, 0))
 
         # Navegação interna, sem abrir nova janela.
