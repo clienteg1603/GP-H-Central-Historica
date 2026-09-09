@@ -1,3 +1,12 @@
+REVISÃO v0.46.7 — JOGOS DO DIA
+- Nova tela “Jogos do dia” na seção OPERAÇÃO, logo abaixo de Início.
+- A tela reúne todas as extrações de uma data em cartões independentes, com horário em destaque e 1º ao 5º prêmio visíveis.
+- Navegação por dia anterior/próximo, Hoje, Último disponível e calendário; a página usa o rolamento inteligente global da Central.
+- Cada prêmio mostra bicho, grupo, centena, dezena e milhar; resultados ainda incompletos mantêm as cinco posições visíveis.
+- A consulta usa diretamente a tabela resultados do mesmo banco da Central; não cria segunda base nem duplica histórico.
+- A tela permite Buscar atualização e Recarregar sem alterar jogos, financeiro, métodos ou decisões.
+- Nenhuma fórmula de Meta, Reset, Puxada, Similaridade, Histórico Concentrado, 3+1 ou Decisão foi alterada.
+
 REVISÃO v0.46.6 — ATUALIZADOR RESILIENTE / HTTP 503
 - Corrigido o comportamento em que “Buscar nova versão” desistia após uma única falha temporária e o usuário acabava fechando/reabrindo a Central para provocar outra tentativa.
 - Erros transitórios de rede (408/425/429/500/502/503/504, timeout, conexão resetada e Backend.max_conn_reached) agora recebem até 3 tentativas automáticas com pequenas esperas progressivas.

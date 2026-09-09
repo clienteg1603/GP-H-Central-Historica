@@ -1,11 +1,12 @@
 # -*- coding: utf-8 -*-
 """
-GP-H Central Histórica v0.46.6
+GP-H Central Histórica v0.46.7
 Pesquisa e manutenção do histórico 2026 do Deu no Poste / PT-Rio.
 
 Escopo desta versão:
 - Sincroniza resultados de 02/01/2026 até a data atual.
 - Guarda 1º ao 5º prêmio.
+- Nova tela Jogos do dia reúne todas as extrações de uma data em cartões.
 - Pesquisa por bicho, grupo, dezena, centena ou milhar.
 - Filtros por período, sorteio/horário e posição.
 - Cadastro manual de resultado.
@@ -88,7 +89,7 @@ def write_crash_log(exc: BaseException):
 
 
 APP_NAME = "GP-H Central Histórica"
-APP_VERSION = "0.46.6"
+APP_VERSION = "0.46.7"
 START_DATE = date(2026, 1, 2)
 BASE_URL = "https://brasildeunoposte.com.br/resultado-do-jogo-do-bicho-deu-no-poste-{date}/"
 # Ao buscar/atualizar resultados, relê os últimos 7 dias para absorver
@@ -1062,6 +1063,46 @@ class Database:
         con = sqlite3.connect(self.path)
         con.row_factory = sqlite3.Row
         return con
+
+    def latest_result_date(self):
+        """Última data que possui ao menos um prêmio registrado."""
+        with self.connect() as con:
+            row = con.execute("SELECT MAX(data) FROM resultados").fetchone()
+        return row[0] if row and row[0] else None
+
+    def day_draws(self, data_value):
+        """Agrupa os prêmios de uma data por extração, em ordem cronológica."""
+        data_value = str(data_value or "").strip()
+        if not data_value:
+            return []
+        with self.connect() as con:
+            rows = con.execute(
+                """
+                SELECT data, sorteio, hora, premio, milhar, centena, dezena, grupo, bicho
+                FROM resultados
+                WHERE data=?
+                ORDER BY substr(hora,1,2), substr(hora,4,2), sorteio, premio
+                """,
+                (data_value,),
+            ).fetchall()
+
+        draws = []
+        current = None
+        for row in rows:
+            key = (row["sorteio"], row["hora"])
+            if current is None or current["key"] != key:
+                current = {
+                    "key": key,
+                    "data": row["data"],
+                    "sorteio": row["sorteio"],
+                    "hora": row["hora"],
+                    "prizes": [],
+                }
+                draws.append(current)
+            current["prizes"].append(dict(row))
+        for draw in draws:
+            draw.pop("key", None)
+        return draws
 
     def init_schema(self):
         with self.connect() as con:
@@ -14739,6 +14780,7 @@ class App(tk.Tk):
             f"Sincronização: {'ativa' if (self.account_profile or {}).get('sync_enabled') else 'somente local'}\n"
             f"Última sincronização: {(self.account_profile or {}).get('last_sync_at') or 'nunca'}\n\n"
             "Atualizações recentes:\n"
+            "• v0.46.7 — nova tela Jogos do dia reúne todas as extrações de uma data em cartões com horário grande e 1º–5º prêmio.\n"
             "• v0.46.1 — clique no bicho abre ranking de Dezenas, Centenas e Milhares fortes; Home recebe polimento de bordas, imagens e status.\n"
             "• v0.42.0 — Walk-Forward rigoroso do GP-H Meta v0.1, sem alterar o cérebro prospectivo.\n"
             "• v0.41.0 — GP-H Meta v0.1 em sombra: modelo logístico nativo aprende com Reset, Puxada, Similaridade e Histórico Concentrado sem alterar o método oficial.\n"
@@ -15036,6 +15078,8 @@ class App(tk.Tk):
         # A troca de aparência acontece em Configurações; não jogar o usuário de volta à Home.
         if previous_page == "base":
             self.show_base_config()
+        elif previous_page == "games_day":
+            self.show_games_day(getattr(self, "games_day_selected_date", None))
         self.status.configure(text=f"Tema aplicado: {theme_name}.")
 
 
@@ -15056,6 +15100,8 @@ class App(tk.Tk):
         self._build_ui()
         if previous_page == "base":
             self.show_base_config()
+        elif previous_page == "games_day":
+            self.show_games_day(getattr(self, "games_day_selected_date", None))
         elif previous_page == "home_animals":
             self.show_home_animals()
         elif previous_page == "home":
@@ -15178,6 +15224,7 @@ class App(tk.Tk):
         self._add_sidebar_section_label("OPERAÇÃO")
         for label, command, icon_key in [
             ("Início", self.show_home, "home"),
+            ("Jogos do dia", self.show_games_day, "results"),
             ("Jogar", self.show_play_page, "ticket"),
             ("Decisão", self.show_decision_page, "generator"),
             ("Resultados", self.show_results, "results"),
@@ -15269,7 +15316,7 @@ class App(tk.Tk):
             btn.configure(
                 bg=self.colors["selection"] if active else self.colors["sidebar"],
                 fg=self.colors["text"] if active else (
-                    self.colors["text"] if name in ("Início", "Jogar", "Decisão", "Resultados") else self.colors["muted"]
+                    self.colors["text"] if name in ("Início", "Jogos do dia", "Jogar", "Decisão", "Resultados") else self.colors["muted"]
                 ),
                 highlightbackground=self.colors["accent"] if active else self.colors["sidebar"],
                 highlightcolor=self.colors["accent"],
@@ -16179,6 +16226,199 @@ class App(tk.Tk):
 
         widget.bind("<Enter>", show, add="+")
         widget.bind("<Leave>", hide, add="+")
+
+    def show_games_day(self, selected_date=None):
+        """Visão diária: uma extração por cartão, sempre com os cinco prêmios visíveis."""
+        self._set_active_nav("Jogos do dia")
+        self._clear_content()
+        self._page = "games_day"
+
+        latest = self.db.latest_result_date()
+        if selected_date is None:
+            selected_date = getattr(self, "games_day_selected_date", None) or latest or date.today().isoformat()
+
+        def parse_day(value):
+            value = str(value or "").strip()
+            for fmt in ("%Y-%m-%d", "%d/%m/%Y"):
+                try:
+                    return datetime.strptime(value, fmt).date()
+                except ValueError:
+                    pass
+            return None
+
+        chosen = parse_day(selected_date) or date.today()
+        day_iso = chosen.isoformat()
+        self.games_day_selected_date = day_iso
+
+        self._page_title(
+            "Jogos do dia",
+            "Veja todas as extrações da data selecionada, com 1º ao 5º prêmio em cartões separados.",
+        )
+        body = self._make_scrollable_page_body(self.content, "games_day")
+
+        controls = ttk.Frame(body, style="Card.TFrame", padding=10)
+        controls.pack(fill="x", pady=(0, 10))
+
+        ttk.Button(
+            controls, text="← Dia anterior",
+            command=lambda: self.show_games_day((chosen - timedelta(days=1)).isoformat()),
+        ).pack(side="left")
+        ttk.Button(
+            controls, text="Próximo dia →",
+            command=lambda: self.show_games_day((chosen + timedelta(days=1)).isoformat()),
+        ).pack(side="left", padx=(6, 0))
+        ttk.Button(
+            controls, text="Hoje",
+            command=lambda: self.show_games_day(date.today().isoformat()),
+        ).pack(side="left", padx=(12, 0))
+        if latest:
+            ttk.Button(
+                controls, text="Último disponível",
+                command=lambda: self.show_games_day(latest),
+            ).pack(side="left", padx=(6, 0))
+
+        ttk.Label(controls, text="Data", style="Card.TLabel").pack(side="left", padx=(18, 5))
+        self.games_day_date_var = tk.StringVar(value=chosen.strftime("%d/%m/%Y"))
+
+        def calendar_changed(*_):
+            picked = parse_day(self.games_day_date_var.get())
+            if picked and picked.isoformat() != self.games_day_selected_date:
+                self.show_games_day(picked.isoformat())
+
+        calendar_field = CalendarField(
+            controls, self.games_day_date_var, width=11, on_change=calendar_changed
+        )
+        calendar_field.pack(side="left")
+
+        ttk.Button(
+            controls, text="Recarregar",
+            command=lambda: self.show_games_day(self.games_day_selected_date),
+        ).pack(side="right")
+        ttk.Button(
+            controls, text="Buscar atualização", style="Accent.TButton",
+            command=self.start_update_search,
+        ).pack(side="right", padx=(0, 7))
+
+        draws = self.db.day_draws(day_iso)
+        total_prizes = sum(len(d["prizes"]) for d in draws)
+
+        summary = ttk.Frame(body)
+        summary.pack(fill="x", pady=(0, 8))
+        ttk.Label(
+            summary,
+            text=chosen.strftime("%d/%m/%Y"),
+            font=(UI_FONT_SEMIBOLD, 14),
+        ).pack(side="left")
+        ttk.Label(
+            summary,
+            text=(
+                f"{len(draws)} extração" + ("" if len(draws) == 1 else "ões") +
+                f" • {total_prizes} prêmio" + ("" if total_prizes == 1 else "s")
+            ),
+            style="Sub.TLabel",
+        ).pack(side="right")
+
+        if not draws:
+            empty = ttk.Frame(body, style="Card.TFrame", padding=18)
+            empty.pack(fill="x")
+            ttk.Label(
+                empty,
+                text="Nenhuma extração registrada nesta data.",
+                style="Card.TLabel",
+                font=(UI_FONT_SEMIBOLD, 11),
+            ).pack(anchor="w")
+            ttk.Label(
+                empty,
+                text="Use Buscar atualização ou escolha outra data.",
+                style="CardMuted.TLabel",
+            ).pack(anchor="w", pady=(3, 0))
+            return
+
+        grid = tk.Frame(body, bg=self.colors["bg"])
+        grid.pack(fill="both", expand=True)
+        for col in range(3):
+            grid.grid_columnconfigure(col, weight=1, uniform="gamesdaycols")
+
+        for idx, draw in enumerate(draws):
+            card = tk.Frame(
+                grid,
+                bg=self.colors["card"],
+                highlightbackground=self.colors["border"],
+                highlightthickness=1,
+                padx=9,
+                pady=8,
+            )
+            card.grid(row=idx // 3, column=idx % 3, sticky="nsew", padx=4, pady=4)
+
+            head = tk.Frame(card, bg=self.colors["card"])
+            head.pack(fill="x", pady=(0, 7))
+            tk.Label(
+                head,
+                text=draw["hora"],
+                bg=self.colors["card"],
+                fg=self.colors["text"],
+                font=(UI_FONT_SEMIBOLD, 20),
+            ).pack(side="left")
+            tk.Label(
+                head,
+                text=draw["sorteio"],
+                bg=self.colors["card"],
+                fg=self.colors["muted"],
+                font=(UI_FONT_SEMIBOLD, 9),
+            ).pack(side="right", pady=(7, 0))
+
+            prize_map = {int(r["premio"]): r for r in draw["prizes"]}
+            for prize_no in range(1, 6):
+                r = prize_map.get(prize_no)
+                row = tk.Frame(
+                    card,
+                    bg=self.colors["card2"],
+                    highlightbackground=self.colors["border"],
+                    highlightthickness=1,
+                    padx=6,
+                    pady=4,
+                )
+                row.pack(fill="x", pady=(0, 4))
+                tk.Label(
+                    row,
+                    text=f"{prize_no}º",
+                    bg=self.colors["accent"],
+                    fg="white",
+                    font=(UI_FONT_SEMIBOLD, 8),
+                    width=3,
+                    padx=2,
+                    pady=2,
+                ).pack(side="left", padx=(0, 6))
+
+                if r:
+                    ident = tk.Frame(row, bg=self.colors["card2"])
+                    ident.pack(side="left", fill="x", expand=True)
+                    tk.Label(
+                        ident,
+                        text=f"{str(r['bicho']).title()} • Grupo {int(r['grupo']):02d}",
+                        bg=self.colors["card2"], fg=self.colors["text"],
+                        font=(UI_FONT_SEMIBOLD, 8), anchor="w",
+                    ).pack(fill="x")
+                    tk.Label(
+                        ident,
+                        text=f"Cent. {r['centena']} • Dez. {r['dezena']}",
+                        bg=self.colors["card2"], fg=self.colors["muted"],
+                        font=(UI_FONT_FAMILY, 7), anchor="w",
+                    ).pack(fill="x")
+                    tk.Label(
+                        row,
+                        text=str(r["milhar"]),
+                        bg=self.colors["card2"], fg=self.colors["accent"],
+                        font=("Consolas", 14, "bold"),
+                    ).pack(side="right", padx=(5, 1))
+                else:
+                    tk.Label(
+                        row,
+                        text="Ainda não disponível",
+                        bg=self.colors["card2"], fg=self.colors["muted"],
+                        font=(UI_FONT_FAMILY, 8), anchor="w",
+                    ).pack(side="left", fill="x", expand=True)
+
 
     def show_search(self):
         self._set_active_nav("Pesquisa")
