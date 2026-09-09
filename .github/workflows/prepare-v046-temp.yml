@@ -1,0 +1,54 @@
+name: Preparar GP-H v0.46.0 temporariamente
+
+on:
+  push:
+    branches:
+      - refactor-ui-limpeza-v045
+    paths:
+      - ".github/workflows/prepare-v046-temp.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: refactor-ui-limpeza-v045
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - name: Atualizar versao e documentacao
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p=Path('source/gph_central.py')
+          text=p.read_text(encoding='utf-8')
+          if text.count('APP_VERSION = "0.45.0"') != 1:
+              raise SystemExit('APP_VERSION 0.45.0 nao encontrado de forma unica')
+          text=text.replace('APP_VERSION = "0.45.0"','APP_VERSION = "0.46.0"',1)
+          text=text.replace('GP-H Central Histórica v0.45.0','GP-H Central Histórica v0.46.0',1)
+          p.write_text(text,encoding='utf-8')
+
+          doc=Path('source/DOCUMENTACAO_GP-H.txt')
+          if doc.exists():
+              current=doc.read_text(encoding='utf-8')
+              note='''GP-H CENTRAL HISTÓRICA — v0.46.0 TESTE\n\nREFORMA DE INTERFACE E LIMPEZA ESTRUTURAL\n- Decisão reorganizada em Resumo, Análise, Auditoria e Laboratório.\n- Jogar separa Decisão da Rodada de Apoio à Construção.\n- Configurações divididas em Conta e Sync, Aparência, Atualizações e Base de dados.\n- Pesquisa usa um seletor único de período: qualquer data, data específica ou entre datas.\n- Menu lateral organizado em Operação, Análise e Sistema.\n- Pop-ups redundantes de sucesso foram reduzidos; confirmações críticas foram preservadas.\n- Código legado sem uso comprovado foi removido.\n- Métodos sensíveis de Meta, Reset, Puxada/Convergência, Similaridade, Histórico Concentrado e Decisão permanecem inalterados.\n\n'''
+              if not current.startswith('GP-H CENTRAL HISTÓRICA — v0.46.0 TESTE'):
+                  doc.write_text(note + current, encoding='utf-8')
+          PY
+          python -m py_compile source/gph_central.py source/gph_updater.py source/CRIAR_PACOTE_ATUALIZACAO.py
+          git diff --check
+      - name: Gravar v0.46.0 na branch
+        shell: bash
+        run: |
+          git config user.name "Gzaraki"
+          git config user.email "112765179+clienteg1603@users.noreply.github.com"
+          git rm .github/workflows/prepare-v046-temp.yml
+          git add source/gph_central.py source/DOCUMENTACAO_GP-H.txt
+          git commit -m "Preparar v0.46.0 teste"
+          git push origin HEAD:refactor-ui-limpeza-v045
