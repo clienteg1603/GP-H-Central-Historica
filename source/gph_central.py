@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-GP-H Central Histórica v0.46.1
+GP-H Central Histórica v0.46.2
 Pesquisa e manutenção do histórico 2026 do Deu no Poste / PT-Rio.
 
 Escopo desta versão:
@@ -88,7 +88,7 @@ def write_crash_log(exc: BaseException):
 
 
 APP_NAME = "GP-H Central Histórica"
-APP_VERSION = "0.46.1"
+APP_VERSION = "0.46.2"
 START_DATE = date(2026, 1, 2)
 BASE_URL = "https://brasildeunoposte.com.br/resultado-do-jogo-do-bicho-deu-no-poste-{date}/"
 # Ao buscar/atualizar resultados, relê os últimos 7 dias para absorver
@@ -14995,6 +14995,7 @@ class App(tk.Tk):
         self._page = None
         self._hover_popup = None
         self._hover_after_id = None
+        self._hover_card = None
         self._install_smart_scroll_policy()
 
         shell = ttk.Frame(self)
@@ -15372,6 +15373,7 @@ class App(tk.Tk):
         self._clear_content()
         self._page = "home"
         body = self._make_scrollable_page_body(self.content, "home")
+        home_canvas = getattr(body, "_gph_scroll_canvas", None)
 
         summary = self.db.home_summary()
         delays = self.db.delay_leaders()
@@ -15696,6 +15698,30 @@ class App(tk.Tk):
             for widget in (box, cap, val, delay_lab):
                 self._bind_delay_tooltip(widget, tip)
 
+
+        # A página vive dentro de Canvas. Depois que todos os cartões existem,
+        # congelamos apenas a ALTURA NATURAL solicitada pela Home. O Canvas pode
+        # ficar menor que ela e então passa a rolar. Não prendemos <Configure>,
+        # evitando ciclos de pack/unpack da própria barra de rolagem.
+        if home_canvas is not None:
+            def _home_set_natural_height():
+                try:
+                    body.update_idletasks()
+                    natural_height = max(
+                        720,
+                        int(header.winfo_reqheight())
+                        + int(main.winfo_reqheight())
+                        + 10,
+                    )
+                    body.configure(height=natural_height)
+                    bbox = home_canvas.bbox("all")
+                    if bbox:
+                        home_canvas.configure(scrollregion=bbox)
+                except (tk.TclError, ValueError, TypeError):
+                    pass
+            self.after_idle(_home_set_natural_height)
+
+
     def show_home_animals(self):
         """Painel dedicado: preserva a grade 5x5 sem poluir a abertura."""
         self._set_active_nav("Início")
@@ -15733,27 +15759,39 @@ class App(tk.Tk):
 
 
     def _make_animal_card(self, parent, info, compact=False):
-        """Cartão v0.25: imagem dominante + faixa inferior com grupo/nome/dezenas."""
+        """Cartão do bicho com hover estável, sem mudança de geometria."""
         card_bg = self.colors["card"]
         band_bg = self.colors["band"]
+
+        # A moldura fica fisicamente com 1 px o tempo todo. Em repouso ela usa
+        # a mesma cor do cartão e fica invisível; no hover muda apenas a cor.
+        # Assim o tamanho do widget nunca oscila quando o mouse entra/sai.
         card = tk.Frame(
             parent,
             bg=card_bg,
-            highlightbackground=self.colors["border"],
-            highlightthickness=0,
+            highlightbackground=card_bg,
+            highlightthickness=1,
             bd=0,
             cursor="hand2",
         )
 
         visual = tk.Frame(card, bg=card_bg, bd=0)
         visual.pack(fill="both", expand=True)
-        image = self.animal_images_large.get(info["grupo"])
+        image = (
+            self.animal_images_large.get(info["grupo"])
+            if compact
+            else self.animal_images_large.get(info["grupo"])
+        )
         if image is not None:
             animal = tk.Label(visual, image=image, bg=card_bg, bd=0)
         else:
             animal = tk.Label(
-                visual, text=BICHO_ICONS.get(info["grupo"], "●"), bg=card_bg, fg=self.colors["text"],
-                font=("Segoe UI Emoji", 24 if compact else 30), bd=0,
+                visual,
+                text=BICHO_ICONS.get(info["grupo"], "●"),
+                bg=card_bg,
+                fg=self.colors["text"],
+                font=("Segoe UI Emoji", 28 if compact else 30),
+                bd=0,
             )
         animal.pack(expand=True, pady=(1 if compact else 3, 0))
 
@@ -15762,7 +15800,8 @@ class App(tk.Tk):
         title = tk.Label(
             band,
             text=f"{info['grupo']:02d} · {info['bicho']}",
-            bg=band_bg, fg=self.colors["text"],
+            bg=band_bg,
+            fg=self.colors["text"],
             font=("Segoe UI Semibold", 8 if compact else 9),
             anchor="center",
         )
@@ -15770,26 +15809,78 @@ class App(tk.Tk):
         dezenas = tk.Label(
             band,
             text="  ".join(info["dezenas"]),
-            bg=band_bg, fg=self.colors["accent"],
-            font=("Segoe UI Semibold", 8 if compact else 8),
+            bg=band_bg,
+            fg=self.colors["accent"],
+            font=("Segoe UI Semibold", 8),
             anchor="center",
         )
         dezenas.pack(fill="x", pady=(0, 2 if compact else 3))
 
-        def enter(_event):
+        hover_state = {"active": False, "leave_after": None}
+
+        def _cancel_card_leave():
+            after_id = hover_state.get("leave_after")
+            if after_id:
+                try:
+                    self.after_cancel(after_id)
+                except Exception:
+                    pass
+                hover_state["leave_after"] = None
+
+        def _pointer_inside_card():
+            try:
+                px, py = self.winfo_pointerxy()
+                x0, y0 = card.winfo_rootx(), card.winfo_rooty()
+                return (
+                    x0 <= px < x0 + max(1, card.winfo_width())
+                    and y0 <= py < y0 + max(1, card.winfo_height())
+                )
+            except Exception:
+                return False
+
+        def _set_hover_visual(active):
+            hover_state["active"] = bool(active)
+            bg = self.colors["hover"] if active else card_bg
+            card.configure(
+                highlightbackground=(
+                    self.colors["accent_hover"] if active else card_bg
+                ),
+                bg=bg,
+            )
+            visual.configure(bg=bg)
+            animal.configure(bg=bg)
+
+        def enter(_event=None):
+            _cancel_card_leave()
             self._cancel_hover_hide()
-            card.configure(highlightbackground=self.colors["accent_hover"], highlightthickness=1, bg=self.colors["hover"])
-            visual.configure(bg=self.colors["hover"])
-            animal.configure(bg=self.colors["hover"])
-            self._show_animal_hover(card, info)
 
-        def leave(_event):
-            card.configure(highlightbackground=self.colors["border"], highlightthickness=0, bg=card_bg)
-            visual.configure(bg=card_bg)
-            animal.configure(bg=card_bg)
-            self._schedule_hover_hide()
+            # Entrar da imagem para a faixa/nome/dezenas continua sendo o mesmo
+            # cartão. Não redesenha e, principalmente, não destrói/recria tooltip.
+            if hover_state["active"]:
+                return
 
-        def click(_event):
+            _set_hover_visual(True)
+            if getattr(self, "_hover_card", None) is not card:
+                self._hover_card = card
+                self._show_animal_hover(card, info)
+
+        def finish_leave():
+            hover_state["leave_after"] = None
+            if _pointer_inside_card():
+                return
+            _set_hover_visual(False)
+            if getattr(self, "_hover_card", None) is card:
+                self._hover_card = None
+                self._schedule_hover_hide()
+
+        def leave(_event=None):
+            # Leave/Enter também acontecem ao cruzar subwidgets no Tk. Um atraso
+            # curtíssimo permite que a entrada no próximo filho cancele a saída.
+            _cancel_card_leave()
+            hover_state["leave_after"] = self.after(65, finish_leave)
+
+        def click(_event=None):
+            _cancel_card_leave()
             self._hide_animal_hover()
             AnimalQuickDetailsDialog(self, self.db, info["grupo"])
 
