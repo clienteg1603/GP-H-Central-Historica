@@ -11,28 +11,23 @@ jobs:
       - uses: actions/checkout@v4
         with:
           ref: ui-auditoria-bilhete-v0470
-      - name: Mostrar pontos exatos
+      - name: Mostrar construtor e schema relevante
         run: |
           python - <<'PY'
           import ast
           from pathlib import Path
-          p=Path('source/gph_central.py')
-          s=p.read_text(encoding='utf-8')
+          s=Path('source/gph_central.py').read_text(encoding='utf-8')
           t=ast.parse(s)
-          wanted={
-            'update_search_worker','after_web_update','after_manual_saved',
-            'play_show_games','play_refresh_games','play_ticket_history_selected',
-            'play_show_game_detail','play_delete_selected_ticket','play_audit_game',
-            'show_results','results_audit_games','audit_frozen_games',
-          }
           for node in ast.walk(t):
-              if isinstance(node,(ast.FunctionDef,ast.AsyncFunctionDef)) and node.name in wanted:
-                  print(f'\n===== {node.name} L{node.lineno} =====')
-                  print(ast.get_source_segment(s,node))
-          print('\n===== TRECHOS DE BOTÕES DE AUDITORIA =====')
-          lines=s.splitlines()
-          for center in (13255,21739,21924):
-              a=max(1,center-18); b=min(len(lines),center+18)
-              print(f'\n--- L{a}-{b} ---')
-              for i in range(a,b+1): print(f'{i}: {lines[i-1]}')
+              if isinstance(node,ast.ClassDef) and node.name=='Database':
+                  for item in node.body:
+                      if isinstance(item,(ast.FunctionDef,ast.AsyncFunctionDef)) and item.name in {'__init__','init_schema','refresh_ticket_totals','delete_ticket'}:
+                          print(f'\n===== {item.name} L{item.lineno} =====')
+                          seg=ast.get_source_segment(s,item) or ''
+                          if item.name=='init_schema':
+                              for line in seg.splitlines():
+                                  if any(x in line.lower() for x in ['create table','bilhetes','jogos_congelados','jogos_itens','sync_uid','foreign key']):
+                                      print(line)
+                          else:
+                              print(seg)
           PY
