@@ -1,3 +1,12 @@
+REVISÃO v0.46.1 — HOME + NÚMEROS FORTES POR BICHO
+- Clique em qualquer bicho da Home para consultar diretamente os números historicamente mais fortes daquele grupo.
+- A nova aba “Números fortes” mostra Dezenas, Centenas e Milhares lado a lado, com ranking, ocorrências e última aparição.
+- O usuário pode alternar entre histórico 1º–5º e somente 1º prêmio. A consulta reutiliza exatamente Database.number_rankings_for_group(), já usada pela geração histórica oficial; não cria uma fórmula paralela.
+- Regra do ranking preservada: frequência histórica; recência desempata; menor número é apenas desempate técnico final.
+- Home: imagens dos bichos ganham mais presença, cartões deixam de ter moldura permanente, bordas internas do último resultado/atrasos são suavizadas, versão lateral é encurtada e o status “Pronto.” deixa de ocupar espaço quando não há mensagem.
+- Menu lateral: removida a legenda inferior redundante “Operação • Estudos • Histórico”.
+- Nenhum cálculo de Meta, Reset, Puxada, Similaridade, Histórico Concentrado, 3+1 ou Decisão foi alterado.
+
 GP-H CENTRAL HISTÓRICA — v0.46.0 TESTE
 
 REFORMA DE INTERFACE E LIMPEZA ESTRUTURAL

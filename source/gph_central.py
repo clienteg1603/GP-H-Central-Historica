@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-GP-H Central Histórica v0.46.0
+GP-H Central Histórica v0.46.1
 Pesquisa e manutenção do histórico 2026 do Deu no Poste / PT-Rio.
 
 Escopo desta versão:
@@ -88,7 +88,7 @@ def write_crash_log(exc: BaseException):
 
 
 APP_NAME = "GP-H Central Histórica"
-APP_VERSION = "0.46.0"
+APP_VERSION = "0.46.1"
 START_DATE = date(2026, 1, 2)
 BASE_URL = "https://brasildeunoposte.com.br/resultado-do-jogo-do-bicho-deu-no-poste-{date}/"
 # Ao buscar/atualizar resultados, relê os últimos 7 dias para absorver
@@ -11937,98 +11937,226 @@ class CalendarField(ttk.Frame):
 
 
 class AnimalQuickDetailsDialog(tk.Toplevel):
+    """Resumo do bicho com consulta direta dos números historicamente mais fortes."""
+
     def __init__(self, master, db: Database, grupo: int):
         super().__init__(master)
         self.db = db
-        self.grupo = grupo
+        self.grupo = int(grupo)
+        self.scope_var = tk.StringVar(value="1º–5º")
+        self.number_trees = {}
 
-        self.title(f"{BICHOS[grupo]} — Grupo {grupo:02d}")
-        fit_toplevel_to_screen(self, 720, 520, min_width=620, min_height=430, parent=master)
+        self.title(f"{BICHOS[self.grupo]} — Grupo {self.grupo:02d}")
+        fit_toplevel_to_screen(
+            self, 1060, 690, min_width=900, min_height=580, parent=master
+        )
         self.resizable(True, True)
 
         outer = ttk.Frame(self, padding=14)
         outer.pack(fill="both", expand=True)
 
-        dezenas = [f"{((grupo - 1) * 4 + i) % 100:02d}" for i in range(1, 5)]
+        header = ttk.Frame(outer)
+        header.pack(fill="x", pady=(0, 8))
+        image = None
+        try:
+            image = master.animal_images_medium.get(self.grupo)
+        except Exception:
+            image = None
+        if image is not None:
+            ttk.Label(header, image=image).pack(side="left", padx=(0, 10))
 
+        head_text = ttk.Frame(header)
+        head_text.pack(side="left", fill="x", expand=True)
         ttk.Label(
-            outer,
-            text=f"{BICHO_ICONS.get(grupo, '')}  {BICHOS[grupo]} — Grupo {grupo:02d}",
-            font=("Segoe UI Semibold", 17),
+            head_text,
+            text=f"{BICHOS[self.grupo]} — Grupo {self.grupo:02d}",
+            style="Title.TLabel",
         ).pack(anchor="w")
 
+        dezenas = [f"{((self.grupo - 1) * 4 + i) % 100:02d}" for i in range(1, 5)]
         ttk.Label(
-            outer,
-            text="Dezenas: " + " • ".join(dezenas),
-        ).pack(anchor="w", pady=(3, 10))
+            head_text,
+            text="Dezenas do grupo: " + " • ".join(dezenas),
+            style="Sub.TLabel",
+        ).pack(anchor="w", pady=(2, 0))
 
         stats = self.db.stats_by_animal()
-        row = next((r for r in stats["rows"] if r["grupo"] == grupo), None)
-
-        info = ttk.Frame(outer, style="Card.TFrame", padding=12)
-        info.pack(fill="x", pady=(0, 10))
-
+        row = next((r for r in stats["rows"] if r["grupo"] == self.grupo), None)
         if row:
             ttk.Label(
-                info,
-                text=f"Ocorrências: {row['ocorrencias']}   •   Em 1º prêmio: {row['p1']}",
-                style="Card.TLabel",
-                font=("Segoe UI Semibold", 10),
-            ).pack(anchor="w")
-            ttk.Label(
-                info,
+                head_text,
                 text=(
-                    f"1º: {row['p1']}   •   2º: {row['p2']}   •   3º: {row['p3']}   •   "
-                    f"4º: {row['p4']}   •   5º: {row['p5']}"
+                    f"{row['ocorrencias']} ocorrências na base • "
+                    f"{row['p1']} em 1º prêmio • "
+                    f"1º {row['p1']}  |  2º {row['p2']}  |  3º {row['p3']}  |  "
+                    f"4º {row['p4']}  |  5º {row['p5']}"
                 ),
-                style="Card.TLabel",
-            ).pack(anchor="w", pady=(4, 0))
+                style="CardMuted.TLabel",
+            ).pack(anchor="w", pady=(2, 0))
+
+        notebook = ttk.Notebook(outer)
+        notebook.pack(fill="both", expand=True)
+
+        strong_tab = ttk.Frame(notebook, padding=10)
+        recent_tab = ttk.Frame(notebook, padding=10)
+        notebook.add(strong_tab, text="Números fortes")
+        notebook.add(recent_tab, text="Ocorrências recentes")
+
+        controls = ttk.Frame(strong_tab)
+        controls.pack(fill="x", pady=(0, 8))
+        ttk.Label(
+            controls,
+            text="NÚMEROS MAIS FORTES",
+            style="Section.TLabel",
+        ).pack(side="left")
+        ttk.Label(
+            controls,
+            text="Escopo:",
+            style="CardMuted.TLabel",
+        ).pack(side="right", padx=(10, 5))
+        scope_cb = ttk.Combobox(
+            controls,
+            textvariable=self.scope_var,
+            values=["1º–5º", "1º"],
+            width=10,
+            state="readonly",
+        )
+        scope_cb.pack(side="right")
+        scope_cb.bind("<<ComboboxSelected>>", self._refresh_number_rankings)
 
         ttk.Label(
-            outer,
+            strong_tab,
+            text=(
+                "Ranking histórico já usado pelo gerador da Central: maior frequência primeiro; "
+                "a ocorrência mais recente desempata. Isso é força histórica, não probabilidade de acerto."
+            ),
+            style="CardMuted.TLabel",
+            wraplength=980,
+            justify="left",
+        ).pack(anchor="w", pady=(0, 8))
+
+        rankings = ttk.Frame(strong_tab)
+        rankings.pack(fill="both", expand=True)
+        for col in range(3):
+            rankings.grid_columnconfigure(col, weight=1, uniform="rankcols")
+        rankings.grid_rowconfigure(0, weight=1)
+
+        specs = [
+            ("Dezena", 4, "DEZENAS", 0),
+            ("Centena", 10, "CENTENAS", 1),
+            ("Milhar", 10, "MILHARES", 2),
+        ]
+        for kind, limit, title, col in specs:
+            box = ttk.Frame(rankings, style="Card.TFrame", padding=8)
+            box.grid(row=0, column=col, sticky="nsew", padx=(0 if col == 0 else 4, 4 if col < 2 else 0))
+            ttk.Label(box, text=title, style="CardTitle.TLabel").pack(anchor="w", pady=(0, 5))
+
+            table = ttk.Frame(box, style="Card.TFrame")
+            table.pack(fill="both", expand=True)
+            cols = ("rank", "numero", "ocorrencias", "ultima")
+            tree = ttk.Treeview(table, columns=cols, show="headings", height=max(5, limit))
+            tree.heading("rank", text="#")
+            tree.heading("numero", text=kind)
+            tree.heading("ocorrencias", text="Ocorr.")
+            tree.heading("ultima", text="Última")
+            tree.column("rank", width=34, anchor="center", stretch=False)
+            tree.column("numero", width=76, anchor="center", stretch=False)
+            tree.column("ocorrencias", width=68, anchor="center", stretch=False)
+            tree.column("ultima", width=155, anchor="w")
+            tree.tag_configure("leader", font=(UI_FONT_SEMIBOLD, UI_FONT_SIZES["table"]))
+
+            y = ttk.Scrollbar(table, orient="vertical", command=tree.yview)
+            tree.configure(yscrollcommand=y.set)
+            tree.grid(row=0, column=0, sticky="nsew")
+            y.grid(row=0, column=1, sticky="ns")
+            table.rowconfigure(0, weight=1)
+            table.columnconfigure(0, weight=1)
+            self.number_trees[kind] = (tree, limit)
+
+        self._refresh_number_rankings()
+
+        ttk.Label(
+            recent_tab,
             text="15 ocorrências mais recentes",
-            font=("Segoe UI Semibold", 12),
-        ).pack(anchor="w", pady=(4, 6))
-
-        frame = ttk.Frame(outer)
+            style="Section.TLabel",
+        ).pack(anchor="w", pady=(0, 6))
+        frame = ttk.Frame(recent_tab)
         frame.pack(fill="both", expand=True)
-
-        cols = ("data","sorteio","hora","premio","milhar","centena","dezena")
+        cols = ("data", "sorteio", "hora", "premio", "milhar", "centena", "dezena")
         tree = ttk.Treeview(frame, columns=cols, show="headings")
-
         for c, label, width in [
-            ("data","Data",95),("sorteio","Sorteio",90),("hora","Hora",70),
-            ("premio","Prêmio",65),("milhar","Milhar",75),
-            ("centena","Centena",75),("dezena","Dezena",65),
+            ("data", "Data", 95), ("sorteio", "Sorteio", 90), ("hora", "Hora", 70),
+            ("premio", "Prêmio", 65), ("milhar", "Milhar", 80),
+            ("centena", "Centena", 80), ("dezena", "Dezena", 70),
         ]:
             tree.heading(c, text=label)
             tree.column(c, width=width, anchor="center")
-
         y = ttk.Scrollbar(frame, orient="vertical", command=tree.yview)
         tree.configure(yscrollcommand=y.set)
-        tree.grid(row=0,column=0,sticky="nsew")
-        y.grid(row=0,column=1,sticky="ns")
-        frame.rowconfigure(0,weight=1)
-        frame.columnconfigure(0,weight=1)
+        tree.grid(row=0, column=0, sticky="nsew")
+        y.grid(row=0, column=1, sticky="ns")
+        frame.rowconfigure(0, weight=1)
+        frame.columnconfigure(0, weight=1)
 
-        for r in self.db.animal_recent_occurrences(grupo, limit=15):
+        for r in self.db.animal_recent_occurrences(self.grupo, limit=15):
             d = datetime.strptime(r["data"], "%Y-%m-%d").strftime("%d/%m/%Y")
             tree.insert("", "end", values=(
                 d, r["sorteio"], r["hora"], f'{r["premio"]}º',
-                r["milhar"], r["centena"], r["dezena"]
+                r["milhar"], r["centena"], r["dezena"],
             ))
 
         footer = ttk.Frame(outer, padding=(0, 10, 0, 0))
         footer.pack(fill="x")
-
+        ttk.Label(
+            footer,
+            text="Dica: na Home, basta clicar em qualquer bicho para abrir esta consulta.",
+            style="CardMuted.TLabel",
+        ).pack(side="left")
         ttk.Button(
             footer,
             text="Detalhes completos",
-            command=lambda: AnimalDetailsDialog(self, self.db, grupo),
-        ).pack(side="left")
-
+            command=lambda: AnimalDetailsDialog(self, self.db, self.grupo),
+        ).pack(side="right", padx=(6, 0))
         ttk.Button(footer, text="Fechar", command=self.destroy).pack(side="right")
-        ttk.Button(footer, text="Minimizar", command=self.iconify).pack(side="right", padx=(0, 8))
+
+    @staticmethod
+    def _format_ranking_last(value):
+        if not value:
+            return "—"
+        parts = str(value).split("|")
+        if len(parts) < 4:
+            return str(value)
+        raw_date, hora, sorteio, premio = parts[:4]
+        try:
+            shown_date = datetime.strptime(raw_date, "%Y-%m-%d").strftime("%d/%m")
+        except Exception:
+            shown_date = raw_date
+        return f"{shown_date} • {sorteio} {hora} • {premio}º"
+
+    def _refresh_number_rankings(self, _event=None):
+        scope = self.scope_var.get() or "1º–5º"
+        for kind, (tree, limit) in self.number_trees.items():
+            for item in tree.get_children():
+                tree.delete(item)
+            ranking = self.db.number_rankings_for_group(
+                self.grupo,
+                kind=kind,
+                scope=scope,
+            )
+            for pos, row in enumerate(ranking[:limit], start=1):
+                tree.insert(
+                    "",
+                    "end",
+                    tags=("leader",) if pos == 1 else (),
+                    values=(
+                        pos,
+                        row["numero"],
+                        row["ocorrencias"],
+                        self._format_ranking_last(row.get("ultima")),
+                    ),
+                )
+
+
 
 
 
@@ -14505,6 +14633,7 @@ class App(tk.Tk):
             f"Sincronização: {'ativa' if (self.account_profile or {}).get('sync_enabled') else 'somente local'}\n"
             f"Última sincronização: {(self.account_profile or {}).get('last_sync_at') or 'nunca'}\n\n"
             "Atualizações recentes:\n"
+            "• v0.46.1 — clique no bicho abre ranking de Dezenas, Centenas e Milhares fortes; Home recebe polimento de bordas, imagens e status.\n"
             "• v0.42.0 — Walk-Forward rigoroso do GP-H Meta v0.1, sem alterar o cérebro prospectivo.\n"
             "• v0.41.0 — GP-H Meta v0.1 em sombra: modelo logístico nativo aprende com Reset, Puxada, Similaridade e Histórico Concentrado sem alterar o método oficial.\n"
             "• v0.40.0 — auditoria prospectiva da própria Decisão: líder contextual congelado antes da rodada e conferido depois, sem backfill.\n"
@@ -14885,7 +15014,7 @@ class App(tk.Tk):
 
         status_bar = ttk.Frame(right, padding=(UI_SPACING["large"], UI_SPACING["micro"], UI_SPACING["large"], UI_SPACING["small"]))
         status_bar.pack(fill="x")
-        self.status = ttk.Label(status_bar, text="Pronto.", style="Sub.TLabel")
+        self.status = ttk.Label(status_bar, text="", style="Sub.TLabel")
         self.status.pack(side="left")
         self.account_status = ttk.Label(
             status_bar, text=self._account_status_text(), style="Sub.TLabel"
@@ -14904,7 +15033,7 @@ class App(tk.Tk):
 
         tk.Label(
             self.sidebar,
-            text=f"v{APP_VERSION}  •  CENTRAL HISTÓRICA",
+            text=f"v{APP_VERSION}",
             bg=self.colors["sidebar"],
             fg=self.colors["muted"],
             font=("Segoe UI Semibold", 8),
@@ -14945,14 +15074,6 @@ class App(tk.Tk):
         self._add_nav_button(
             "Configurações", self.show_base_config, secondary=True, icon_key="database"
         )
-
-        tk.Label(
-            self.sidebar,
-            text="Operação • Estudos • Histórico",
-            bg=self.colors["sidebar"],
-            fg=self.colors["muted"],
-            font=("Segoe UI", 8),
-        ).pack(side="bottom", pady=14)
 
         self._update_results_nav_badge()
         self.show_home()
@@ -15300,7 +15421,7 @@ class App(tk.Tk):
         ).pack(side="left")
         ttk.Label(
             animal_header,
-            text="Grupo • Bicho • 4 dezenas",
+            text="Clique no bicho → números fortes",
             style="CardMuted.TLabel",
             font=("Segoe UI", 8),
         ).pack(side="left", padx=(8, 0))
@@ -15310,7 +15431,7 @@ class App(tk.Tk):
         self.home_grid = grid
         self.home_cards = []
         for row in range(5):
-            grid.grid_rowconfigure(row, weight=1, uniform="animalrows", minsize=82)
+            grid.grid_rowconfigure(row, weight=1, uniform="animalrows", minsize=88)
         for col in range(5):
             grid.grid_columnconfigure(col, weight=1, uniform="animalcols", minsize=94)
 
@@ -15318,7 +15439,7 @@ class App(tk.Tk):
             row = idx // 5
             col = idx % 5
             card = self._make_animal_card(grid, info, compact=True)
-            card.grid(row=row, column=col, padx=2, pady=2, sticky="nsew")
+            card.grid(row=row, column=col, padx=3, pady=3, sticky="nsew")
             self.home_cards.append(card)
 
         # ------------------------------------------------------------------
@@ -15425,7 +15546,7 @@ class App(tk.Tk):
                     prizes_box,
                     bg=self.colors["card2"],
                     highlightbackground=self.colors["border"],
-                    highlightthickness=1,
+                    highlightthickness=0,
                     bd=0,
                     padx=7,
                     pady=3,
@@ -15542,7 +15663,7 @@ class App(tk.Tk):
                 delays_row,
                 bg=self.colors["card2"],
                 highlightbackground=self.colors["border"],
-                highlightthickness=1,
+                highlightthickness=0,
                 bd=0,
                 padx=6,
                 pady=5,
@@ -15619,14 +15740,14 @@ class App(tk.Tk):
             parent,
             bg=card_bg,
             highlightbackground=self.colors["border"],
-            highlightthickness=1,
+            highlightthickness=0,
             bd=0,
             cursor="hand2",
         )
 
         visual = tk.Frame(card, bg=card_bg, bd=0)
         visual.pack(fill="both", expand=True)
-        image = self.animal_images_medium.get(info["grupo"]) if compact else self.animal_images_large.get(info["grupo"])
+        image = self.animal_images_large.get(info["grupo"])
         if image is not None:
             animal = tk.Label(visual, image=image, bg=card_bg, bd=0)
         else:
@@ -15663,7 +15784,7 @@ class App(tk.Tk):
             self._show_animal_hover(card, info)
 
         def leave(_event):
-            card.configure(highlightbackground=self.colors["border"], bg=card_bg)
+            card.configure(highlightbackground=self.colors["border"], highlightthickness=0, bg=card_bg)
             visual.configure(bg=card_bg)
             animal.configure(bg=card_bg)
             self._schedule_hover_hide()
