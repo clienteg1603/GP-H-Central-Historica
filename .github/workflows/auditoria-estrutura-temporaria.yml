@@ -1,0 +1,234 @@
+name: Auditoria temporaria GP-H
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/auditoria-estrutura-temporaria.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - name: Auditar estrutura, redundancias e peso
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import ast, os, re, hashlib, collections, difflib
+
+          root = Path('.')
+          src = Path('source/gph_central.py')
+          text = src.read_text(encoding='utf-8')
+          lines = text.splitlines()
+          tree = ast.parse(text)
+
+          print('=== RESUMO GERAL ===')
+          print('gph_central_bytes=', src.stat().st_size)
+          print('gph_central_lines=', len(lines))
+          print('python_files=', sum(1 for p in root.rglob('*.py') if '.git' not in p.parts))
+          print('all_files=', sum(1 for p in root.rglob('*') if p.is_file() and '.git' not in p.parts))
+          print('repo_bytes_no_git=', sum(p.stat().st_size for p in root.rglob('*') if p.is_file() and '.git' not in p.parts))
+
+          # Classes / funcoes / metodos
+          classes=[]; funcs=[]
+          for node in tree.body:
+              if isinstance(node, ast.ClassDef):
+                  methods=[n for n in node.body if isinstance(n,(ast.FunctionDef,ast.AsyncFunctionDef))]
+                  end=getattr(node,'end_lineno',node.lineno)
+                  classes.append((node.name,node.lineno,end,end-node.lineno+1,len(methods)))
+              elif isinstance(node,(ast.FunctionDef,ast.AsyncFunctionDef)):
+                  end=getattr(node,'end_lineno',node.lineno)
+                  funcs.append((node.name,node.lineno,end,end-node.lineno+1))
+          print('\n=== CLASSES ===')
+          for row in sorted(classes,key=lambda x:-x[3]): print(row)
+          print('top_level_functions=',len(funcs))
+
+          all_defs=[]
+          parent_stack=[]
+          class Collector(ast.NodeVisitor):
+              def visit_ClassDef(self,node):
+                  parent_stack.append(node.name); self.generic_visit(node); parent_stack.pop()
+              def visit_FunctionDef(self,node):
+                  q='.'.join(parent_stack+[node.name]) if parent_stack else node.name
+                  end=getattr(node,'end_lineno',node.lineno)
+                  all_defs.append((q,node.name,node.lineno,end,end-node.lineno+1,node))
+                  # nao visitar defs aninhadas separadamente neste inventario
+              visit_AsyncFunctionDef=visit_FunctionDef
+          Collector().visit(tree)
+          print('\n=== 40 MAIORES FUNCOES/METODOS ===')
+          for r in sorted(all_defs,key=lambda x:-x[4])[:40]: print(r[:5])
+
+          # referencias a nomes de metodos/funcoes
+          refs=collections.Counter()
+          class RefVisitor(ast.NodeVisitor):
+              def visit_Attribute(self,node): refs[node.attr]+=1; self.generic_visit(node)
+              def visit_Name(self,node): refs[node.id]+=1
+          RefVisitor().visit(tree)
+          candidates=[]
+          for q,name,start,end,n,node in all_defs:
+              # refs inclui o nome em FunctionDef? Name visitor nao pega FunctionDef.name
+              if refs[name]==0 and not name.startswith('__') and name not in {'main'}:
+                  candidates.append((q,start,n))
+          print('\n=== CANDIDATOS SEM REFERENCIA ESTATICA (REVISAR, NAO REMOVER AUTOMATICAMENTE) ===')
+          for r in candidates[:120]: print(r)
+          print('candidate_count=',len(candidates))
+
+          # classes referenciadas
+          class_refs=collections.Counter()
+          for n in ast.walk(tree):
+              if isinstance(n,ast.Name): class_refs[n.id]+=1
+          print('\n=== CLASSES COM POUCA REFERENCIA ===')
+          for name,start,end,n,mc in classes:
+              if class_refs[name] <= 1:
+                  print((name,'refs',class_refs[name],'lines',n,'methods',mc,'start',start))
+
+          # imports possivelmente nao usados
+          imported={}
+          for n in tree.body:
+              if isinstance(n,ast.Import):
+                  for a in n.names: imported[a.asname or a.name.split('.')[0]]=n.lineno
+              elif isinstance(n,ast.ImportFrom):
+                  for a in n.names: imported[a.asname or a.name]=n.lineno
+          name_uses=collections.Counter(n.id for n in ast.walk(tree) if isinstance(n,ast.Name))
+          print('\n=== IMPORTS POSSIVELMENTE NAO USADOS ===')
+          for name,lineno in sorted(imported.items(), key=lambda x:x[1]):
+              if name_uses[name] <= 1: print((name,lineno,'uses',name_uses[name]))
+
+          # constantes top-level com pouca referencia
+          constants=[]
+          for n in tree.body:
+              if isinstance(n,(ast.Assign,ast.AnnAssign)):
+                  targets=[]
+                  if isinstance(n,ast.Assign):
+                      for t in n.targets:
+                          if isinstance(t,ast.Name): targets.append(t.id)
+                  else:
+                      if isinstance(n.target,ast.Name): targets.append(n.target.id)
+                  for name in targets:
+                      if name.isupper() and name_uses[name] <= 1:
+                          constants.append((name,n.lineno,name_uses[name]))
+          print('\n=== CONSTANTES POSSIVELMENTE ORFAS ===')
+          for r in constants: print(r)
+
+          # funcoes exatamente duplicadas por AST ignorando nome e docstring
+          def norm_fn(node):
+              node=ast.FunctionDef(name='_',args=node.args,body=node.body,decorator_list=[],returns=node.returns,type_comment=getattr(node,'type_comment',None),type_params=getattr(node,'type_params',[]))
+              # remove docstring
+              body=list(node.body)
+              if body and isinstance(body[0],ast.Expr) and isinstance(body[0].value,ast.Constant) and isinstance(body[0].value.value,str):
+                  node.body=body[1:]
+              return ast.dump(node,include_attributes=False)
+          dup=collections.defaultdict(list)
+          for q,name,start,end,n,node in all_defs:
+              if n>=4:
+                  try: dup[hashlib.sha1(norm_fn(node).encode()).hexdigest()].append((q,start,n))
+                  except Exception: pass
+          print('\n=== FUNCOES/METODOS EXATAMENTE DUPLICADOS ===')
+          exact_groups=0
+          for vals in dup.values():
+              if len(vals)>1:
+                  exact_groups+=1; print(vals)
+          print('exact_duplicate_groups=',exact_groups)
+
+          # strings de UI repetidas
+          strings=collections.Counter()
+          for n in ast.walk(tree):
+              if isinstance(n,ast.Constant) and isinstance(n.value,str):
+                  s=' '.join(n.value.split())
+                  if 4 <= len(s) <= 100: strings[s]+=1
+          print('\n=== STRINGS DE UI MAIS REPETIDAS ===')
+          for s,c in strings.most_common(60):
+              if c>=3: print(c,repr(s))
+
+          # uso de widgets e estilos
+          widget_terms=['ttk.Frame','ttk.Label','ttk.Button','ttk.Treeview','ttk.Combobox','ttk.Separator','tk.Canvas','messagebox.showinfo','messagebox.showwarning','messagebox.showerror']
+          print('\n=== CONTAGEM DE WIDGETS/PADROES UI ===')
+          for term in widget_terms: print(term,text.count(term))
+          styles_defined=set(re.findall(r'configure\(\s*["\']([^"\']+\.T(?:Label|Frame|Button|Entry|Checkbutton|Radiobutton|Labelframe|Scrollbar|Combobox|Notebook|Treeview))["\']',text))
+          style_literals=collections.Counter(re.findall(r'style\s*=\s*["\']([^"\']+)["\']',text))
+          print('styles_defined=',len(styles_defined),'style_literals=',len(style_literals))
+          print('styles_used_most=',style_literals.most_common(30))
+          print('styles_defined_but_no_literal_use=',sorted(s for s in styles_defined if style_literals[s]==0))
+
+          # paginas show_* e builders relevantes
+          print('\n=== PAGINAS / SHOW METHODS ===')
+          for q,name,start,end,n,node in all_defs:
+              if name.startswith('show_') or name.startswith('_build_') or name.startswith('_decision_build_'):
+                  print((q,start,n,'refs',refs[name]))
+
+          # SQL tabelas detectadas e referencias textuais
+          tables=set(re.findall(r'CREATE TABLE IF NOT EXISTS\s+([A-Za-z0-9_]+)',text,re.I))
+          print('\n=== TABELAS E QUANTIDADE DE MENCOES NO CODIGO ===')
+          for t in sorted(tables): print((t,len(re.findall(r'\b'+re.escape(t)+r'\b',text,re.I))))
+
+          # arquivos por tamanho
+          files=[p for p in root.rglob('*') if p.is_file() and '.git' not in p.parts]
+          print('\n=== 40 MAIORES ARQUIVOS ===')
+          for p in sorted(files,key=lambda p:-p.stat().st_size)[:40]: print(p.stat().st_size,p.as_posix())
+
+          # duplicatas exatas de arquivos (especialmente assets)
+          hashes=collections.defaultdict(list)
+          for p in files:
+              if p.stat().st_size==0: continue
+              try:
+                  h=hashlib.sha256(p.read_bytes()).hexdigest(); hashes[(p.stat().st_size,h)].append(p.as_posix())
+              except Exception: pass
+          print('\n=== DUPLICATAS EXATAS DE ARQUIVOS ===')
+          groups=[]
+          for (size,h),vals in hashes.items():
+              if len(vals)>1: groups.append((size,vals))
+          for size,vals in sorted(groups,key=lambda x:-x[0])[:100]: print(size,vals)
+          print('duplicate_file_groups=',len(groups),'duplicate_bytes_recoverable=',sum(size*(len(vals)-1) for size,vals in groups))
+
+          # assets por pasta
+          print('\n=== ASSETS POR PASTA ===')
+          for d in sorted([p for p in Path('source/assets').rglob('*') if p.is_dir()]):
+              fs=[p for p in d.iterdir() if p.is_file()]
+              if fs: print(d.as_posix(),len(fs),sum(p.stat().st_size for p in fs))
+
+          # sinais de legado / compatibilidade / deprecated
+          print('\n=== MARCADORES DE LEGADO/COMPATIBILIDADE ===')
+          for i,line in enumerate(lines,1):
+              low=line.lower()
+              if any(k in low for k in ('legado','compatibilidade','deprecated','obsoleto','órf','orfa','fallback')):
+                  print(i,line.strip()[:220])
+
+          # duplicacao aproximada somente em metodos UI, por nome e tamanho semelhante
+          ui_defs=[]
+          for q,name,start,end,n,node in all_defs:
+              if n>=12 and n<=180 and (name.startswith('show_') or name.startswith('_build_') or name.startswith('_decision_build_') or 'page' in name or 'dialog' in name):
+                  seg='\n'.join(lines[start-1:end])
+                  # normaliza literais e numeros para achar esqueletos visuais semelhantes
+                  seg=re.sub(r'"[^"\n]*"|\'[^\'\n]*\'','STR',seg)
+                  seg=re.sub(r'\b\d+(?:\.\d+)?\b','N',seg)
+                  seg=re.sub(r'\s+',' ',seg)
+                  ui_defs.append((q,start,n,seg))
+          sims=[]
+          for i in range(len(ui_defs)):
+              a=ui_defs[i]
+              for j in range(i+1,len(ui_defs)):
+                  b=ui_defs[j]
+                  if max(a[2],b[2])/max(1,min(a[2],b[2]))>1.45: continue
+                  r=difflib.SequenceMatcher(None,a[3],b[3],autojunk=True).ratio()
+                  if r>=0.78: sims.append((round(r,3),a[:3],b[:3]))
+          print('\n=== PARES UI MUITO PARECIDOS (HEURISTICA) ===')
+          for row in sorted(sims,reverse=True)[:60]: print(row)
+
+          # callbacks command=self.x vs methods nao usados
+          callback_names=set(re.findall(r'command\s*=\s*self\.([A-Za-z_][A-Za-z0-9_]*)',text))
+          callback_names.update(re.findall(r'bind\([^\n]*self\.([A-Za-z_][A-Za-z0-9_]*)',text))
+          print('\n=== CALLBACKS UI DETECTADOS ===')
+          print('callback_count=',len(callback_names))
+          print(sorted(callback_names))
+
+          print('\n=== FIM AUDITORIA ===')
+          PY
