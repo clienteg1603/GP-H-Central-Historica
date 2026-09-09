@@ -6,11 +6,11 @@ import hashlib
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent
-EXPECTED_GZIP_SHA256 = "0749b490776074bd87e504734954e7f72b0875a141d1be4f29970def38e0847d"
-EXPECTED_SOURCE_SHA256 = "b22b7f073cd4c9749b6abdaeeeed483486fbe75e78af3a3c0427ec9b4ca8b99d"
+EXPECTED_GZIP_SHA256 = "0253f530852c31b3a614ee6c079ee5e375e424176ac75c6c952de438fde3e2bd"
+EXPECTED_SOURCE_SHA256 = "b0071e1cafce199e57a08170c17d91d117611551f64fd271c1e412ca4a6a2caa"
 
 parts = []
-for idx in range(9):
+for idx in range(10):
     path = ROOT / f"src_{idx}.b64"
     parts.append(path.read_text(encoding="ascii").strip())
 
