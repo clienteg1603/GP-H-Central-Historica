@@ -1,3 +1,11 @@
+REVISÃO v0.46.4 — HOME RESPONSIVA / RESTAURAR JANELA
+- Corrigido o tremor ao alternar Maximizar/Restaurar no Windows: a Home reserva a largura da scrollbar e não muda mais a geometria horizontal no meio da animação.
+- Eventos de resize da Home agora são agrupados (debounce curto), evitando dezenas de redesenhos consecutivos enquanto o Windows redimensiona a janela.
+- A grade 5x5 passa a usar imagens grandes quando há altura confortável e imagens médias automaticamente na janela restaurada/baixa, sem destruir nem recriar os cartões.
+- Removido o height mínimo artificial de 720 px da Home; a região rolável passa a seguir o tamanho real do conteúdo. Se ainda não houver espaço físico, a rolagem continua disponível até a 5ª linha.
+- O tooltip é recolhido durante mudança de tamanho para não ficar reposicionando sobre widgets em movimento.
+- Nenhum método de banco, Meta, Reset, Puxada, Similaridade, Histórico Concentrado, 3+1, ranking ou Decisão foi alterado.
+
 REVISÃO v0.46.3 — SINCRONIZAÇÃO / WINERROR 5
 - Corrigida falha de sincronização em pastas Dropbox/OneDrive quando o Windows bloqueia temporariamente a troca atômica do JSON do dispositivo (WinError 5 / Acesso negado).
 - A gravação agora tenta novamente o replace atômico com espera curta e, se o provedor de nuvem permitir escrita mas negar rename/delete, usa fallback de sobrescrita com flush/fsync.

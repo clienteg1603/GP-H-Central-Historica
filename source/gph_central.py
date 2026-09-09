@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-GP-H Central Histórica v0.46.3
+GP-H Central Histórica v0.46.4
 Pesquisa e manutenção do histórico 2026 do Deu no Poste / PT-Rio.
 
 Escopo desta versão:
@@ -88,7 +88,7 @@ def write_crash_log(exc: BaseException):
 
 
 APP_NAME = "GP-H Central Histórica"
-APP_VERSION = "0.46.3"
+APP_VERSION = "0.46.4"
 START_DATE = date(2026, 1, 2)
 BASE_URL = "https://brasildeunoposte.com.br/resultado-do-jogo-do-bicho-deu-no-poste-{date}/"
 # Ao buscar/atualizar resultados, relê os últimos 7 dias para absorver
@@ -15239,7 +15239,8 @@ class App(tk.Tk):
             try:
                 if first is None or last is None:
                     first, last = canvas.yview()
-                need = float(first) > 0.0 or float(last) < 1.0
+                keep_reserved = bool(getattr(canvas, "_gph_keep_scrollbar", False))
+                need = keep_reserved or float(first) > 0.0 or float(last) < 1.0
                 managed = bool(bar.winfo_manager())
                 if need and not managed:
                     bar.pack(side="right", fill="y")
@@ -15420,6 +15421,12 @@ class App(tk.Tk):
         self._page = "home"
         body = self._make_scrollable_page_body(self.content, "home")
         home_canvas = getattr(body, "_gph_scroll_canvas", None)
+        if home_canvas is not None:
+            # Reserva a largura da barra na Home. Durante maximizar/restaurar o
+            # Windows dispara vários Configure seguidos; retirar/recolocar a
+            # barra mudava a largura do Canvas no meio da animação e causava
+            # o tremor visual observado no Windows real.
+            home_canvas._gph_keep_scrollbar = True
 
         summary = self.db.home_summary()
         delays = self.db.delay_leaders()
@@ -15745,27 +15752,64 @@ class App(tk.Tk):
                 self._bind_delay_tooltip(widget, tip)
 
 
-        # A página vive dentro de Canvas. Depois que todos os cartões existem,
-        # congelamos apenas a ALTURA NATURAL solicitada pela Home. O Canvas pode
-        # ficar menor que ela e então passa a rolar. Não prendemos <Configure>,
-        # evitando ciclos de pack/unpack da própria barra de rolagem.
+        # HOME RESPONSIVA: maximizada mantém as imagens grandes; em alturas
+        # menores usa as imagens médias já carregadas. Os widgets NÃO são
+        # reconstruídos: apenas a propriedade image dos Labels é trocada.
+        # Isso elimina a sequência de redraws/tremor ao restaurar a janela.
         if home_canvas is not None:
-            def _home_set_natural_height():
+            home_state = {"after": None, "mode": None}
+            self._home_responsive_state = home_state
+
+            def _home_refresh_region():
                 try:
                     body.update_idletasks()
-                    natural_height = max(
-                        720,
-                        int(header.winfo_reqheight())
-                        + int(main.winfo_reqheight())
-                        + 10,
-                    )
-                    body.configure(height=natural_height)
                     bbox = home_canvas.bbox("all")
-                    if bbox:
-                        home_canvas.configure(scrollregion=bbox)
+                    home_canvas.configure(scrollregion=bbox or (0, 0, 0, 0))
                 except (tk.TclError, ValueError, TypeError):
                     pass
-            self.after_idle(_home_set_natural_height)
+
+            def _home_apply_density():
+                home_state["after"] = None
+                try:
+                    if getattr(self, "_page", None) != "home" or not home_canvas.winfo_exists():
+                        return
+                    viewport_h = max(1, int(home_canvas.winfo_height()))
+                    # No Windows, a janela restaurada de 1280x760 costuma deixar
+                    # cerca de 640-680 px úteis depois do título/status. Abaixo de
+                    # 700 usamos medium para preservar as cinco linhas completas.
+                    mode = "compact" if viewport_h < 700 else "large"
+                    if mode != home_state["mode"]:
+                        images = self.animal_images_medium if mode == "compact" else self.animal_images_large
+                        row_min = 70 if mode == "compact" else 88
+                        for row_idx in range(5):
+                            grid.grid_rowconfigure(row_idx, minsize=row_min)
+                        for animal_card in list(getattr(self, "home_cards", ())):
+                            label = getattr(animal_card, "_gph_animal_label", None)
+                            group = getattr(animal_card, "_gph_animal_group", None)
+                            image = images.get(group) if group is not None else None
+                            if label is not None and image is not None:
+                                label.configure(image=image)
+                        home_state["mode"] = mode
+                        self._home_density_mode = mode
+                    _home_refresh_region()
+                except (tk.TclError, ValueError, TypeError):
+                    pass
+
+            def _home_schedule_density(_event=None):
+                # Um resize de janela gera muitos Configure consecutivos. Esperar
+                # o último evita redesenhar a grade dezenas de vezes durante a
+                # animação do botão Maximizar/Restaurar.
+                self._hide_animal_hover()
+                pending = home_state.get("after")
+                if pending:
+                    try:
+                        self.after_cancel(pending)
+                    except Exception:
+                        pass
+                home_state["after"] = self.after(85, _home_apply_density)
+
+            home_canvas.bind("<Configure>", _home_schedule_density, add="+")
+            self.after_idle(_home_schedule_density)
 
 
     def show_home_animals(self):
@@ -15840,6 +15884,9 @@ class App(tk.Tk):
                 bd=0,
             )
         animal.pack(expand=True, pady=(1 if compact else 3, 0))
+        card._gph_animal_label = animal
+        card._gph_animal_group = int(info["grupo"])
+        card._gph_compact_card = bool(compact)
 
         band = tk.Frame(card, bg=band_bg, bd=0)
         band.pack(fill="x", side="bottom")
