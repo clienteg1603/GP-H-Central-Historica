@@ -1,0 +1,27 @@
+name: Inspecionar Meta em formação
+on:
+  push:
+    branches: [fix-meta-formacao-v0469]
+permissions:
+  contents: read
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix-meta-formacao-v0469
+      - name: Mostrar funções Meta relevantes
+        run: |
+          python - <<'PY'
+          import ast
+          from pathlib import Path
+          p=Path('source/gph_central.py')
+          s=p.read_text(encoding='utf-8')
+          t=ast.parse(s)
+          wanted={'meta_shadow_prediction','freeze_meta_snapshot','_meta_generation_context'}
+          for node in ast.walk(t):
+              if isinstance(node,(ast.FunctionDef,ast.AsyncFunctionDef)) and node.name in wanted:
+                  print('\n===== '+node.name+' =====')
+                  print(ast.get_source_segment(s,node))
+          PY
