@@ -1,3 +1,11 @@
+REVISÃO v0.46.5 — HOME ESTÁVEL NO WINDOWS
+- Abandonada a troca dinâmica de densidade da v0.46.4: a grade não reage mais a <Configure> trocando imagens durante Maximizar/Restaurar.
+- Os cartões compactos da Home passam a nascer diretamente com a imagem média e permanecem nesse tamanho; não há reconstrução nem troca large/medium durante resize.
+- Altura mínima da janela principal ajustada de 650 para 700 px, impedindo o estado de janela em que a quinta linha ficava espremida/cortada.
+- No Windows, a Central solicita ao DWM a desativação das transições animadas da janela (DWMWA_TRANSITIONS_FORCEDISABLED), tornando Maximizar/Restaurar um salto visual em vez de vários frames de redesenho do Tk.
+- A barra/Canvas da Home continuam oferecendo rolagem de segurança para DPI ou ambientes excepcionais, mas não controlam mais densidade dos bichos.
+- Database e todo o cérebro estatístico permanecem estruturalmente idênticos à v0.46.4.
+
 REVISÃO v0.46.4 — HOME RESPONSIVA / RESTAURAR JANELA
 - Corrigido o tremor ao alternar Maximizar/Restaurar no Windows: a Home reserva a largura da scrollbar e não muda mais a geometria horizontal no meio da animação.
 - Eventos de resize da Home agora são agrupados (debounce curto), evitando dezenas de redesenhos consecutivos enquanto o Windows redimensiona a janela.

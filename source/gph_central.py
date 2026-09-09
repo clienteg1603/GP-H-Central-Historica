@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-GP-H Central Histórica v0.46.4
+GP-H Central Histórica v0.46.5
 Pesquisa e manutenção do histórico 2026 do Deu no Poste / PT-Rio.
 
 Escopo desta versão:
@@ -88,7 +88,7 @@ def write_crash_log(exc: BaseException):
 
 
 APP_NAME = "GP-H Central Histórica"
-APP_VERSION = "0.46.4"
+APP_VERSION = "0.46.5"
 START_DATE = date(2026, 1, 2)
 BASE_URL = "https://brasildeunoposte.com.br/resultado-do-jogo-do-bicho-deu-no-poste-{date}/"
 # Ao buscar/atualizar resultados, relê os últimos 7 dias para absorver
@@ -13715,7 +13715,7 @@ class App(tk.Tk):
 
         self.title(f"{APP_NAME} v{APP_VERSION}")
         self.geometry("1280x760")
-        self.minsize(1050, 650)
+        self.minsize(1050, 700)
         self.configure(bg=self.colors["bg"])
 
         # v0.32.2: mantém a abertura maximizada introduzida na v0.32.1.
@@ -14712,8 +14712,32 @@ class App(tk.Tk):
         )
         messagebox.showinfo("Sobre a Central", text, parent=self)
 
+    def _disable_windows_window_transitions(self):
+        """Desliga animações DWM desta janela para maximizar/restaurar sem tremor."""
+        if os.name != "nt":
+            return False
+        try:
+            import ctypes
+            hwnd = int(self.winfo_id())
+            # Em algumas builds do Tk, winfo_id aponta para a janela cliente; o
+            # HWND pai é a moldura de topo que o DWM realmente anima.
+            parent = int(ctypes.windll.user32.GetParent(hwnd) or 0)
+            if parent:
+                hwnd = parent
+            disabled = ctypes.c_int(1)
+            result = ctypes.windll.dwmapi.DwmSetWindowAttribute(
+                ctypes.c_void_p(hwnd),
+                ctypes.c_uint(3),  # DWMWA_TRANSITIONS_FORCEDISABLED
+                ctypes.byref(disabled),
+                ctypes.sizeof(disabled),
+            )
+            return int(result) == 0
+        except Exception:
+            return False
+
     def _maximize_main_window(self):
         """Inicia a janela principal maximizada sem depender de resolução fixa."""
+        self._disable_windows_window_transitions()
         try:
             # Windows/Tk: forma nativa e mais confiável.
             self.state("zoomed")
@@ -15752,64 +15776,17 @@ class App(tk.Tk):
                 self._bind_delay_tooltip(widget, tip)
 
 
-        # HOME RESPONSIVA: maximizada mantém as imagens grandes; em alturas
-        # menores usa as imagens médias já carregadas. Os widgets NÃO são
-        # reconstruídos: apenas a propriedade image dos Labels é trocada.
-        # Isso elimina a sequência de redraws/tremor ao restaurar a janela.
+        # Home estática: nada é reconstruído ou troca de densidade em <Configure>.
+        # O Canvas continua cuidando apenas da rolagem de segurança.
         if home_canvas is not None:
-            home_state = {"after": None, "mode": None}
-            self._home_responsive_state = home_state
-
-            def _home_refresh_region():
+            def _home_refresh_region_once():
                 try:
                     body.update_idletasks()
                     bbox = home_canvas.bbox("all")
                     home_canvas.configure(scrollregion=bbox or (0, 0, 0, 0))
                 except (tk.TclError, ValueError, TypeError):
                     pass
-
-            def _home_apply_density():
-                home_state["after"] = None
-                try:
-                    if getattr(self, "_page", None) != "home" or not home_canvas.winfo_exists():
-                        return
-                    viewport_h = max(1, int(home_canvas.winfo_height()))
-                    # No Windows, a janela restaurada de 1280x760 costuma deixar
-                    # cerca de 640-680 px úteis depois do título/status. Abaixo de
-                    # 700 usamos medium para preservar as cinco linhas completas.
-                    mode = "compact" if viewport_h < 700 else "large"
-                    if mode != home_state["mode"]:
-                        images = self.animal_images_medium if mode == "compact" else self.animal_images_large
-                        row_min = 70 if mode == "compact" else 88
-                        for row_idx in range(5):
-                            grid.grid_rowconfigure(row_idx, minsize=row_min)
-                        for animal_card in list(getattr(self, "home_cards", ())):
-                            label = getattr(animal_card, "_gph_animal_label", None)
-                            group = getattr(animal_card, "_gph_animal_group", None)
-                            image = images.get(group) if group is not None else None
-                            if label is not None and image is not None:
-                                label.configure(image=image)
-                        home_state["mode"] = mode
-                        self._home_density_mode = mode
-                    _home_refresh_region()
-                except (tk.TclError, ValueError, TypeError):
-                    pass
-
-            def _home_schedule_density(_event=None):
-                # Um resize de janela gera muitos Configure consecutivos. Esperar
-                # o último evita redesenhar a grade dezenas de vezes durante a
-                # animação do botão Maximizar/Restaurar.
-                self._hide_animal_hover()
-                pending = home_state.get("after")
-                if pending:
-                    try:
-                        self.after_cancel(pending)
-                    except Exception:
-                        pass
-                home_state["after"] = self.after(85, _home_apply_density)
-
-            home_canvas.bind("<Configure>", _home_schedule_density, add="+")
-            self.after_idle(_home_schedule_density)
+            self.after_idle(_home_refresh_region_once)
 
 
     def show_home_animals(self):
@@ -15868,7 +15845,7 @@ class App(tk.Tk):
         visual = tk.Frame(card, bg=card_bg, bd=0)
         visual.pack(fill="both", expand=True)
         image = (
-            self.animal_images_large.get(info["grupo"])
+            self.animal_images_medium.get(info["grupo"])
             if compact
             else self.animal_images_large.get(info["grupo"])
         )
