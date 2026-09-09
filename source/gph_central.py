@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-GP-H Central Histórica v0.46.5
+GP-H Central Histórica v0.46.6
 Pesquisa e manutenção do histórico 2026 do Deu no Poste / PT-Rio.
 
 Escopo desta versão:
@@ -88,7 +88,7 @@ def write_crash_log(exc: BaseException):
 
 
 APP_NAME = "GP-H Central Histórica"
-APP_VERSION = "0.46.5"
+APP_VERSION = "0.46.6"
 START_DATE = date(2026, 1, 2)
 BASE_URL = "https://brasildeunoposte.com.br/resultado-do-jogo-do-bicho-deu-no-poste-{date}/"
 # Ao buscar/atualizar resultados, relê os últimos 7 dias para absorver
@@ -145,6 +145,10 @@ PROGRAM_UPDATE_LOG_PATH = PROGRAM_UPDATE_DIR / "GP-H_Update_ultimo.log"
 # configurado uma única vez na própria Central. O cliente aceita qualquer
 # hospedagem HTTPS estática; o pacote de publicação usa URLs relativas.
 DEFAULT_PROGRAM_UPDATE_MANIFEST_URL = os.environ.get("GPH_UPDATE_MANIFEST_URL", "https://raw.githubusercontent.com/clienteg1603/GP-H-Central-Historica/main/update_manifest.json").strip()
+OFFICIAL_PROGRAM_UPDATE_MANIFEST_URLS = (
+    "https://raw.githubusercontent.com/clienteg1603/GP-H-Central-Historica/main/update_manifest.json",
+    "https://github.com/clienteg1603/GP-H-Central-Historica/raw/refs/heads/main/update_manifest.json",
+)
 PROGRAM_UPDATE_MAX_MANIFEST_BYTES = 1024 * 1024
 PROGRAM_UPDATE_MAX_PACKAGE_BYTES = 600 * 1024 * 1024
 PROGRAM_UPDATE_CHANNELS = {"Estável": "stable", "Teste": "test"}
@@ -239,7 +243,20 @@ def _validate_update_manifest_url(url):
     raise ValueError("Por segurança, o servidor remoto de atualização deve usar HTTPS.")
 
 
-def _fetch_json_url(url, timeout=12):
+def _is_transient_program_update_error(exc):
+    """Erros de rede que merecem nova tentativa sem incomodar o usuário."""
+    if isinstance(exc, urllib.error.HTTPError):
+        return int(getattr(exc, "code", 0) or 0) in {408, 425, 429, 500, 502, 503, 504}
+    if isinstance(exc, (urllib.error.URLError, TimeoutError, ConnectionError)):
+        return True
+    text = str(exc or "").lower()
+    return any(token in text for token in (
+        "backend.max_conn_reached", "timed out", "timeout", "temporarily unavailable",
+        "connection reset", "connection aborted", "remote end closed",
+    ))
+
+
+def _fetch_json_url_once(url, timeout=12):
     url = _validate_update_manifest_url(url)
     if re.match(r"^https?://", url, flags=re.I):
         req = urllib.request.Request(
@@ -262,6 +279,49 @@ def _fetch_json_url(url, timeout=12):
     if not isinstance(data, dict):
         raise ValueError("Manifesto de atualização inválido.")
     return data
+
+
+def _fetch_json_url(url, timeout=12, attempts=3):
+    """Busca JSON com retry curto para congestionamentos/erros temporários."""
+    try:
+        attempts = max(1, min(5, int(attempts)))
+    except Exception:
+        attempts = 3
+    delays = (0.35, 0.80, 1.40, 2.00)
+    last_error = None
+    for attempt in range(attempts):
+        try:
+            return _fetch_json_url_once(url, timeout=timeout)
+        except Exception as exc:
+            last_error = exc
+            if attempt >= attempts - 1 or not _is_transient_program_update_error(exc):
+                raise
+            time.sleep(delays[min(attempt, len(delays) - 1)])
+    raise last_error or RuntimeError("Não foi possível consultar o servidor de atualização.")
+
+
+def _program_update_manifest_candidates(url):
+    """Mantém servidor customizado intacto; só cria fallback para o oficial GP-H."""
+    url = _validate_update_manifest_url(url)
+    candidates = [url]
+    normalized = url.rstrip("/")
+    official = {item.rstrip("/") for item in OFFICIAL_PROGRAM_UPDATE_MANIFEST_URLS}
+    if normalized in official:
+        for item in OFFICIAL_PROGRAM_UPDATE_MANIFEST_URLS:
+            if item.rstrip("/") != normalized and item not in candidates:
+                candidates.append(item)
+    return candidates
+
+
+def _fetch_program_update_manifest(url, timeout=12):
+    """Consulta o manifesto oficial com retry e rota alternativa automática."""
+    last_error = None
+    for candidate in _program_update_manifest_candidates(url):
+        try:
+            return _fetch_json_url(candidate, timeout=timeout, attempts=3), candidate
+        except Exception as exc:
+            last_error = exc
+    raise last_error or RuntimeError("Não foi possível consultar o servidor de atualização.")
 
 
 def _resolve_update_url(manifest_url, value):
@@ -14390,8 +14450,8 @@ class App(tk.Tk):
 
         def worker():
             try:
-                manifest = _fetch_json_url(url)
-                release = _release_from_manifest(manifest, channel=channel, manifest_url=url)
+                manifest, used_manifest_url = _fetch_program_update_manifest(url)
+                release = _release_from_manifest(manifest, channel=channel, manifest_url=used_manifest_url)
                 result = (True, release, None)
             except Exception as exc:
                 result = (False, None, str(exc))

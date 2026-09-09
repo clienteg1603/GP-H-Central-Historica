@@ -1,3 +1,11 @@
+REVISÃO v0.46.6 — ATUALIZADOR RESILIENTE / HTTP 503
+- Corrigido o comportamento em que “Buscar nova versão” desistia após uma única falha temporária e o usuário acabava fechando/reabrindo a Central para provocar outra tentativa.
+- Erros transitórios de rede (408/425/429/500/502/503/504, timeout, conexão resetada e Backend.max_conn_reached) agora recebem até 3 tentativas automáticas com pequenas esperas progressivas.
+- Quando o manifesto oficial em raw.githubusercontent.com continuar indisponível, a Central tenta automaticamente uma segunda rota oficial pelo github.com/raw.
+- Servidores personalizados configurados pelo usuário não são redirecionados para o GitHub: retry ocorre no próprio endereço configurado.
+- A mensagem de erro só aparece depois que todas as tentativas/rotas aplicáveis falharem.
+- Nenhum método de banco, Meta, Reset, Puxada, Similaridade, Histórico, 3+1, ranking ou Decisão foi alterado.
+
 REVISÃO v0.46.5 — HOME ESTÁVEL NO WINDOWS
 - Abandonada a troca dinâmica de densidade da v0.46.4: a grade não reage mais a <Configure> trocando imagens durante Maximizar/Restaurar.
 - Os cartões compactos da Home passam a nascer diretamente com a imagem média e permanecem nesse tamanho; não há reconstrução nem troca large/medium durante resize.
