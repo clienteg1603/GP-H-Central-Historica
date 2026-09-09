@@ -1,3 +1,13 @@
+REVISÃO v0.46.8 — GP-H META v0.1 JOGÁVEL / DISTRIBUIÇÃO FLEXÍVEL
+- O GP-H Meta v0.1 sai da condição exclusivamente sombra no módulo Jogar e passa a poder gerar apostas reais, sem alterar seu cérebro: mesmas 20 características, regressão logística L2 nativa, mínimo de 20 snapshots, janela prospectiva de até 160 e proteções anti-lookahead.
+- A previsão usada no bilhete é sempre a leitura Meta congelada ANTES do resultado da rodada; se já houver leitura congelada, ela é reutilizada.
+- O Meta entra como seletor em Grupo, Dupla/Terno/Quadra/Quina de Grupo, Fechamento, Passe, Dezena, Duque/Terno de Dezena, invertidas, Centena e Milhar (incluindo Milhar/Centena).
+- O usuário escolhe quantos bichos do ranking Meta utilizar; sobras na distribuição de quantidade favorecem os bichos mais bem ranqueados.
+- Centena Meta usa a nova distribuição aproximada 2:1 entre duas dezenas ativas: 4=3+1, 5=3+2, 6=4+2, 8=5+3 e 9=6+3. A máquina de congelamento do 3+1 é reutilizada sem mudança: principal congelada desloca a dupla ativa para 2ª+3ª dezena.
+- Para preservar exatamente a regra 2:1 em duas dezenas, o gerador limita a 15 Centenas por bicho; acima disso orienta aumentar os bichos ou reduzir a quantidade, em vez de quebrar silenciosamente a matemática.
+- O 3+1 oficial do Reset permanece intacto e separado. Bilhetes Meta são gravados com seletor GP-H Meta v0.1 para auditoria real independente.
+- Nenhuma fórmula de Reset, Puxada, Similaridade, Histórico Concentrado, Decisão A/B/C/D ou do cérebro Meta existente foi recalibrada nesta versão.
+
 REVISÃO v0.46.7 — JOGOS DO DIA
 - Nova tela “Jogos do dia” na seção OPERAÇÃO, logo abaixo de Início.
 - A tela reúne todas as extrações de uma data em cartões independentes, com horário em destaque e 1º ao 5º prêmio visíveis.
