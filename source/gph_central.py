@@ -18157,9 +18157,14 @@ class App(tk.Tk):
             for kind, label in (("Dupla de Grupo","Duplas"),("Terno de Grupo","Ternos"),("Quadra de Grupo","Quadras"),("Quina de Grupo","Quinas"))
             if (qty := int(requests.get(kind, 0))) > 0
         )
-        note.configure(text=(
-            f"{len(ranking)} bichos-base • {requested_text} • repetição na extração-base conta novamente, como no Histórico v0.1"
-        ))
+        if generation.get("meta_bundle"):
+            note.configure(text=(
+                f"{len(ranking)} bichos-base • {requested_text} • ranking GP-H Meta congelado antes do resultado"
+            ))
+        else:
+            note.configure(text=(
+                f"{len(ranking)} bichos-base • {requested_text} • repetição na extração-base conta novamente, como no Histórico v0.1"
+            ))
         for idx, row in enumerate(ranking, start=1):
             letter = chr(64 + idx) if idx <= 26 else str(idx)
             if generation.get("meta_bundle"):
