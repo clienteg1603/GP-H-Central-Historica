@@ -14914,7 +14914,8 @@ class App(tk.Tk):
         self.nav_buttons = {}
         self.nav_button_icon_keys = {}
 
-        # Uso diário primeiro; estudos ficam em um segundo bloco.
+        # Uso diario primeiro; analises e sistema ficam claramente separados.
+        self._add_sidebar_section_label("OPERAÇÃO")
         for label, command, icon_key in [
             ("Início", self.show_home, "home"),
             ("Jogar", self.show_play_page, "ticket"),
@@ -14924,8 +14925,9 @@ class App(tk.Tk):
             self._add_nav_button(label, command, icon_key=icon_key)
 
         tk.Frame(self.sidebar, bg=self.colors["divider"], height=1).pack(
-            fill="x", padx=14, pady=12
+            fill="x", padx=14, pady=(10, 7)
         )
+        self._add_sidebar_section_label("ANÁLISE")
 
         for label, command, icon_key in [
             ("Pesquisa", self.show_search, "search"),
@@ -14936,8 +14938,9 @@ class App(tk.Tk):
             self._add_nav_button(label, command, secondary=True, icon_key=icon_key)
 
         tk.Frame(self.sidebar, bg=self.colors["divider"], height=1).pack(
-            fill="x", padx=14, pady=12
+            fill="x", padx=14, pady=(10, 7)
         )
+        self._add_sidebar_section_label("SISTEMA")
 
         self._add_nav_button(
             "Configurações", self.show_base_config, secondary=True, icon_key="database"
@@ -14953,6 +14956,16 @@ class App(tk.Tk):
 
         self._update_results_nav_badge()
         self.show_home()
+
+    def _add_sidebar_section_label(self, text):
+        tk.Label(
+            self.sidebar,
+            text=text,
+            bg=self.colors["sidebar"],
+            fg=self.colors["muted"],
+            font=(UI_FONT_SEMIBOLD, 8),
+            anchor="w",
+        ).pack(fill="x", padx=18, pady=(0, 4))
 
     def _add_nav_button(self, label, command, secondary=False, icon_key=None):
         img = self.nav_icon_images.get(icon_key) if icon_key else None
@@ -14974,7 +14987,7 @@ class App(tk.Tk):
             anchor="w",
             padx=16,
             pady=7,
-            font=("Segoe UI", 9 if secondary else 10),
+            font=(UI_FONT_FAMILY, UI_FONT_SIZES["body"]),
             cursor="hand2",
         )
         btn.pack(fill="x", padx=7, pady=1)
@@ -17881,16 +17894,6 @@ class App(tk.Tk):
                 "Ainda não foi registrado."
             )
         )
-        messagebox.showinfo(
-            "Horários preparados",
-            (
-                f"{len(selected)} rodada(s) foram adicionadas ao bilhete em montagem.\n\n"
-                "Nenhum bilhete foi registrado ainda.\n"
-                "Revise o bilhete e clique em REGISTRAR BILHETE quando quiser confirmar."
-            ),
-            parent=self,
-        )
-
     def play_register_ticket(self):
         if not self.play_ticket_draft:
             messagebox.showinfo(
@@ -18009,24 +18012,18 @@ class App(tk.Tk):
         self._update_results_nav_badge()
 
         if multi_targets:
-            messagebox.showinfo(
-                "Bilhetes registrados",
-                (
-                    f"{len(registered)} bilhetes separados foram registrados.\n"
-                    f"{len(game_ids)} modalidade(s) no total.\n"
-                    f"Total apostado: {self._money(grand_total)}."
-                ),
-                parent=self,
+            self.status.configure(
+                text=(
+                    f"{len(registered)} bilhetes registrados • "
+                    f"{len(game_ids)} modalidade(s) • total {self._money(grand_total)}."
+                )
             )
         else:
-            messagebox.showinfo(
-                "Bilhete registrado",
-                (
-                    f"Bilhete #{registered[0]} registrado.\n"
-                    f"{len(game_ids)} modalidade(s).\n"
-                    f"Total apostado: {self._money(total_per_ticket)}."
-                ),
-                parent=self,
+            self.status.configure(
+                text=(
+                    f"Bilhete #{registered[0]} registrado • "
+                    f"{len(game_ids)} modalidade(s) • total {self._money(total_per_ticket)}."
+                )
             )
 
         self.play_show_games(
@@ -20289,26 +20286,18 @@ class App(tk.Tk):
             return
 
         if not report.get("deleted"):
-            messagebox.showinfo(
-                "Excluir bilhete",
-                "Esse bilhete já não existe na base.",
-                parent=self,
-            )
+            feedback = f"Bilhete #{ticket_id} já não existe na base."
         else:
-            messagebox.showinfo(
-                "Bilhete excluído",
-                (
-                    f"Bilhete #{ticket_id} excluído.\n"
-                    f"{report.get('games_deleted', 0)} modalidade(s) removida(s)."
-                ),
-                parent=self,
+            feedback = (
+                f"Bilhete #{ticket_id} excluído • "
+                f"{report.get('games_deleted', 0)} modalidade(s) removida(s)."
             )
 
         self.play_selected_ticket_id = None
         self.play_selected_game_id = None
         self._update_results_nav_badge()
         self.play_refresh_games()
-        self.status.configure(text=f"Bilhete #{ticket_id} excluído.")
+        self.status.configure(text=feedback)
 
     def play_ticket_history_selected(self, _event=None):
         sel = self.play_ticket_history_tree.selection()
