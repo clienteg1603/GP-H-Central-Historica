@@ -1,0 +1,176 @@
+name: Validar GP-H Meta jogável v0.46.8
+
+on:
+  push:
+    branches:
+      - meta-jogavel-v0468
+
+permissions:
+  contents: write
+
+jobs:
+  validar:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Baixar branch
+        uses: actions/checkout@v4
+        with:
+          ref: meta-jogavel-v0468
+          fetch-depth: 0
+
+      - name: Guardar baseline v0.46.7
+        run: cp source/gph_central.py /tmp/gph_before.py
+
+      - name: Aplicar v0.46.8
+        run: python .github/scripts/apply_meta_v0468.py
+
+      - name: Validar sintaxe
+        run: python -m py_compile source/gph_central.py
+
+      - name: Proteger cérebro e métodos existentes
+        shell: python
+        run: |
+          import ast
+          from pathlib import Path
+
+          before = ast.parse(Path('/tmp/gph_before.py').read_text(encoding='utf-8'))
+          after = ast.parse(Path('source/gph_central.py').read_text(encoding='utf-8'))
+
+          protected = {
+              '_meta_feature_names', '_meta_feature_vector', '_meta_examples',
+              '_meta_fit_logit', '_meta_model_score', '_meta_training_records',
+              'meta_shadow_prediction', 'meta_walk_forward',
+              'method_reset_coverage_v1', 'method_convergencia_g5',
+              'method_similarity_day', 'method_historico_concentrado_v01',
+              'generate_centenas_3plus1', 'centena_31_freeze_state',
+              'decision_adaptive_context', 'decision_operational_recommendation',
+          }
+
+          def methods(tree):
+              out = {}
+              for node in ast.walk(tree):
+                  if isinstance(node, ast.ClassDef) and node.name == 'Database':
+                      for item in node.body:
+                          if isinstance(item, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                              out[item.name] = ast.dump(item, include_attributes=False)
+              return out
+
+          a, b = methods(before), methods(after)
+          missing = sorted(name for name in protected if name not in a or name not in b)
+          changed = sorted(name for name in protected if name in a and name in b and a[name] != b[name])
+          if missing or changed:
+              raise SystemExit(f'Proteção falhou. Ausentes={missing} Alterados={changed}')
+          print(f'OK: {len(protected)} métodos sensíveis AST-idênticos')
+
+      - name: Testar matemática Meta 2 para 1
+        shell: python
+        env:
+          GPH_DATA_DIR: /tmp/gph_meta_test_data
+        run: |
+          import importlib.util, sys
+          from pathlib import Path
+
+          path = Path('source/gph_central.py')
+          spec = importlib.util.spec_from_file_location('gph_meta_test', path)
+          mod = importlib.util.module_from_spec(spec)
+          sys.modules[spec.name] = mod
+          spec.loader.exec_module(mod)
+
+          class Dummy:
+              distribute_game_counts = mod.Database.distribute_game_counts
+              generate_centenas_meta_21 = mod.Database.generate_centenas_meta_21
+
+              def latest_operational_draw(self):
+                  return {'data':'2026-09-09','sorteio':'PT','hora':'14:00','prizes':[]}
+
+              def number_rankings_for_group(self, group, kind='Dezena', scope='1º–5º'):
+                  if kind != 'Dezena':
+                      raise AssertionError(kind)
+                  start = (int(group)-1)*4+1
+                  return [
+                      {'numero':f'{(start+i)%100:02d}','ocorrencias':100-i,'ultima':'2026-09-01'}
+                      for i in range(4)
+                  ]
+
+              def centena_31_freeze_state(self, group, principal_dezena, previous_draw=None):
+                  return {'frozen':False,'trigger':None,'released_by':None}
+
+              def centena_rankings_for_dezena(self, group, dezena, scope='1º–5º'):
+                  return [
+                      {'numero':f'{i}{str(dezena).zfill(2)}','ocorrencias':10-i,'ultima':'2026-09-01'}
+                      for i in range(10)
+                  ]
+
+          d = Dummy()
+
+          g = d.generate_centenas_meta_21([1,2,3], total=10, previous_draw=d.latest_operational_draw())
+          assert g['counts'] == {1:4,2:3,3:3}, g['counts']
+          alloc = [(a['total_count'], a['main_count'], a['extra_count']) for a in g['animals']]
+          assert alloc == [(4,3,1),(3,2,1),(3,2,1)], alloc
+          assert len(g['rows']) == 10
+
+          g = d.generate_centenas_meta_21([1,2,3], total=15, previous_draw=d.latest_operational_draw())
+          assert g['counts'] == {1:5,2:5,3:5}
+          assert {(a['main_count'],a['extra_count']) for a in g['animals']} == {(3,2)}
+
+          expected = {4:(3,1),5:(3,2),6:(4,2),8:(5,3),9:(6,3)}
+          for total, pair in expected.items():
+              z = d.generate_centenas_meta_21([1], total=total, previous_draw=d.latest_operational_draw())
+              a = z['animals'][0]
+              got = (a['main_count'],a['extra_count'])
+              assert got == pair, (total, got, pair)
+
+          z = d.generate_centenas_meta_21([1,2,3], total=23, previous_draw=d.latest_operational_draw())
+          assert z['counts'] == {1:8,2:8,3:7}, z['counts']
+          assert [(a['main_count'],a['extra_count']) for a in z['animals']] == [(5,3),(5,3),(5,2)]
+
+          try:
+              d.generate_centenas_meta_21([1], total=16, previous_draw=d.latest_operational_draw())
+          except ValueError as exc:
+              assert '15 Centenas por bicho' in str(exc)
+          else:
+              raise AssertionError('limite 2:1 por bicho não foi protegido')
+
+          print('OK: distribuição Meta 2:1 e sobras por ranking validadas')
+
+      - name: Validar cobertura das modalidades e integração
+        shell: python
+        run: |
+          from pathlib import Path
+          s = Path('source/gph_central.py').read_text(encoding='utf-8')
+          required = [
+              '"★ META • GP-H Meta v0.1"',
+              'generate_centenas_meta_21',
+              'Meta 2:1',
+              'Meta • Fechamento',
+              'META • ADAPTATIVO',
+              'GP-H Meta v0.1 ainda não pode gerar esta rodada',
+              'freeze_meta_snapshot(snapshot=snapshot)',
+              'kind in GROUP_COMBO_SIZES or kind in PASSE_MODALITIES',
+              'kind in DEZENA_COMBO_SIZES or kind in INVERTED_MODALITIES or kind == "Dezena"',
+          ]
+          for token in required:
+              assert token in s, token
+          # O Meta precisa aparecer em Fechamento, Centena, Milhar, Grupo,
+          # combinações/Passe e Dezena/invertidas.
+          assert s.count('"★ META • GP-H Meta v0.1"') >= 6
+          assert 'APP_VERSION = "0.46.8"' in s
+          assert Path('source/DOCUMENTACAO_GP-H.txt').read_text(encoding='utf-8').startswith('REVISÃO v0.46.8')
+          print('OK: Meta disponível em todas as famílias automáticas')
+
+      - name: Conferir diff
+        run: git diff --check
+
+      - name: Limpar arquivos temporários e publicar branch validada
+        shell: bash
+        run: |
+          rm -f .github/scripts/apply_meta_v0468.py
+          rm -f .github/workflows/testar-meta-v0468.yml
+          find source -type d -name __pycache__ -prune -exec rm -rf {} + || true
+          find source -type f \( -name '*.pyc' -o -name '*.pyo' \) -delete || true
+          git diff --check
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "GP-H Central Histórica v0.46.8 — Meta jogável" 
+          git push origin HEAD:meta-jogavel-v0468
