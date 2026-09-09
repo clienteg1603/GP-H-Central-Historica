@@ -51,10 +51,10 @@ jobs:
       - name: Testar agrupamento diário
         shell: pwsh
         run: |
+          Remove-Item _central_v0467_test.db -Force -ErrorAction SilentlyContinue
           @'
           import importlib.util
           import sys
-          import tempfile
           from pathlib import Path
 
           spec = importlib.util.spec_from_file_location('gph', 'source/gph_central.py')
@@ -62,35 +62,39 @@ jobs:
           sys.modules['gph'] = gph
           spec.loader.exec_module(gph)
 
-          with tempfile.TemporaryDirectory() as td:
-              db = gph.Database(Path(td) / 'teste.db')
-              draws = [
-                  ('PPT','09:00'), ('PTM','11:00'), ('PT','14:00'),
-                  ('PTV','16:00'), ('FEDERAL','20:00'), ('CORUJA','21:00'),
-              ]
-              with db.connect() as con:
-                  for di,(sorteio,hora) in enumerate(draws):
-                      for premio in range(1,6):
-                          milhar = f'{(di+1)*1000 + premio*4:04d}'[-4:]
-                          centena = milhar[-3:]
-                          dezena = milhar[-2:]
-                          grupo = gph.grupo_da_dezena(int(dezena))
-                          con.execute(
-                              'INSERT INTO resultados(data,dia_semana,sorteio,hora,premio,milhar,centena,dezena,grupo,bicho,fonte) VALUES(?,?,?,?,?,?,?,?,?,?,?)',
-                              ('2026-09-09','quarta-feira',sorteio,hora,premio,milhar,centena,dezena,grupo,gph.BICHOS[grupo],'TESTE')
-                          )
-                  con.commit()
-              assert db.latest_result_date() == '2026-09-09'
-              grouped = db.day_draws('2026-09-09')
-              assert len(grouped) == 6, len(grouped)
-              assert [d['hora'] for d in grouped] == ['09:00','11:00','14:00','16:00','20:00','21:00']
-              assert all(len(d['prizes']) == 5 for d in grouped)
-              assert sum(len(d['prizes']) for d in grouped) == 30
-              assert db.day_draws('2026-09-08') == []
-              print('6 extrações / 30 prêmios OK')
+          path = Path('_central_v0467_test.db')
+          db = gph.Database(path)
+          draws = [
+              ('PPT','09:00'), ('PTM','11:00'), ('PT','14:00'),
+              ('PTV','16:00'), ('FEDERAL','20:00'), ('CORUJA','21:00'),
+          ]
+          con = db.connect()
+          try:
+              for di,(sorteio,hora) in enumerate(draws):
+                  for premio in range(1,6):
+                      milhar = f'{(di+1)*1000 + premio*4:04d}'[-4:]
+                      centena = milhar[-3:]
+                      dezena = milhar[-2:]
+                      grupo = gph.grupo_da_dezena(int(dezena))
+                      con.execute(
+                          'INSERT INTO resultados(data,dia_semana,sorteio,hora,premio,milhar,centena,dezena,grupo,bicho,fonte) VALUES(?,?,?,?,?,?,?,?,?,?,?)',
+                          ('2026-09-09','quarta-feira',sorteio,hora,premio,milhar,centena,dezena,grupo,gph.BICHOS[grupo],'TESTE')
+                      )
+              con.commit()
+          finally:
+              con.close()
+          assert db.latest_result_date() == '2026-09-09'
+          grouped = db.day_draws('2026-09-09')
+          assert len(grouped) == 6, len(grouped)
+          assert [d['hora'] for d in grouped] == ['09:00','11:00','14:00','16:00','20:00','21:00']
+          assert all(len(d['prizes']) == 5 for d in grouped)
+          assert sum(len(d['prizes']) for d in grouped) == 30
+          assert db.day_draws('2026-09-08') == []
+          print('6 extrações / 30 prêmios OK')
           '@ | Set-Content -Encoding UTF8 _central_v0467_test.py
           python _central_v0467_test.py
           Remove-Item _central_v0467_test.py -Force
+          Remove-Item _central_v0467_test.db -Force -ErrorAction Stop
 
       - name: Conferir proteção dos métodos
         shell: pwsh
