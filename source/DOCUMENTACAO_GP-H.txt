@@ -1,3 +1,10 @@
+REVISÃO v0.46.3 — SINCRONIZAÇÃO / WINERROR 5
+- Corrigida falha de sincronização em pastas Dropbox/OneDrive quando o Windows bloqueia temporariamente a troca atômica do JSON do dispositivo (WinError 5 / Acesso negado).
+- A gravação agora tenta novamente o replace atômico com espera curta e, se o provedor de nuvem permitir escrita mas negar rename/delete, usa fallback de sobrescrita com flush/fsync.
+- Arquivos temporários são limpos após falha; o banco SQLite local não é substituído nem sobrescrito por esse mecanismo.
+- Mensagem de erro de sincronização ficou mais clara para bloqueios de pasta compartilhada.
+- Nenhum cálculo de Meta, Reset, Puxada, Similaridade, Histórico Concentrado, 3+1 ou Decisão foi alterado.
+
 REVISÃO v0.46.2 — HOME RESPONSIVA / HOVER ESTÁVEL
 - Corrigido o tremor dos cartões ao mover rapidamente o mouse: cruzar imagem, faixa, nome e dezenas não recria mais o tooltip nem altera a geometria do cartão.
 - A moldura do hover mantém 1 px físico constante e muda apenas de cor, eliminando deslocamento visual.

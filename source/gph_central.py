@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-GP-H Central Histórica v0.46.2
+GP-H Central Histórica v0.46.3
 Pesquisa e manutenção do histórico 2026 do Deu no Poste / PT-Rio.
 
 Escopo desta versão:
@@ -88,7 +88,7 @@ def write_crash_log(exc: BaseException):
 
 
 APP_NAME = "GP-H Central Histórica"
-APP_VERSION = "0.46.2"
+APP_VERSION = "0.46.3"
 START_DATE = date(2026, 1, 2)
 BASE_URL = "https://brasildeunoposte.com.br/resultado-do-jogo-do-bicho-deu-no-poste-{date}/"
 # Ao buscar/atualizar resultados, relê os últimos 7 dias para absorver
@@ -559,11 +559,57 @@ def _sync_timestamp(value):
             return datetime.min
 
 def _atomic_write_json(path, data):
+    """Grava JSON com tolerância a bloqueios transitórios de Dropbox/OneDrive."""
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
+    payload = json.dumps(data, ensure_ascii=False, indent=2)
     tmp = path.with_name(path.name + ".tmp-" + secrets.token_hex(4))
-    tmp.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
-    os.replace(tmp, path)
+    tmp.write_text(payload, encoding="utf-8")
+
+    last_error = None
+    try:
+        # Cloud clients e antivírus podem segurar o arquivo final por alguns
+        # milissegundos. Repetimos o replace atômico antes de usar fallback.
+        for attempt in range(7):
+            try:
+                os.replace(tmp, path)
+                return
+            except PermissionError as exc:
+                last_error = exc
+                if attempt < 6:
+                    time.sleep(min(0.10 * (attempt + 1), 0.60))
+
+        # No Windows é comum o provedor permitir escrita, mas negar a operação
+        # de DELETE/RENAME exigida por os.replace. Como este arquivo pertence
+        # somente a este dispositivo, o fallback seguro é sobrescrevê-lo em
+        # fluxo único, com flush/fsync. O SQLite local nunca é tocado aqui.
+        for attempt in range(4):
+            try:
+                with path.open("w", encoding="utf-8") as fh:
+                    fh.write(payload)
+                    fh.flush()
+                    try:
+                        os.fsync(fh.fileno())
+                    except OSError:
+                        pass
+                try:
+                    tmp.unlink(missing_ok=True)
+                except OSError:
+                    pass
+                return
+            except PermissionError as exc:
+                last_error = exc
+                if attempt < 3:
+                    time.sleep(0.20 * (attempt + 1))
+
+        raise last_error or PermissionError(f"Não foi possível gravar {path}")
+    finally:
+        # Não deixa lixo .tmp permanente quando a tentativa falha.
+        if tmp.exists():
+            try:
+                tmp.unlink()
+            except OSError:
+                pass
 
 def account_sync_root(profile):
     folder = (profile or {}).get("sync_folder")
