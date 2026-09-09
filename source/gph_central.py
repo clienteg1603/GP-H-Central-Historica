@@ -367,7 +367,6 @@ def _read_local_update_package(package_path):
 # ------------------------------------------------------------------
 UI_FONT_FAMILY = "Segoe UI"
 UI_FONT_SEMIBOLD = "Segoe UI Semibold"
-UI_FONT_MONO = "Consolas"
 UI_TEXT_ON_ACCENT = "#FFFFFF"
 UI_FONT_SIZES = {
     "page": 17,
@@ -386,8 +385,6 @@ UI_SPACING = {
     "large": 16,
     "section": 24,
 }
-UI_CARD_PADDING = UI_SPACING["normal"]
-UI_CARD_PADDING_COMPACT = UI_SPACING["small"]
 UI_TABLE_ROWHEIGHT = 28
 
 THEME_PALETTES = {
@@ -710,14 +707,6 @@ INVERTED_MODALITIES = {
     "Milhar Invertida": ("Milhar", 4),
 }
 
-PLAY_METHOD_LABELS = {
-    "reset": "Oficial • Reset",
-    "three_plus_one": "Oficial • Reset + 3+1",
-    "dry": "Especial • Seca do Dia 1º",
-    "pull": "Experimental • Puxada Combinada",
-    "similarity": "Experimental • Similaridade do Dia",
-    "manual": "Manual",
-}
 
 METHOD_GUIDE = [
     {
@@ -2362,13 +2351,6 @@ class Database:
             ).fetchone()
         return self._decision_row_to_dict(row)
 
-    def decision_snapshot_history(self, limit=100):
-        with self.connect() as con:
-            rows = con.execute(
-                "SELECT * FROM decision_snapshots ORDER BY target_data DESC,target_hora DESC,id DESC LIMIT ?",
-                (max(1, int(limit)),),
-            ).fetchall()
-        return [self._decision_row_to_dict(r) for r in rows]
 
     # ========================================================
     # GP-H META v0.1 — v0.41.0
@@ -5900,15 +5882,7 @@ class Database:
         with self.connect() as con:
             return con.execute("SELECT COUNT(*) FROM resultados").fetchone()[0]
 
-    def minmax_date(self):
-        with self.connect() as con:
-            return con.execute("SELECT MIN(data), MAX(data) FROM resultados").fetchone()
 
-    def distinct_draws(self):
-        with self.connect() as con:
-            return con.execute(
-                "SELECT COUNT(*) FROM (SELECT DISTINCT data,sorteio,hora FROM resultados)"
-            ).fetchone()[0]
 
     def search(
         self,
@@ -6006,88 +5980,7 @@ class Database:
             return con.execute(sql, args).fetchall()
 
 
-    def search_filter_options(
-        self,
-        date_from=None,
-        date_to=None,
-        selected_sort="Todos",
-        selected_hour="Todos",
-    ):
-        """
-        Opções dependentes do painel principal.
 
-        - Sorteios disponíveis respeitam o período e, quando escolhido, a hora.
-        - Horas disponíveis respeitam o período e, quando escolhido, o sorteio.
-        """
-        date_where = []
-        date_args = []
-        if date_from:
-            date_where.append("data >= ?")
-            date_args.append(date_from)
-        if date_to:
-            date_where.append("data <= ?")
-            date_args.append(date_to)
-
-        # Sorteios válidos no período e na hora selecionada.
-        sort_where = list(date_where)
-        sort_args = list(date_args)
-        if selected_hour != "Todos":
-            sort_where.append("hora = ?")
-            sort_args.append(selected_hour)
-
-        sort_sql = "SELECT DISTINCT sorteio FROM resultados"
-        if sort_where:
-            sort_sql += " WHERE " + " AND ".join(sort_where)
-        sort_sql += " ORDER BY sorteio"
-
-        # Horas válidas no período e no sorteio selecionado.
-        hour_where = list(date_where)
-        hour_args = list(date_args)
-        if selected_sort != "Todos":
-            hour_where.append("sorteio = ?")
-            hour_args.append(selected_sort)
-
-        hour_sql = "SELECT DISTINCT hora FROM resultados"
-        if hour_where:
-            hour_sql += " WHERE " + " AND ".join(hour_where)
-        hour_sql += " ORDER BY hora"
-
-        with self.connect() as con:
-            sorts = [r[0] for r in con.execute(sort_sql, sort_args)]
-            hours = [r[0] for r in con.execute(hour_sql, hour_args)]
-
-        return sorts, hours
-
-    def search_filter_combination_exists(
-        self,
-        date_from=None,
-        date_to=None,
-        sorteio="Todos",
-        hora="Todos",
-    ):
-        where = []
-        args = []
-
-        if date_from:
-            where.append("data >= ?")
-            args.append(date_from)
-        if date_to:
-            where.append("data <= ?")
-            args.append(date_to)
-        if sorteio != "Todos":
-            where.append("sorteio = ?")
-            args.append(sorteio)
-        if hora != "Todos":
-            where.append("hora = ?")
-            args.append(hora)
-
-        sql = "SELECT 1 FROM resultados"
-        if where:
-            sql += " WHERE " + " AND ".join(where)
-        sql += " LIMIT 1"
-
-        with self.connect() as con:
-            return con.execute(sql, args).fetchone() is not None
 
     def draw_combo_options(self, date_from=None, date_to=None):
         """Retorna somente pares reais (sorteio, hora) existentes na base."""
@@ -6110,15 +6003,6 @@ class Database:
             return [(r[0], r[1]) for r in con.execute(sql, args)]
 
 
-    def filter_options(self):
-        with self.connect() as con:
-            sorteios = [r[0] for r in con.execute(
-                "SELECT DISTINCT sorteio FROM resultados ORDER BY sorteio"
-            )]
-            horas = [r[0] for r in con.execute(
-                "SELECT DISTINCT hora FROM resultados ORDER BY hora"
-            )]
-        return sorteios, horas
 
 
     def latest_date(self) -> date | None:
@@ -6331,17 +6215,6 @@ class Database:
 
 
 
-    def list_draws(self, date_from=None, date_to=None):
-        """Lista extrações cadastradas em ordem cronológica."""
-        draws = self._draws_in_order()
-        out = []
-        for d in draws:
-            if date_from and d["data"] < date_from:
-                continue
-            if date_to and d["data"] > date_to:
-                continue
-            out.append(d)
-        return out
 
     def get_draw(self, draw_date, sorteio, hora):
         for d in self._draws_in_order():
@@ -6353,26 +6226,6 @@ class Database:
         draws = self._draws_in_order()
         return draws[-1] if draws else None
 
-    def draw_filter_options(self, draw_date=None):
-        where = []
-        args = []
-        if draw_date:
-            where.append("data = ?")
-            args.append(draw_date)
-
-        sort_sql = "SELECT DISTINCT sorteio FROM resultados"
-        hour_sql = "SELECT DISTINCT hora FROM resultados"
-        if where:
-            clause = " WHERE " + " AND ".join(where)
-            sort_sql += clause
-            hour_sql += clause
-        sort_sql += " ORDER BY sorteio"
-        hour_sql += " ORDER BY hora"
-
-        with self.connect() as con:
-            sorts = [r[0] for r in con.execute(sort_sql, args)]
-            hours = [r[0] for r in con.execute(hour_sql, args)]
-        return sorts, hours
 
     def _draws_in_order(self):
         """
@@ -8826,24 +8679,7 @@ class Database:
         except Exception:
             return 0.0
 
-    def set_payout_multiplier(self, kind, scope, value):
-        value = float(value)
-        if value < 0:
-            raise ValueError("O multiplicador não pode ser negativo.")
-        with self.connect() as con:
-            con.execute(
-                "INSERT OR REPLACE INTO meta(chave, valor) VALUES(?, ?)",
-                (self._payout_key(kind, scope), str(value)),
-            )
 
-    def payout_table(self):
-        kinds = ("Grupo", "Dezena", "Centena", "Milhar")
-        scopes = ("1º", "1º–5º")
-        return {
-            (kind, scope): self.get_payout_multiplier(kind, scope)
-            for kind in kinds
-            for scope in scopes
-        }
 
     def game_planned_target(self, game):
         if game.get("alvo_data"):
@@ -10858,63 +10694,6 @@ class Database:
         summary["rounds"] = list(summary["rounds"])
         return summary
 
-    def financial_by_kind(self, period="month"):
-        base = {}
-        today = datetime.now().date()
-
-        if period == "today":
-            start = today
-        elif period == "week":
-            start = today - timedelta(days=today.weekday())
-        else:
-            start = today.replace(day=1)
-
-        for game in self.list_frozen_games(limit=10000):
-            if not game.get("jogado"):
-                continue
-
-            target = self.game_planned_target(game)
-            if not target or not target.get("data"):
-                continue
-
-            try:
-                d = datetime.strptime(
-                    target["data"], "%Y-%m-%d"
-                ).date()
-            except Exception:
-                continue
-
-            if not (start <= d <= today):
-                continue
-
-            label = game["tipo"]
-            if game.get("submodalidade"):
-                label += f" / {game['submodalidade']}"
-
-            row = base.setdefault(label, {
-                "modalidade": label,
-                "jogos": 0,
-                "apostado": 0.0,
-                "retorno": 0.0,
-                "fechados": 0,
-                "liquido": 0.0,
-            })
-
-            stake = float(game.get("valor_total") or 0)
-            row["jogos"] += 1
-            row["apostado"] += stake
-
-            if game["status"] == "AUDITADO":
-                ret = float(game.get("retorno_real") or 0)
-                row["fechados"] += 1
-                row["retorno"] += ret
-                row["liquido"] += ret - stake
-
-        rows = list(base.values())
-        rows.sort(
-            key=lambda r: (-r["apostado"], r["modalidade"])
-        )
-        return rows
 
     def financial_history(
         self,
@@ -12975,207 +12754,6 @@ class FrozenGameDetailsDialog(tk.Toplevel):
             messagebox.showinfo("Auditoria", result["reason"], parent=self)
 
 
-class DryDayTechnicalDialog(tk.Toplevel):
-    def __init__(self, master, result):
-        super().__init__(master)
-        self.result = result
-
-        self.title(
-            "Detalhes técnicos — Seca do Dia 1º"
-        )
-        fit_toplevel_to_screen(self, 1080, 650, min_width=880, min_height=540, parent=master)
-        self.resizable(True, True)
-
-        outer = ttk.Frame(
-            self, padding=12
-        )
-        outer.pack(
-            fill="both", expand=True
-        )
-
-        ttk.Label(
-            outer,
-            text="Seca do Dia — 1º prêmio",
-            font=("Segoe UI Semibold", 16),
-        ).pack(anchor="w")
-
-        d = datetime.strptime(
-            result["base_date"],
-            "%Y-%m-%d",
-        ).strftime("%d/%m/%Y")
-
-        ttk.Label(
-            outer,
-            text=(
-                f"Dia-base: {d} • "
-                f"{len(result['base_first_prizes'])} "
-                f"1º prêmio(s) • "
-                f"{result['transition_count']} "
-                f"transição(ões) históricas • "
-                f"alvos/fonte: {result['targets_per_source']} • "
-                f"suporte mínimo: {result['min_support']}."
-            ),
-            wraplength=1000,
-        ).pack(
-            anchor="w", pady=(3, 7)
-        )
-
-        ttk.Label(
-            outer,
-            text=(
-                "1º prêmios usados: "
-                + " • ".join(
-                    f"{x['hora']} "
-                    f"{x['bicho']}({x['grupo']:02d})"
-                    for x in result["base_first_prizes"]
-                )
-            ),
-            wraplength=1000,
-        ).pack(
-            anchor="w", pady=(0, 8)
-        )
-
-        table = ttk.Frame(outer)
-        table.pack(
-            fill="both", expand=True
-        )
-
-        cols = (
-            "rank","grupo","bicho",
-            "indic","fontes","prob",
-            "lift","origens",
-        )
-        tree = ttk.Treeview(
-            table,
-            columns=cols,
-            show="headings",
-        )
-
-        labels = {
-            "rank":"#",
-            "grupo":"G",
-            "bicho":"Bicho",
-            "indic":"Indicações",
-            "fontes":"Fontes",
-            "prob":"Σ Prob.",
-            "lift":"Σ Lift",
-            "origens":"Quem apontou",
-        }
-        widths = {
-            "rank":38,
-            "grupo":42,
-            "bicho":100,
-            "indic":70,
-            "fontes":60,
-            "prob":75,
-            "lift":65,
-            "origens":500,
-        }
-
-        for c in cols:
-            tree.heading(
-                c, text=labels[c]
-            )
-            tree.column(
-                c,
-                width=widths[c],
-                anchor=(
-                    "w"
-                    if c in ("bicho","origens")
-                    else "center"
-                ),
-            )
-
-        y = ttk.Scrollbar(
-            table,
-            orient="vertical",
-            command=tree.yview,
-        )
-        x = ttk.Scrollbar(
-            table,
-            orient="horizontal",
-            command=tree.xview,
-        )
-        tree.configure(
-            yscrollcommand=y.set,
-            xscrollcommand=x.set,
-        )
-        tree.grid(
-            row=0,column=0,sticky="nsew"
-        )
-        y.grid(
-            row=0,column=1,sticky="ns"
-        )
-        x.grid(
-            row=1,column=0,sticky="ew"
-        )
-        table.rowconfigure(
-            0, weight=1
-        )
-        table.columnconfigure(
-            0, weight=1
-        )
-
-        selected_groups = {
-            r["grupo"]
-            for r in result["selected"]
-        }
-
-        for rank, r in enumerate(
-            result["ranking"], start=1
-        ):
-            origins = " | ".join(
-                f"{s['bicho']} "
-                f"{s['prob']:.1f}%/"
-                f"{s['lift']:.2f}x"
-                for s in r["sources"]
-            )
-
-            tree.insert(
-                "",
-                "end",
-                tags=(
-                    ("selected",)
-                    if r["grupo"] in selected_groups
-                    else ()
-                ),
-                values=(
-                    rank,
-                    f'{r["grupo"]:02d}',
-                    r["bicho"],
-                    r["indications"],
-                    r["distinct_source_count"],
-                    f'{r["sum_prob"]:.1f}',
-                    f'{r["sum_lift"]:.2f}',
-                    origins,
-                ),
-            )
-
-        tree.tag_configure(
-            "selected",
-            font=("Segoe UI Semibold", 8),
-        )
-
-        footer = ttk.Frame(
-            outer, padding=(0,8,0,0)
-        )
-        footer.pack(fill="x")
-
-        ttk.Label(
-            footer,
-            text=(
-                "Indicações = quantas vezes as fontes do dia-base "
-                "apontaram o alvo. Com 'Contar repetições', "
-                "um bicho repetido no 1º prêmio reforça o sinal."
-            ),
-            wraplength=820,
-        ).pack(side="left")
-
-        ttk.Button(
-            footer,
-            text="Fechar",
-            command=self.destroy,
-        ).pack(side="right")
 
 
 class SimilarityTechnicalDialog(tk.Toplevel):
@@ -15017,7 +14595,7 @@ class App(tk.Tk):
 
         self._activate_animal_pack(self.animal_pack_name)
 
-        for key in ("home","ticket","results","search","statistics","pulls","methods","database","animals"):
+        for key in ("home","ticket","results","search","statistics","pulls","methods","generator","database","animals"):
             normal = ICON_ASSET_DIR / f"{key}.png"
             active = ICON_ASSET_DIR / f"{key}_active.png"
             try:
@@ -15201,10 +14779,6 @@ class App(tk.Tk):
             self.show_base_config()
         self.status.configure(text=f"Tema aplicado: {theme_name}.")
 
-    def _theme_changed(self, _event=None):
-        value = self.theme_var.get().strip()
-        if value and value != self.theme_name:
-            self._set_theme(value)
 
     def _set_animal_pack(self, pack_name):
         if pack_name not in ANIMAL_PACKS:
@@ -15344,7 +14918,7 @@ class App(tk.Tk):
         for label, command, icon_key in [
             ("Início", self.show_home, "home"),
             ("Jogar", self.show_play_page, "ticket"),
-            ("Decisão", self.show_decision_page, "methods"),
+            ("Decisão", self.show_decision_page, "generator"),
             ("Resultados", self.show_results, "results"),
         ]:
             self._add_nav_button(label, command, icon_key=icon_key)
@@ -16023,34 +15597,6 @@ class App(tk.Tk):
             card.grid(row=row, column=col, padx=4, pady=4, sticky="nsew")
             self.home_cards.append(card)
 
-    def home_prepare_next_game(self):
-        try:
-            target = self.db.next_operational_target()
-            if not target:
-                raise ValueError(
-                    "Não foi possível determinar a próxima rodada operacional."
-                )
-
-            self.show_play_page()
-            self.play_generate()
-
-            target_date = datetime.strptime(
-                target["data"], "%Y-%m-%d"
-            ).strftime("%d/%m/%Y")
-
-            self.status.configure(
-                text=(
-                    f"Próximo jogo preparado para "
-                    f"{target['sorteio']} {target['hora']} • {target_date}. "
-                    "Confira os palpites e adicione ao bilhete quando estiver satisfeito."
-                )
-            )
-        except Exception as exc:
-            messagebox.showerror(
-                "Preparar próximo jogo",
-                str(exc),
-                parent=self,
-            )
 
     def _make_animal_card(self, parent, info, compact=False):
         """Cartão v0.25: imagem dominante + faixa inferior com grupo/nome/dezenas."""
@@ -16120,16 +15666,6 @@ class App(tk.Tk):
 
         return card
 
-    def _set_card_bg(self, card, bg):
-        try:
-            card.configure(bg=bg)
-            for child in card.winfo_children():
-                try:
-                    child.configure(bg=bg)
-                except tk.TclError:
-                    pass
-        except tk.TclError:
-            pass
 
     def _cancel_hover_hide(self):
         if self._hover_after_id:
@@ -19367,99 +18903,6 @@ class App(tk.Tk):
             text=f"{len(numbers)} número(s) copiado(s)."
         )
 
-    def play_register(self):
-        if not self.play_generation:
-            messagebox.showinfo(
-                "Registrar jogada",
-                "Gere a jogada primeiro.",
-                parent=self,
-            )
-            return
-
-        try:
-            stake = self._parse_money(self.play_stake.get())
-        except Exception:
-            messagebox.showerror(
-                "Valor",
-                "Informe um valor válido por palpite.",
-                parent=self,
-            )
-            return
-
-        if stake <= 0:
-            messagebox.showerror(
-                "Valor",
-                "Informe quanto foi apostado em cada palpite.",
-                parent=self,
-            )
-            return
-
-        target = self.db.next_operational_target()
-        already = self.db.pending_operational_games_for_target(target)
-
-        if already:
-            if not messagebox.askyesno(
-                "Já existe jogo para esta rodada",
-                (
-                    f"Já existe(m) {len(already)} jogo(s) congelado(s) "
-                    "aguardando esta rodada.\n\n"
-                    "Deseja registrar outra jogada mesmo assim?"
-                ),
-                parent=self,
-            ):
-                return
-
-        kind = self.play_generation.get("kind", self.play_kind.get())
-        scope = self.play_generation.get("scope", self.play_scope.get())
-        sub = self.play_generation.get("submodalidade")
-
-        snap = self.db._financial_snapshot(
-            kind,
-            scope,
-            len(self.play_generation["rows"]),
-            stake,
-            submodalidade=sub,
-        )
-
-        rows = self.play_generation["rows"]
-        target_text = self._format_target(target)
-
-        modality_text = (
-            f"{kind} • {sub}"
-            if kind == "Milhar" and sub
-            else kind
-        )
-
-        position_text = (
-            f"\nValor por posição: {self._money(snap['valor_posicao'])}"
-            if snap["divisor_posicoes"] > 1
-            else ""
-        )
-
-        if not messagebox.askyesno(
-            "Confirmar jogada",
-            (
-                f"{target_text}\n"
-                f"{modality_text} • {scope}\n"
-                f"Método: {self.play_method.get()}\n"
-                f"{len(rows)} palpite(s)\n"
-                f"{self._money(stake)} por palpite"
-                f"{position_text}\n"
-                f"Total apostado: {self._money(snap['valor_total'])}\n\n"
-                "Registrar esta jogada como REAL?"
-            ),
-            parent=self,
-        ):
-            return
-
-        game_id = self.db.register_play(
-            self.play_generation,
-            stake,
-            base_draw=self.db.latest_operational_draw(),
-        )
-
-        self._update_results_nav_badge()
-        self.play_show_games(select_game_id=game_id)
 
     def play_open_payout_config(self):
         PayoutConfigDialog(
@@ -24978,11 +24421,7 @@ class App(tk.Tk):
         self.method_draw.set("Todos")
         self.methods_refresh_draw_options()
 
-    def methods_sort_changed(self, _event=None):
-        self.methods_refresh_draw_options()
 
-    def methods_hour_changed(self, _event=None):
-        self.methods_refresh_draw_options()
 
     def methods_load_latest(self):
         latest = self.db.latest_operational_draw()
@@ -25161,9 +24600,6 @@ class App(tk.Tk):
         else:
             MethodsTechnicalDialog(self, self.method_current_result)
 
-    def show_generator_page(self):
-        """Compatibilidade: a antiga tela Gerador foi absorvida por Jogar."""
-        return self.show_play_page()
 
 
 
@@ -25262,11 +24698,7 @@ class App(tk.Tk):
     def refresh_filters(self):
         self.refresh_search_filter_options(prefer=None)
 
-    def on_search_sort_changed(self, _event=None):
-        self.refresh_search_filter_options()
 
-    def on_search_hour_changed(self, _event=None):
-        self.refresh_search_filter_options()
 
     def on_exact_date_changed(self):
         if self.var_date.get().strip():
@@ -25542,18 +24974,9 @@ class App(tk.Tk):
         elif self._page == "base":
             self.show_base_config()
 
-    def open_statistics(self):
-        self.show_statistics_page()
 
-    def open_pulls(self):
-        self.show_pulls_page()
 
-    def open_methods_lab(self):
-        self.show_methods_page()
 
-    def open_game_generator(self):
-        # Compatibilidade com chamadas antigas: geração oficial vive em Jogar.
-        self.show_play_page()
 
     def open_manual(self):
         ManualDialog(self, self.db, self.after_manual_saved)
