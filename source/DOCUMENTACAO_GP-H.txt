@@ -1,3 +1,12 @@
+REVISÃO v0.47.3 — TERNOS / DIVERSIFICAÇÃO DO LÍDER
+
+- Corrige a montagem genérica de combinações de Grupo: as primeiras combinações lexicográficas podiam colocar o líder em todos os 5 Ternos.
+- Com 5 bichos ranqueados e 5 Ternos, a ordem passa a ser ABC, ABD, ACD, BCD, ABE: preserva concentração nos líderes, mas inclui um Terno sem o líder.
+- A correção vale para Oficial • Reset combinações, GP-H Meta v0.1, Puxada Combinada, Similaridade combinações e Manual, pois todos usam o mesmo gerador de combinações de Grupo.
+- Duplas e Quadras de Grupo também passam a respeitar a mesma ordenação por núcleo ranqueado; Quina continua naturalmente única quando há exatamente 5 bichos.
+- O GP-H Histórico Concentrado já utilizava essa ordem e não precisou ser alterado.
+- Nenhum ranking, cérebro, peso, probabilidade, Meta, Reset, Puxada, Similaridade, Histórico, 3+1 ou Decisão foi recalibrado; mudou apenas a montagem dos jogos a partir de um ranking já pronto.
+
 REVISÃO v0.47.2 — AGENDA SEMANAL / PRÓXIMA RODADA
 
 - A próxima rodada deixou de usar uma sequência única de segunda a sexta e agora respeita a grade operacional por dia da semana.

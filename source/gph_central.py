@@ -91,7 +91,7 @@ def write_crash_log(exc: BaseException):
 
 
 APP_NAME = "GP-H Central Histórica"
-APP_VERSION = "0.47.2"
+APP_VERSION = "0.47.3"
 START_DATE = date(2026, 1, 2)
 BASE_URL = "https://brasildeunoposte.com.br/resultado-do-jogo-do-bicho-deu-no-poste-{date}/"
 # Ao buscar/atualizar resultados, relê os últimos 7 dias para absorver
@@ -10138,7 +10138,21 @@ class Database:
                 f"{kind} precisa de pelo menos {size} grupos distintos."
             )
 
-        combos = list(combinations(unique, size))
+        # Ordena pelas posições do ranking: primeiro esgota o menor núcleo
+        # de líderes capaz de produzir jogos distintos e só depois abre para
+        # o próximo bicho. Para 5 bichos e 5 ternos: ABC, ABD, ACD, BCD, ABE.
+        # Assim o líder continua priorizado, mas não aparece em todos os jogos.
+        ranked_combos = []
+        for idx_combo in combinations(range(len(unique)), size):
+            combo = tuple(unique[i] for i in idx_combo)
+            ranked_combos.append((
+                max(idx_combo),
+                sum(idx_combo),
+                idx_combo,
+                combo,
+            ))
+        ranked_combos.sort(key=lambda item: (item[0], item[1], item[2]))
+        combos = [item[3] for item in ranked_combos]
         rows = []
 
         for combo in combos[:max(1, int(total))]:
