@@ -1,3 +1,11 @@
+REVISÃO v0.46.9 — META JOGÁVEL EM FORMAÇÃO
+- Corrige a v0.46.8: o GP-H Meta passa a poder gerar jogo antes dos 20 snapshots, desde que exista pelo menos 1 snapshot auditado anterior.
+- A trava científica do Meta sombra NÃO foi removida: meta_shadow_prediction continua exigindo 20 snapshots para ficar disponível na avaliação oficial.
+- A nova camada play-only META EM FORMAÇÃO usa as mesmas 20 características, a mesma regressão logística L2, os mesmos pesos de exemplo e o mesmo corte temporal/anti-lookahead do Meta.
+- De 1 a 19 snapshots, o jogo mostra claramente META EM FORMAÇÃO e o progresso n/20; a partir de 20, o módulo Jogar volta a usar automaticamente a leitura Meta oficial congelada.
+- Leituras antigas AMOSTRA INSUFICIENTE permanecem preservadas; o Jogar calcula o ranking preliminar prospectivo sem reescrever o snapshot sombra.
+- Reset, Puxada, Similaridade, Histórico Concentrado, 3+1, Decisão, Walk-Forward e meta_shadow_prediction permanecem inalterados.
+
 REVISÃO v0.46.8 — GP-H META v0.1 JOGÁVEL / DISTRIBUIÇÃO FLEXÍVEL
 - O GP-H Meta v0.1 sai da condição exclusivamente sombra no módulo Jogar e passa a poder gerar apostas reais, sem alterar seu cérebro: mesmas 20 características, regressão logística L2 nativa, mínimo de 20 snapshots, janela prospectiva de até 160 e proteções anti-lookahead.
 - A previsão usada no bilhete é sempre a leitura Meta congelada ANTES do resultado da rodada; se já houver leitura congelada, ela é reutilizada.

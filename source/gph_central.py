@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-GP-H Central Histórica v0.46.8
+GP-H Central Histórica v0.46.9
 Pesquisa e manutenção do histórico 2026 do Deu no Poste / PT-Rio.
 
 Escopo desta versão:
@@ -89,7 +89,7 @@ def write_crash_log(exc: BaseException):
 
 
 APP_NAME = "GP-H Central Histórica"
-APP_VERSION = "0.46.8"
+APP_VERSION = "0.46.9"
 START_DATE = date(2026, 1, 2)
 BASE_URL = "https://brasildeunoposte.com.br/resultado-do-jogo-do-bicho-deu-no-poste-{date}/"
 # Ao buscar/atualizar resultados, relê os últimos 7 dias para absorver
@@ -3082,6 +3082,108 @@ class Database:
             "model":{**model,"feature_names":list(self._meta_feature_names())},
             "lookahead_safe":True,
             "note":"Score interno de ranking; NÃO é probabilidade calibrada e NÃO altera o Reset + 3+1 oficial.",
+        }
+
+
+    def meta_play_formation_prediction(self, target, base_draw, signals, training_limit=160):
+        """Ranking jogável do Meta antes da maturidade mínima de 20 snapshots.
+
+        Esta camada NÃO altera o Meta sombra nem sua trava científica de 20
+        snapshots. Ela usa exatamente as mesmas características, exemplos,
+        regressão logística L2 e corte temporal do Meta, mas permite que a tela
+        Jogar use o aprendizado disponível desde o primeiro snapshot auditado.
+        Até 19 snapshots o resultado é explicitamente rotulado EM FORMAÇÃO.
+        """
+        target = dict(target or {})
+        base_draw = dict(base_draw or {})
+        signals = signals or {}
+        if not target or not base_draw:
+            return {"available": False, "status": "SEM DADOS", "reason": "Alvo/base indisponível."}
+        if self.get_draw(target.get("data"), target.get("sorteio"), target.get("hora")):
+            return {
+                "available": False,
+                "status": "BLOQUEADO",
+                "reason": "Resultado-alvo já existe; Meta em formação não é reconstruído retroativamente.",
+            }
+
+        records = self._meta_training_records(before_target=target, limit=training_limit)
+        n = len(records)
+        same_hour = sum(
+            1 for r in records
+            if str(r.get("target_hora") or "") == str(target.get("hora") or "")
+        )
+        if n < 1:
+            return {
+                "available": False,
+                "status": "SEM AMOSTRA AUDITADA",
+                "training_snapshots": 0,
+                "same_hour_snapshots": 0,
+                "minimum_play_snapshots": 1,
+                "minimum_maturity_snapshots": 20,
+                "reason": "O GP-H Meta precisa de pelo menos 1 snapshot auditado anterior para iniciar o modo jogável em formação.",
+                "model_version": "META_LOGIT_NATIVE_V1",
+                "lookahead_safe": True,
+                "play_only": True,
+            }
+
+        try:
+            historical = self.method_historico_concentrado_v01(
+                base_draw.get("data"), base_draw.get("sorteio"), base_draw.get("hora"), top_n=5
+            )
+        except Exception:
+            historical = {"selected": []}
+
+        examples = self._meta_examples(records, focus_target=target)
+        model = self._meta_fit_logit(examples)
+        if not model:
+            return {
+                "available": False,
+                "status": "SEM MODELO",
+                "training_snapshots": n,
+                "reason": "Ajuste logístico do Meta em formação indisponível.",
+                "lookahead_safe": True,
+                "play_only": True,
+            }
+
+        ranking = []
+        for group in range(1, 26):
+            x = self._meta_feature_vector(group, signals, historical, base_draw)
+            ranking.append({
+                "grupo": group,
+                "bicho": BICHOS[group],
+                "score": round(self._meta_model_score(model, x), 3),
+                "features": [round(v, 6) for v in x],
+            })
+        ranking.sort(key=lambda r: (-r["score"], r["grupo"]))
+        for idx, row in enumerate(ranking, start=1):
+            row["rank"] = idx
+
+        return {
+            "available": True,
+            "status": "EM FORMAÇÃO",
+            "objective": "1º–5º",
+            "model_version": "META_LOGIT_NATIVE_V1",
+            "training_snapshots": n,
+            "training_examples": len(examples),
+            "same_hour_snapshots": same_hour,
+            "minimum_play_snapshots": 1,
+            "minimum_maturity_snapshots": 20,
+            "formation_progress_pct": round(min(100.0, (n / 20.0) * 100.0), 1),
+            "groups": [r["grupo"] for r in ranking[:5]],
+            "animals": [r["bicho"] for r in ranking[:5]],
+            "scores": [r["score"] for r in ranking[:5]],
+            "ranking": ranking,
+            "input_groups": {
+                "Reset Cobertura": list((signals.get("Reset Cobertura") or {}).get("groups") or [])[:5],
+                "Puxada Combinada": list((signals.get("Puxada Combinada") or {}).get("groups") or [])[:5],
+                "Similaridade": list((signals.get("Similaridade") or {}).get("groups") or [])[:5],
+                "Histórico Concentrado": [int(r.get("grupo")) for r in (historical.get("selected") or [])[:5]],
+            },
+            "model": {**model, "feature_names": list(self._meta_feature_names())},
+            "lookahead_safe": True,
+            "play_only": True,
+            "shadow_gate_preserved": True,
+            "note": "Ranking preliminar jogável. Mesma arquitetura do Meta; maturidade oficial continua em 20 snapshots auditados.",
         }
 
     def freeze_meta_snapshot(self, snapshot=None, force=False):
@@ -17133,7 +17235,7 @@ class App(tk.Tk):
         ).pack(side="left", padx=(10, 0))
         tk.Label(
             self.play_meta_card,
-            text="Ranking aprendido continuamente com rodadas auditadas. O cérebro permanece congelado em estrutura; somente os dados de treino avançam.",
+            text="Pode jogar desde o primeiro snapshot auditado. Até 20, fica marcado como META EM FORMAÇÃO; a arquitetura do cérebro e o corte anti-lookahead permanecem os mesmos.",
             bg=self.colors["card2"], fg=self.colors["muted"],
             font=("Segoe UI", 8), anchor="w", justify="left",
         ).pack(fill="x", pady=(5, 7))
@@ -19279,8 +19381,25 @@ class App(tk.Tk):
                 snapshot, _meta_created = self.db.freeze_meta_snapshot(snapshot=snapshot)
                 meta_payload = copy.deepcopy(snapshot.get("meta") or {})
                 if not meta_payload.get("available"):
-                    reason = meta_payload.get("reason") or meta_payload.get("status") or "Meta indisponível"
-                    raise ValueError(f"GP-H Meta v0.1 ainda não pode gerar esta rodada: {reason}")
+                    if meta_payload.get("status") == "AMOSTRA INSUFICIENTE":
+                        meta_base = self.db.get_draw(
+                            snapshot.get("base_data"),
+                            snapshot.get("base_sorteio"),
+                            snapshot.get("base_hora"),
+                        ) or latest
+                        formation = self.db.meta_play_formation_prediction(
+                            target=snap_target,
+                            base_draw=meta_base,
+                            signals=snapshot.get("signals") or {},
+                        )
+                        if formation.get("available"):
+                            meta_payload = formation
+                        else:
+                            reason = formation.get("reason") or formation.get("status") or "Meta em formação indisponível"
+                            raise ValueError(f"GP-H Meta v0.1 ainda não pode gerar esta rodada: {reason}")
+                    else:
+                        reason = meta_payload.get("reason") or meta_payload.get("status") or "Meta indisponível"
+                        raise ValueError(f"GP-H Meta v0.1 ainda não pode gerar esta rodada: {reason}")
 
                 ranking = list(meta_payload.get("ranking") or [])
                 if len(ranking) < top_animals:
@@ -19292,12 +19411,18 @@ class App(tk.Tk):
                 if hasattr(self, "play_meta_status"):
                     names = ", ".join(BICHOS[g].title() for g in groups[:8])
                     suffix = "..." if len(groups) > 8 else ""
-                    self.play_meta_status.configure(
-                        text=(
-                            f"Top {len(groups)} congelado para esta rodada • treino: "
-                            f"{int(meta_payload.get('training_snapshots') or 0)} snapshots • {names}{suffix}"
+                    n_train = int(meta_payload.get("training_snapshots") or 0)
+                    if meta_payload.get("status") == "EM FORMAÇÃO":
+                        status_text = (
+                            f"META EM FORMAÇÃO • Top {len(groups)} • treino: {n_train}/20 snapshots • "
+                            f"{names}{suffix}"
                         )
-                    )
+                    else:
+                        status_text = (
+                            f"{meta_payload.get('status') or 'META'} • Top {len(groups)} congelado para esta rodada • "
+                            f"treino: {n_train} snapshots • {names}{suffix}"
+                        )
+                    self.play_meta_status.configure(text=status_text)
 
             elif method.startswith("Experimental"):
                 if "Puxada" in method:
