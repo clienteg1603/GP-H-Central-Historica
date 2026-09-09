@@ -22114,7 +22114,6 @@ class App(tk.Tk):
         # Mantem apenas a secao escolhida visivel. Os controles continuam
         # sendo construidos uma vez nesta abertura para preservar callbacks e
         # o comportamento existente, mas deixam de formar uma pagina gigante.
-        top_level = list(base_body.winfo_children())
         fixed_sections = {
             "account": [account_box],
             "appearance": [visual_box],
@@ -22145,13 +22144,6 @@ class App(tk.Tk):
                     widget.pack_forget()
                 except tk.TclError:
                     pass
-
-        self._base_section_widgets = {
-            "account": account_box,
-            "appearance": visual_box,
-            "updates": update_box,
-            "data": health_box,
-        }
 
     def _auto_decision_cycle(self):
         try:
