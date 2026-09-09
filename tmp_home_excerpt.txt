@@ -1,0 +1,424 @@
+### _make_scrollable_page_body lines 15218-15282
+
+    def _make_scrollable_page_body(self, parent, key):
+        """Cria uma página rolável usando exclusivamente o GPHSmartWheel global."""
+        host = ttk.Frame(parent)
+        host.pack(fill="both", expand=True)
+        canvas = tk.Canvas(
+            host, highlightthickness=0, borderwidth=0, bg=self.colors["bg"]
+        )
+        bar = ttk.Scrollbar(host, orient="vertical", command=canvas.yview)
+        canvas.pack(side="left", fill="both", expand=True)
+        bar.pack(side="right", fill="y")
+
+        body = ttk.Frame(canvas)
+        window = canvas.create_window((0, 0), window=body, anchor="nw")
+        canvas._gph_smart_scroll = True
+        canvas._gph_scrollbar = bar
+        body._gph_scroll_canvas = canvas
+        if not hasattr(self, "_smart_scroll_canvases"):
+            self._smart_scroll_canvases = {}
+        self._smart_scroll_canvases[key] = canvas
+
+        def update_bar(first=None, last=None):
+            try:
+                if first is None or last is None:
+                    first, last = canvas.yview()
+                need = float(first) > 0.0 or float(last) < 1.0
+                managed = bool(bar.winfo_manager())
+                if need and not managed:
+                    bar.pack(side="right", fill="y")
+                elif not need and managed:
+                    bar.pack_forget()
+            except (tk.TclError, ValueError, TypeError):
+                pass
+
+        def on_yview(first, last):
+            try:
+                bar.set(first, last)
+            finally:
+                update_bar(first, last)
+
+        canvas.configure(yscrollcommand=on_yview)
+
+        def update_region(_event=None):
+            try:
+                bbox = canvas.bbox("all")
+                canvas.configure(scrollregion=bbox or (0, 0, 0, 0))
+                self.after_idle(update_bar)
+            except tk.TclError:
+                pass
+
+        def resize_body(event):
+            try:
+                canvas.itemconfigure(window, width=max(1, int(event.width)))
+                self.after_idle(update_region)
+            except tk.TclError:
+                pass
+
+        body.bind("<Configure>", update_region, add="+")
+        canvas.bind("<Configure>", resize_body, add="+")
+
+        def install_global_policy():
+            self._smart_scroll_install_tags(host)
+            update_region()
+
+        self.after_idle(install_global_policy)
+        return body
+
+
+### show_home lines 15417-15768
+
+    def show_home(self):
+        self._set_active_nav("Início")
+        self._clear_content()
+        self._page = "home"
+        body = self._make_scrollable_page_body(self.content, "home")
+        home_canvas = getattr(body, "_gph_scroll_canvas", None)
+
+        summary = self.db.home_summary()
+        delays = self.db.delay_leaders()
+        latest = summary["latest"]
+        operational = self.db.latest_operational_draw()
+        next_target = self.db.next_operational_target()
+        pending_target_games = (
+            self.db.pending_operational_games_for_target(next_target)
+            if next_target else []
+        )
+
+        # v0.33: Home reorganizada em duas áreas. Os 25 bichos voltam a ser
+        # protagonistas, com cartões quase quadrados; o painel operacional fica
+        # à direita. Os indicadores financeiros saíram daqui e vivem no Financeiro.
+        header = ttk.Frame(body)
+        header.pack(fill="x", pady=(0, 5))
+        ttk.Label(
+            header,
+            text="Visão geral",
+            style="Title.TLabel",
+        ).pack(side="left")
+        ttk.Label(
+            header,
+            text=f'{summary["draws"]:,}'.replace(",", ".") + " extrações na base",
+            style="Sub.TLabel",
+            font=("Segoe UI", 8),
+        ).pack(side="right", anchor="e")
+
+        main = ttk.Frame(body)
+        main.pack(fill="both", expand=True)
+        main.grid_columnconfigure(0, weight=59, uniform="homecols")
+        main.grid_columnconfigure(1, weight=41, uniform="homecols")
+        main.grid_rowconfigure(0, weight=1)
+
+        # ------------------------------------------------------------------
+        # ESQUERDA — 25 bichos, sempre com Grupo + Nome + 4 dezenas visíveis.
+        animals_panel = ttk.Frame(main, style="Card.TFrame", padding=(7, 6))
+        animals_panel.grid(row=0, column=0, sticky="nsew", padx=(0, 5))
+
+        animal_header = ttk.Frame(animals_panel, style="Card.TFrame")
+        animal_header.pack(fill="x", pady=(0, 4))
+        ttk.Label(
+            animal_header,
+            text="OS 25 BICHOS",
+            style="Section.TLabel",
+            font=("Segoe UI Semibold", 12),
+        ).pack(side="left")
+        ttk.Label(
+            animal_header,
+            text="Clique no bicho → números fortes",
+            style="CardMuted.TLabel",
+            font=("Segoe UI", 8),
+        ).pack(side="left", padx=(8, 0))
+
+        grid = tk.Frame(animals_panel, bg=self.colors["card"])
+        grid.pack(fill="both", expand=True)
+        self.home_grid = grid
+        self.home_cards = []
+        for row in range(5):
+            grid.grid_rowconfigure(row, weight=1, uniform="animalrows", minsize=88)
+        for col in range(5):
+            grid.grid_columnconfigure(col, weight=1, uniform="animalcols", minsize=94)
+
+        for idx, info in enumerate(self.db.home_animal_cards()):
+            row = idx // 5
+            col = idx % 5
+            card = self._make_animal_card(grid, info, compact=True)
+            card.grid(row=row, column=col, padx=3, pady=3, sticky="nsew")
+            self.home_cards.append(card)
+
+        # ------------------------------------------------------------------
+        # DIREITA — próxima rodada, último resultado vertical e atrasos atuais.
+        side = ttk.Frame(main)
+        side.grid(row=0, column=1, sticky="nsew", padx=(5, 0))
+        side.grid_columnconfigure(0, weight=1)
+
+        # Próxima rodada + atualização dos RESULTADOS no mesmo cartão.
+        hero = ttk.Frame(side, style="Card.TFrame", padding=(11, 8))
+        hero.pack(fill="x", pady=(0, 6))
+
+        ttk.Label(
+            hero,
+            text="PRÓXIMA RODADA",
+            style="CardMuted.TLabel",
+            font=("Segoe UI Semibold", 9),
+        ).pack(anchor="w")
+
+        if next_target:
+            target_date = datetime.strptime(next_target["data"], "%Y-%m-%d").strftime("%d/%m/%Y")
+            target_main = f"{next_target['sorteio']} {next_target['hora']}  •  {target_date}"
+        else:
+            target_main = "Ainda não identificada"
+
+        ttk.Label(
+            hero,
+            text=target_main,
+            style="Card.TLabel",
+            font=("Segoe UI Semibold", 17),
+        ).pack(anchor="w", pady=(1, 1))
+
+        if operational:
+            op_date = datetime.strptime(operational["data"], "%Y-%m-%d").strftime("%d/%m/%Y")
+            base_text = f"Base: {operational['sorteio']} {operational['hora']} • {op_date}"
+        else:
+            base_text = "Base: —"
+
+        pending_text = (
+            f"{len(pending_target_games)} jogo(s) aguardando"
+            if pending_target_games else "Nenhum jogo congelado"
+        )
+        ttk.Label(
+            hero,
+            text=f"{base_text}   •   {pending_text}",
+            style="CardMuted.TLabel",
+            font=("Segoe UI", 8),
+        ).pack(anchor="w")
+
+        hero_actions = ttk.Frame(hero, style="Card.TFrame")
+        hero_actions.pack(fill="x", pady=(7, 0))
+        ttk.Button(
+            hero_actions,
+            text="JOGAR AGORA",
+            style="Accent.TButton",
+            command=self.show_play_page,
+        ).pack(side="left")
+        ttk.Button(
+            hero_actions,
+            text="Atualizar resultados",
+            command=self.start_update_search,
+        ).pack(side="left", padx=(5, 0))
+        ttk.Button(
+            hero_actions,
+            text="Resultados",
+            command=self.show_results,
+        ).pack(side="right")
+
+        # Último resultado — destaque maior e leitura VERTICAL, prêmio por prêmio.
+        latest_card = tk.Frame(
+            side,
+            bg=self.colors["card"],
+            highlightbackground=self.colors["accent"],
+            highlightthickness=1,
+            bd=0,
+            padx=10,
+            pady=8,
+        )
+        latest_card.pack(fill="both", expand=True, pady=(0, 6))
+
+        latest_head = tk.Frame(latest_card, bg=self.colors["card"])
+        latest_head.pack(fill="x", pady=(0, 5))
+        tk.Label(
+            latest_head,
+            text="ÚLTIMO RESULTADO",
+            bg=self.colors["card"],
+            fg=self.colors["text"],
+            font=("Segoe UI Semibold", 12),
+        ).pack(side="left")
+        if latest:
+            d = datetime.strptime(latest["data"], "%Y-%m-%d").strftime("%d/%m/%Y")
+            tk.Label(
+                latest_head,
+                text=f"{d} • {latest['sorteio']} {latest['hora']}",
+                bg=self.colors["card"],
+                fg=self.colors["muted"],
+                font=("Segoe UI", 8),
+            ).pack(side="right")
+
+            prizes_box = tk.Frame(latest_card, bg=self.colors["card"])
+            prizes_box.pack(fill="both", expand=True)
+            for p in latest["prizes"]:
+                row = tk.Frame(
+                    prizes_box,
+                    bg=self.colors["card2"],
+                    highlightbackground=self.colors["border"],
+                    highlightthickness=0,
+                    bd=0,
+                    padx=7,
+                    pady=3,
+                )
+                row.pack(fill="both", expand=True, pady=(0, 3))
+
+                prize_badge = tk.Label(
+                    row,
+                    text=f"{p['premio']}º",
+                    bg=self.colors["accent"],
+                    fg="#FFFFFF",
+                    font=("Segoe UI Semibold", 9),
+                    width=3,
+                    padx=2,
+                    pady=2,
+                )
+                prize_badge.pack(side="left", padx=(0, 7))
+
+                tiny = self.animal_images_tiny.get(p["grupo"])
+                if tiny is not None:
+                    tk.Label(row, image=tiny, bg=self.colors["card2"], bd=0).pack(side="left", padx=(0, 7))
+
+                ident = tk.Frame(row, bg=self.colors["card2"])
+                ident.pack(side="left", fill="x", expand=True)
+                tk.Label(
+                    ident,
+                    text=f"{p['bicho']}  •  Grupo {p['grupo']:02d}",
+                    bg=self.colors["card2"],
+                    fg=self.colors["text"],
+                    font=("Segoe UI Semibold", 9),
+                    anchor="w",
+                ).pack(fill="x")
+                tk.Label(
+                    ident,
+                    text=f"Centena {p['centena']}  •  Dezena {p['dezena']}",
+                    bg=self.colors["card2"],
+                    fg=self.colors["muted"],
+                    font=("Segoe UI", 8),
+                    anchor="w",
+                ).pack(fill="x")
+
+                tk.Label(
+                    row,
+                    text=p["milhar"],
+                    bg=self.colors["card2"],
+                    fg=self.colors["accent"],
+                    font=("Consolas", 17, "bold"),
+                    anchor="e",
+                ).pack(side="right", padx=(8, 2))
+        else:
+            tk.Label(
+                latest_card,
+                text="Base ainda vazia.",
+                bg=self.colors["card"],
+                fg=self.colors["muted"],
+                font=("Segoe UI", 9),
+            ).pack(anchor="w", pady=(3, 0))
+
+        # Atrasos atuais — mais legíveis, abaixo do último resultado.
+        delay_card = ttk.Frame(side, style="Card.TFrame", padding=(10, 7))
+        delay_card.pack(fill="x")
+        delay_head = ttk.Frame(delay_card, style="Card.TFrame")
+        delay_head.pack(fill="x", pady=(0, 5))
+        ttk.Label(
+            delay_head,
+            text="ATRASOS ATUAIS",
+            style="Section.TLabel",
+            font=("Segoe UI Semibold", 11),
+        ).pack(side="left")
+        ttk.Label(
+            delay_head,
+            text="extrações desde a última aparição",
+            style="CardMuted.TLabel",
+            font=("Segoe UI", 8),
+        ).pack(side="right")
+
+        def _delay_text(field, caption):
+            item = delays.get(field)
+            if not item:
+                return "—", "—", "Sem dados suficientes na base."
+            raw = item["value"]
+            if field == "bicho":
+                shown = BICHOS.get(int(raw), str(raw))
+            else:
+                shown = str(raw).zfill(3 if field == "centena" else 2)
+            plural = "extração" if item["delay"] == 1 else "extrações"
+            tie = f" +{item['tie_count'] - 1} emp." if item["tie_count"] > 1 else ""
+            delay_value = f"{item['delay']} {plural}{tie}"
+            last = item["last"]
+            d = datetime.strptime(last["data"], "%Y-%m-%d").strftime("%d/%m/%Y")
+            tied_values = []
+            for v in item["ties"][:6]:
+                if field == "bicho":
+                    tied_values.append(BICHOS.get(int(v), str(v)))
+                else:
+                    tied_values.append(str(v).zfill(3 if field == "centena" else 2))
+            tie_detail = ""
+            if item["tie_count"] > 1:
+                rest = item["tie_count"] - len(tied_values)
+                tie_detail = "\nEmpate: " + ", ".join(tied_values) + (f" +{rest}" if rest > 0 else "")
+            tip = (
+                f"{caption}: {shown}\n"
+                f"{item['delay']} {plural} sem aparecer\n"
+                f"Última: {d} • {last['sorteio']} {last['hora']} • "
+                f"{last['premio']}º prêmio • Milhar {last['milhar']}" + tie_detail
+            )
+            return shown, delay_value, tip
+
+        delays_row = ttk.Frame(delay_card, style="Card.TFrame")
+        delays_row.pack(fill="x")
+        for idx, (field, caption) in enumerate((("bicho", "Bicho"), ("centena", "Centena"), ("dezena", "Dezena"))):
+            shown, delay_value, tip = _delay_text(field, caption)
+            box = tk.Frame(
+                delays_row,
+                bg=self.colors["card2"],
+                highlightbackground=self.colors["border"],
+                highlightthickness=0,
+                bd=0,
+                padx=6,
+                pady=5,
+            )
+            box.pack(side="left", fill="x", expand=True, padx=(0, 4 if idx < 2 else 0))
+            cap = tk.Label(
+                box,
+                text=caption,
+                bg=self.colors["card2"],
+                fg=self.colors["muted"],
+                font=("Segoe UI", 8),
+            )
+            cap.pack(anchor="w")
+            val = tk.Label(
+                box,
+                text=shown,
+                bg=self.colors["card2"],
+                fg=self.colors["text"],
+                font=("Segoe UI Semibold", 10),
+            )
+            val.pack(anchor="w")
+            delay_lab = tk.Label(
+                box,
+                text=delay_value,
+                bg=self.colors["card2"],
+                fg=self.colors["accent"],
+                font=("Segoe UI Semibold", 8),
+            )
+            delay_lab.pack(anchor="w")
+            for widget in (box, cap, val, delay_lab):
+                self._bind_delay_tooltip(widget, tip)
+
+
+        # A página vive dentro de Canvas. Depois que todos os cartões existem,
+        # congelamos apenas a ALTURA NATURAL solicitada pela Home. O Canvas pode
+        # ficar menor que ela e então passa a rolar. Não prendemos <Configure>,
+        # evitando ciclos de pack/unpack da própria barra de rolagem.
+        if home_canvas is not None:
+            def _home_set_natural_height():
+                try:
+                    body.update_idletasks()
+                    natural_height = max(
+                        720,
+                        int(header.winfo_reqheight())
+                        + int(main.winfo_reqheight())
+                        + 10,
+                    )
+                    body.configure(height=natural_height)
+                    bbox = home_canvas.bbox("all")
+                    if bbox:
+                        home_canvas.configure(scrollregion=bbox)
+                except (tk.TclError, ValueError, TypeError):
+                    pass
+            self.after_idle(_home_set_natural_height)
+
