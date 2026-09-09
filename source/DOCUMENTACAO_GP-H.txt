@@ -1,3 +1,13 @@
+REVISÃO v0.47.2 — AGENDA SEMANAL / PRÓXIMA RODADA
+
+- A próxima rodada deixou de usar uma sequência única de segunda a sexta e agora respeita a grade operacional por dia da semana.
+- Quarta-feira: PPT 09h → PTM 11h → PT 14h → PTV 16h → FEDERAL 20h → CORUJA 21h; não existe PTN 18h na grade operacional de quarta.
+- Domingo: FEDERAL 11h → PT 14h → PTV 16h.
+- Sábado permanece PPT 09h → PTM 11h → PT 14h → PTV 16h → CORUJA 21h, sem PTN 18h.
+- Segunda, terça, quinta e sexta permanecem PPT 09h → PTM 11h → PT 14h → PTV 16h → PTN 18h → CORUJA 21h.
+- A mesma agenda é usada para próxima rodada, validação operacional e detecção de lacunas, evitando divergências entre telas.
+- Nenhuma fórmula de Meta, Reset, Puxada, Similaridade, Histórico Concentrado, 3+1 ou Decisão foi recalibrada; a mudança é exclusivamente de calendário/encadeamento operacional.
+
 REVISÃO v0.47.1 — ATUALIZADOR / FALLBACK INDEPENDENTE
 
 - A consulta de atualização mantém as tentativas automáticas e ganha uma terceira rota oficial pela API do GitHub, independente das duas rotas raw usadas anteriormente.

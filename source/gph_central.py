@@ -91,7 +91,7 @@ def write_crash_log(exc: BaseException):
 
 
 APP_NAME = "GP-H Central Histórica"
-APP_VERSION = "0.47.1"
+APP_VERSION = "0.47.2"
 START_DATE = date(2026, 1, 2)
 BASE_URL = "https://brasildeunoposte.com.br/resultado-do-jogo-do-bicho-deu-no-poste-{date}/"
 # Ao buscar/atualizar resultados, relê os últimos 7 dias para absorver
@@ -880,7 +880,7 @@ METHOD_GUIDE = [
         "name": "GP-H Reset Cobertura v1",
         "status": "OFICIAL — seletor principal dos 5 bichos",
         "base": "Usa a extração operacional mais recente como base e prevê a próxima rodada operacional.",
-        "history": "Últimas 240 transições anteriores à base (mínimo 35). Passagens iguais de horário recebem peso 3; no salto sábado Coruja → domingo PT esse peso de contexto é desligado.",
+        "history": "Últimas 240 transições anteriores à base (mínimo 35). Passagens iguais de horário recebem peso 3; no salto sábado Coruja → domingo Federal esse peso de contexto é desligado.",
         "does": "Para cada bicho presente na base, mede historicamente quais bichos apareceram na extração seguinte. Respeita repetição/multiplicidade do bicho-base, combina as probabilidades das fontes e ordena os 25 grupos por cobertura esperada.",
         "output": "Entrega o ranking e, no uso oficial, os 5 bichos mais fortes. Não olha resultados posteriores à extração-base.",
         "note": "Configuração congelada: last240 | pull | pair3 | probability.",
@@ -6573,11 +6573,16 @@ class Database:
         weekday = datetime.strptime(draw["data"], "%Y-%m-%d").weekday()
         name = draw["sorteio"]
 
+        # v0.47.2 — a grade operacional depende do dia da semana.
+        # Domingo começa na Federal 11h; quarta troca a PTN 18h pela Federal 20h.
         if weekday == 6:  # domingo
-            return name in ("PT", "PTV")
+            return name in ("FEDERAL", "PT", "PTV")
 
         if weekday == 5:  # sábado
             return name in ("PPT", "PTM", "PT", "PTV", "CORUJA")
+
+        if weekday == 2:  # quarta-feira
+            return name in ("PPT", "PTM", "PT", "PTV", "FEDERAL", "CORUJA")
 
         return name in ("PPT", "PTM", "PT", "PTV", "PTN", "CORUJA")
 
@@ -6605,67 +6610,54 @@ class Database:
 
     def _reset_expected_target(self, source_draw):
         day = datetime.strptime(source_draw["data"], "%Y-%m-%d")
-        weekday = day.weekday()
-        source_sort = source_draw["sorteio"]
+        source_sort = str(source_draw.get("sorteio") or "")
+        source_hour = str(source_draw.get("hora") or "")
 
-        weekday_sequence = [
-            ("PPT", "09:00"),
-            ("PTM", "11:00"),
-            ("PT", "14:00"),
-            ("PTV", "16:00"),
-            ("PTN", "18:00"),
-            ("CORUJA", "21:00"),
-        ]
-        saturday_sequence = [
-            ("PPT", "09:00"),
-            ("PTM", "11:00"),
-            ("PT", "14:00"),
-            ("PTV", "16:00"),
-            ("CORUJA", "21:00"),
-        ]
-        sunday_sequence = [
-            ("PT", "14:00"),
-            ("PTV", "16:00"),
-        ]
+        # Uma única agenda passa a governar Reset, próxima rodada e diagnóstico
+        # de lacunas. Isso evita divergência entre quarta, sábado e domingo.
+        sequence = self._operational_schedule_for_date(source_draw["data"])
 
-        if weekday == 5:
-            sequence = saturday_sequence
-        elif weekday == 6:
-            sequence = sunday_sequence
-        else:
-            sequence = weekday_sequence
-
-        pos = next(
-            (i for i, item in enumerate(sequence) if item[0] == source_sort),
+        source_index = next(
+            (
+                i for i, (name, hour) in enumerate(sequence)
+                if name == source_sort and (not source_hour or hour == source_hour)
+            ),
             None,
         )
+        if source_index is None:
+            # Compatibilidade com bases antigas em que a hora possa ter sido
+            # armazenada com pequena diferença: tenta identificar pelo sorteio.
+            source_index = next(
+                (i for i, (name, _hour) in enumerate(sequence) if name == source_sort),
+                None,
+            )
 
-        if pos is not None and pos + 1 < len(sequence):
-            nxt_sort, nxt_hour = sequence[pos + 1]
+        if source_index is not None and source_index + 1 < len(sequence):
+            next_sort, next_hour = sequence[source_index + 1]
             return {
                 "data": source_draw["data"],
-                "sorteio": nxt_sort,
-                "hora": nxt_hour,
+                "sorteio": next_sort,
+                "hora": next_hour,
                 "derived": True,
             }
 
-        next_date = (day + timedelta(days=1)).strftime("%Y-%m-%d")
+        # Se a fonte não pertence à grade daquele dia (registro legado) ou já é
+        # a última extração, avança para a primeira rodada operacional do dia seguinte.
+        next_day = day + timedelta(days=1)
+        for _ in range(8):
+            next_date = next_day.strftime("%Y-%m-%d")
+            next_sequence = self._operational_schedule_for_date(next_date)
+            if next_sequence:
+                next_sort, next_hour = next_sequence[0]
+                return {
+                    "data": next_date,
+                    "sorteio": next_sort,
+                    "hora": next_hour,
+                    "derived": True,
+                }
+            next_day += timedelta(days=1)
 
-        if weekday == 5:
-            return {
-                "data": next_date,
-                "sorteio": "PT",
-                "hora": "14:00",
-                "derived": True,
-                "sunday_skip": True,
-            }
-
-        return {
-            "data": next_date,
-            "sorteio": "PPT",
-            "hora": "09:00",
-            "derived": True,
-        }
+        return None
 
     @staticmethod
     def _reset_presence(draw):
@@ -6764,9 +6756,14 @@ class Database:
     def _operational_schedule_for_date(self, iso_date):
         weekday = datetime.strptime(iso_date, "%Y-%m-%d").weekday()
 
-        if weekday == 6:
-            return [("PT", "14:00"), ("PTV", "16:00")]
-        if weekday == 5:
+        if weekday == 6:  # domingo
+            return [
+                ("FEDERAL", "11:00"),
+                ("PT", "14:00"),
+                ("PTV", "16:00"),
+            ]
+
+        if weekday == 5:  # sábado
             return [
                 ("PPT", "09:00"),
                 ("PTM", "11:00"),
@@ -6774,6 +6771,17 @@ class Database:
                 ("PTV", "16:00"),
                 ("CORUJA", "21:00"),
             ]
+
+        if weekday == 2:  # quarta-feira
+            return [
+                ("PPT", "09:00"),
+                ("PTM", "11:00"),
+                ("PT", "14:00"),
+                ("PTV", "16:00"),
+                ("FEDERAL", "20:00"),
+                ("CORUJA", "21:00"),
+            ]
+
         return [
             ("PPT", "09:00"),
             ("PTM", "11:00"),
