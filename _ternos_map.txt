@@ -1,0 +1,2818 @@
+===== L788-L897 =====
+788:     1: "🐦", 2: "🦅", 3: "🫏", 4: "🦋", 5: "🐕",
+789:     6: "🐐", 7: "🐏", 8: "🐪", 9: "🐍", 10: "🐇",
+790:     11: "🐎", 12: "🐘", 13: "🐓", 14: "🐈", 15: "🐊",
+791:     16: "🦁", 17: "🐒", 18: "🐖", 19: "🦚", 20: "🦃",
+792:     21: "🐂", 22: "🐅", 23: "🐻", 24: "🦌", 25: "🐄",
+793: }
+794: 
+795: SORTEIO_ALIASES = {
+796:     "PPT": "PPT",
+797:     "PTM": "PTM",
+798:     "PT": "PT",
+799:     "PTV": "PTV",
+800:     "PTN": "PTN",
+801:     "FEDERAL": "FEDERAL",
+802:     "CORUJA": "CORUJA",
+803:     "CORUJINHA": "CORUJA",
+804: }
+805: 
+806: 
+807: # Cotações por R$ 1,00 informadas pelo usuário.
+808: # A cotação não muda entre 1º e 1º–5º; no 1º–5º o valor do palpite
+809: # é dividido pelas cinco posições, exceto modalidades de colocação fixa.
+810: DEFAULT_QUOTES = {
+811:     "Grupo": 18.0,
+812:     "Dupla de Grupo": 16.0,
+813:     "Terno de Grupo": 150.0,
+814:     "Quadra de Grupo": 1000.0,
+815:     "Quina de Grupo": 5000.0,
+816:     "Duque de Dezena": 300.0,
+817:     "Terno de Dezena": 5000.0,
+818:     "Passe vai": 90.0,
+819:     "Milhar": 6000.0,
+820:     "Centena": 600.0,
+821:     "Dezena": 60.0,
+822:     "Milhar Invertida": 6000.0,
+823:     "Centena Invertida": 600.0,
+824:     "Dezena Invertida": 60.0,
+825:     "Passe vai e vem": 90.0,
+826: }
+827: 
+828: DEFAULT_MILHAR_CENTENA_QUOTES = {
+829:     "centena": 300.0,
+830:     "milhar": 3000.0,
+831:     "ambos": 3300.0,
+832: }
+833: 
+834: FIXED_PLACEMENT_MODALITIES = {
+835:     "Dupla de Grupo",
+836:     "Terno de Grupo",
+837:     "Quadra de Grupo",
+838:     "Quina de Grupo",
+839:     "Duque de Dezena",
+840:     "Terno de Dezena",
+841:     "Passe vai",
+842:     "Passe vai e vem",
+843: }
+844: 
+845: GROUP_COMBO_SIZES = {
+846:     "Dupla de Grupo": 2,
+847:     "Terno de Grupo": 3,
+848:     "Quadra de Grupo": 4,
+849:     "Quina de Grupo": 5,
+850: }
+851: 
+852: DEZENA_COMBO_SIZES = {
+853:     "Duque de Dezena": 2,
+854:     "Terno de Dezena": 3,
+855: }
+856: 
+857: PASSE_MODALITIES = {
+858:     "Passe vai",
+859:     "Passe vai e vem",
+860: }
+861: 
+862: INVERTED_MODALITIES = {
+863:     "Dezena Invertida": ("Dezena", 2),
+864:     "Centena Invertida": ("Centena", 3),
+865:     "Milhar Invertida": ("Milhar", 4),
+866: }
+867: 
+868: 
+869: METHOD_GUIDE = [
+870:     {
+871:         "name": "GP-H Histórico Concentrado v0.1",
+872:         "status": "Histórico recuperado para combinações de Grupo; Terno preserva a lógica original e Dupla/Quadra/Quina são extensões prospectivas.",
+873:         "base": "Usa as cinco posições da extração-base. Se um bicho aparece duas vezes, ele contribui duas vezes, como no Histórico v0.1 original.",
+874:         "history": "Para cada posição da base consulta a puxada Geral daquele bicho, somente com transições anteriores à base, e usa os 3 alvos históricos mais fortes.",
+875:         "does": "Soma indicações e percentuais para rankear os bichos. Depois monta combinações concentradas: primeiro esgota o menor núcleo de líderes capaz de produzir jogos distintos e só então abre para o próximo bicho.",
+876:         "output": "Um ranking A > B > C... e quantidades escolhidas de Duplas, Ternos, Quadras e Quinas, sem repetir combinações.",
+877:         "note": "Com 5 bichos e 5 Ternos, a ordem preservada é ABC, ABD, ACD, BCD, ABE. O método continua prospectivo: a base usada é anterior à rodada-alvo.",
+878:     },
+879:     {
+880:         "name": "GP-H Reset Cobertura v1",
+881:         "status": "OFICIAL — seletor principal dos 5 bichos",
+882:         "base": "Usa a extração operacional mais recente como base e prevê a próxima rodada operacional.",
+883:         "history": "Últimas 240 transições anteriores à base (mínimo 35). Passagens iguais de horário recebem peso 3; no salto sábado Coruja → domingo Federal esse peso de contexto é desligado.",
+884:         "does": "Para cada bicho presente na base, mede historicamente quais bichos apareceram na extração seguinte. Respeita repetição/multiplicidade do bicho-base, combina as probabilidades das fontes e ordena os 25 grupos por cobertura esperada.",
+885:         "output": "Entrega o ranking e, no uso oficial, os 5 bichos mais fortes. Não olha resultados posteriores à extração-base.",
+886:         "note": "Configuração congelada: last240 | pull | pair3 | probability.",
+887:     },
+888:     {
+889:         "name": "Puxada Combinada",
+890:         "status": "MODELO DE ANÁLISE / comparação",
+891:         "base": "Usa os 5 bichos da extração-base escolhida.",
+892:         "history": "Usa somente transições anteriores à extração-base. Não tem janela fixa de 240; consulta o histórico disponível antes do corte temporal.",
+893:         "does": "Para cada bicho-base considera o estado ×1, ×2 ou ×3+. Se o estado específico tiver suporte menor que 5, recua para Geral. Cada fonte aponta seus 3 alvos mais fortes; a convergência final prioriza quantidade de fontes, soma das probabilidades e lift.",
+894:         "output": "Ranking de bichos por convergência G5, com detalhes de qual bicho-base indicou cada alvo.",
+895:         "note": "É diferente do Reset: o Reset usa janela last240 e ponderação pair3; a Puxada Combinada usa convergência das tabelas de puxadas por estado.",
+896:     },
+897:     {
+===== L2534-L2854 =====
+2534:             "result_groups_json": [],
+2535:         }
+2536:         for field, default in json_defaults.items():
+2537:             raw = d.get(field)
+2538:             key = field.replace("_json", "")
+2539:             try:
+2540:                 d[key] = json.loads(raw) if raw else copy.deepcopy(default)
+2541:             except Exception:
+2542:                 d[key] = copy.deepcopy(default)
+2543:         return d
+2544: 
+2545:     def latest_decision_snapshot(self):
+2546:         with self.connect() as con:
+2547:             row = con.execute(
+2548:                 "SELECT * FROM decision_snapshots ORDER BY target_data DESC,target_hora DESC,id DESC LIMIT 1"
+2549:             ).fetchone()
+2550:         return self._decision_row_to_dict(row)
+2551: 
+2552: 
+2553:     # ========================================================
+2554:     # GP-H META v0.1 — v0.41.0
+2555:     # Meta-aprendizado SOMBRA, sem alterar qualquer método oficial.
+2556:     # Modelo: regressão logística L2 nativa, determinística e sem dependências.
+2557:     # ========================================================
+2558:     @staticmethod
+2559:     def _meta_feature_names():
+2560:         return (
+2561:             "reset_sel", "reset_rank", "reset_strength",
+2562:             "pull_sel", "pull_rank", "pull_sources", "pull_strength",
+2563:             "sim_sel", "sim_rank", "sim_strength",
+2564:             "hist_sel", "hist_rank", "hist_indications", "hist_strength",
+2565:             "agreement", "agreement_2plus", "agreement_3plus", "agreement_4",
+2566:             "base_present", "base_repeat",
+2567:         )
+2568: 
+2569:     @staticmethod
+2570:     def _meta_squash(value, scale):
+2571:         try:
+2572:             value=max(0.0,float(value)); scale=max(1e-9,float(scale))
+2573:         except Exception:
+2574:             return 0.0
+2575:         return value/(value+scale)
+2576: 
+2577:     @staticmethod
+2578:     def _meta_sigmoid(z):
+2579:         z=max(-35.0,min(35.0,float(z)))
+2580:         return 1.0/(1.0+exp(-z))
+2581: 
+2582:     @staticmethod
+2583:     def _meta_round_key(data, hora, fallback=0):
+2584:         try:
+2585:             day=datetime.strptime(str(data),"%Y-%m-%d").toordinal()
+2586:         except Exception:
+2587:             day=0
+2588:         m=re.search(r"(\d{1,2})(?::(\d{2}))?",str(hora or ""))
+2589:         minutes=(int(m.group(1))*60 + int(m.group(2) or 0)) if m else int(fallback or 0)
+2590:         return day,minutes,int(fallback or 0)
+2591: 
+2592:     @staticmethod
+2593:     def _meta_selected_position(groups, group):
+2594:         try:
+2595:             return [int(g) for g in (groups or [])].index(int(group))
+2596:         except Exception:
+2597:             return None
+2598: 
+2599:     def _meta_feature_vector(self, group, signals, historical, base_draw):
+2600:         group=int(group)
+2601:         signals=signals or {}
+2602:         features=[]
+2603: 
+2604:         reset=signals.get("Reset Cobertura") or {}
+2605:         pos=self._meta_selected_position(reset.get("groups"),group)
+2606:         rsel=1.0 if pos is not None else 0.0
+2607:         rrank=(5-pos)/5.0 if pos is not None and pos < 5 else 0.0
+2608:         rscores=reset.get("scores") or []
+2609:         rstrength=self._meta_squash(rscores[pos] if pos is not None and pos < len(rscores) else 0,50.0)
+2610:         features += [rsel,rrank,rstrength]
+2611: 
+2612:         pull=signals.get("Puxada Combinada") or {}
+2613:         pos=self._meta_selected_position(pull.get("groups"),group)
+2614:         psel=1.0 if pos is not None else 0.0
+2615:         prank=(5-pos)/5.0 if pos is not None and pos < 5 else 0.0
+2616:         psrc=pull.get("source_counts") or []
+2617:         pprob=pull.get("sum_prob") or []
+2618:         psources=min(1.0,max(0.0,float(psrc[pos] if pos is not None and pos < len(psrc) else 0))/5.0)
+2619:         pstrength=self._meta_squash(pprob[pos] if pos is not None and pos < len(pprob) else 0,60.0)
+2620:         features += [psel,prank,psources,pstrength]
+2621: 
+2622:         sim=signals.get("Similaridade") or {}
+2623:         pos=self._meta_selected_position(sim.get("groups"),group)
+2624:         ssel=1.0 if pos is not None else 0.0
+2625:         srank=(5-pos)/5.0 if pos is not None and pos < 5 else 0.0
+2626:         shares=sim.get("weighted_shares") or []
+2627:         sstrength=self._meta_squash(shares[pos] if pos is not None and pos < len(shares) else 0,30.0)
+2628:         features += [ssel,srank,sstrength]
+2629: 
+2630:         hrows=(historical or {}).get("selected") or []
+2631:         hpos=None; hrow={}
+2632:         for i,row in enumerate(hrows[:5]):
+2633:             try:
+2634:                 if int(row.get("grupo")) == group:
+2635:                     hpos=i; hrow=row; break
+2636:             except Exception:
+2637:                 pass
+2638:         hsel=1.0 if hpos is not None else 0.0
+2639:         hrank=(5-hpos)/5.0 if hpos is not None and hpos < 5 else 0.0
+2640:         hind=min(1.0,max(0.0,float(hrow.get("indication_count") or 0))/5.0) if hrow else 0.0
+2641:         hstrength=self._meta_squash(hrow.get("sum_prob") or 0,60.0) if hrow else 0.0
+2642:         features += [hsel,hrank,hind,hstrength]
+2643: 
+2644:         agreement=int(rsel+psel+ssel+hsel)
+2645:         features += [agreement/4.0, float(agreement>=2), float(agreement>=3), float(agreement>=4)]
+2646: 
+2647:         base_groups=[]
+2648:         for p in (base_draw or {}).get("prizes") or []:
+2649:             try: base_groups.append(int(p.get("grupo")))
+2650:             except Exception: pass
+2651:         count=base_groups.count(group)
+2652:         features += [float(count>0), min(1.0,max(0,count-1)/2.0)]
+2653:         return [float(v) for v in features]
+2654: 
+2655:     @classmethod
+2656:     def _meta_fit_logit(cls, examples, epochs=240, l2=0.025):
+2657:         examples=list(examples or [])
+2658:         if not examples:
+2659:             return None
+2660:         n_features=len(examples[0][0])
+2661:         if any(len(x)!=n_features for x,_,_ in examples):
+2662:             raise ValueError("Exemplos Meta com dimensões incompatíveis.")
+2663:         pos=sum(1 for _,y,_ in examples if int(y)==1)
+2664:         neg=len(examples)-pos
+2665:         if not pos or not neg:
+2666:             return None
+2667:         positive_weight=min(4.0,max(1.0,neg/max(1,pos)))
+2668:         w=[0.0]*n_features
+2669:         bias=0.0
+2670:         lr=0.18
+2671:         for epoch in range(max(40,int(epochs))):
+2672:             gb=0.0; gw=[0.0]*n_features; total=0.0
+2673:             for x,y,sample_weight in examples:
+2674:                 y=1.0 if int(y) else 0.0
+2675:                 sw=max(0.05,float(sample_weight or 1.0))*(positive_weight if y else 1.0)
+2676:                 z=bias+sum(a*b for a,b in zip(w,x))
+2677:                 p=cls._meta_sigmoid(z)
+2678:                 err=p-y
+2679:                 gb += sw*err
+2680:                 for j,val in enumerate(x): gw[j] += sw*err*val
+2681:                 total += sw
+2682:             total=max(total,1e-9)
+2683:             bias -= lr*(gb/total)
+2684:             for j in range(n_features):
+2685:                 w[j] -= lr*((gw[j]/total) + float(l2)*w[j])
+2686:             lr=max(0.025,lr*0.992)
+2687:         return {
+2688:             "schema":1,
+2689:             "kind":"native_logit_l2",
+2690:             "intercept":round(bias,9),
+2691:             "coefficients":[round(v,9) for v in w],
+2692:             "positive_weight":round(positive_weight,6),
+2693:             "examples":len(examples),
+2694:             "positive_examples":pos,
+2695:         }
+2696: 
+2697:     @classmethod
+2698:     def _meta_model_score(cls, model, features):
+2699:         if not model:
+2700:             return 0.0
+2701:         z=float(model.get("intercept") or 0.0)
+2702:         coefs=model.get("coefficients") or []
+2703:         z += sum(float(a)*float(b) for a,b in zip(coefs,features))
+2704:         return cls._meta_sigmoid(z)*100.0
+2705: 
+2706:     def _meta_training_records(self, before_target=None, limit=160):
+2707:         """Monta exemplos somente de snapshots já auditados e anteriores ao alvo."""
+2708:         with self.connect() as con:
+2709:             rows=con.execute(
+2710:                 "SELECT * FROM decision_snapshots WHERE status='AUDITADO' "
+2711:                 "AND result_groups_json IS NOT NULL AND TRIM(result_groups_json)<>'' "
+2712:                 "ORDER BY target_data ASC,id ASC"
+2713:             ).fetchall()
+2714:         cutoff=None
+2715:         if before_target:
+2716:             cutoff=self._meta_round_key(before_target.get("data"),before_target.get("hora"),10**9)
+2717:         parsed=[]
+2718:         for row in rows:
+2719:             d=self._decision_row_to_dict(row)
+2720:             if cutoff and self._meta_round_key(d.get("target_data"),d.get("target_hora"),d.get("id") or 0) >= cutoff:
+2721:                 continue
+2722:             result_groups=[int(g) for g in (d.get("result_groups") or []) if str(g).isdigit()]
+2723:             if not result_groups:
+2724:                 continue
+2725:             signals=d.get("signals") or {}
+2726:             if not all((signals.get(name) or {}).get("available") for name in ("Reset Cobertura","Puxada Combinada","Similaridade")):
+2727:                 continue
+2728:             base=self.get_draw(d.get("base_data"),d.get("base_sorteio"),d.get("base_hora"))
+2729:             if not base:
+2730:                 continue
+2731:             try:
+2732:                 historical=self.method_historico_concentrado_v01(
+2733:                     d.get("base_data"),d.get("base_sorteio"),d.get("base_hora"),top_n=5
+2734:                 )
+2735:             except Exception:
+2736:                 historical={"selected":[]}
+2737:             parsed.append({
+2738:                 "target_data":d.get("target_data"),"target_hora":d.get("target_hora"),
+2739:                 "signals":signals,"historical":historical,"base_draw":base,
+2740:                 "result_groups":result_groups,
+2741:             })
+2742:         return parsed[-max(1,int(limit)):]
+2743: 
+2744:     def _meta_examples(self, records, focus_target=None):
+2745:         records=list(records or [])
+2746:         total=max(1,len(records))
+2747:         focus_hour=str((focus_target or {}).get("hora") or "")
+2748:         focus_weekday=self._decision_weekday_label((focus_target or {}).get("data")) if focus_target else ""
+2749:         examples=[]
+2750:         for idx,rec in enumerate(records):
+2751:             # Recência suave + contexto do alvo. O peso é aplicado apenas ao
+2752:             # treinamento atual; os sinais de cada rodada continuam congelados.
+2753:             recency=0.75+0.50*((idx+1)/total)
+2754:             weight=recency
+2755:             if focus_hour and str(rec.get("target_hora") or "") == focus_hour:
+2756:                 weight += 0.60
+2757:             if focus_weekday and self._decision_weekday_label(rec.get("target_data")) == focus_weekday:
+2758:                 weight += 0.20
+2759:             winners=set(int(g) for g in rec.get("result_groups") or [])
+2760:             for group in range(1,26):
+2761:                 x=self._meta_feature_vector(group,rec.get("signals"),rec.get("historical"),rec.get("base_draw"))
+2762:                 examples.append((x,1 if group in winners else 0,weight))
+2763:         return examples
+2764: 
+2765:     def _meta_temporal_holdout(self, records):
+2766:         records=list(records or [])
+2767:         if len(records) < 24:
+2768:             return {"available":False,"rounds":0,"note":"Mínimo de 24 snapshots para holdout temporal preliminar."}
+2769:         split=max(16,int(len(records)*0.80))
+2770:         if len(records)-split < 4:
+2771:             split=len(records)-4
+2772:         train,test=records[:split],records[split:]
+2773:         model=self._meta_fit_logit(self._meta_examples(train,focus_target=None))
+2774:         if not model:
+2775:             return {"available":False,"rounds":0,"note":"Modelo não pôde ser ajustado no bloco de treino."}
+2776:         hits=[]; random_expected=[]; benchmarks={name:[] for name in ("Reset Cobertura","Puxada Combinada","Similaridade","Histórico Concentrado")}
+2777:         for rec in test:
+2778:             ranking=[]
+2779:             for group in range(1,26):
+2780:                 x=self._meta_feature_vector(group,rec.get("signals"),rec.get("historical"),rec.get("base_draw"))
+2781:                 ranking.append((self._meta_model_score(model,x),group))
+2782:             ranking.sort(key=lambda t:(-t[0],t[1]))
+2783:             top={g for _,g in ranking[:5]}
+2784:             result=set(int(g) for g in rec.get("result_groups") or [])
+2785:             hits.append(len(top & result))
+2786:             random_expected.append(5.0*len(result)/25.0)
+2787:             for name in ("Reset Cobertura","Puxada Combinada","Similaridade"):
+2788:                 groups=set(int(g) for g in ((rec.get("signals") or {}).get(name) or {}).get("groups") or [])
+2789:                 benchmarks[name].append(len(groups & result))
+2790:             hgroups=set(int(r.get("grupo")) for r in (rec.get("historical") or {}).get("selected") or [])
+2791:             benchmarks["Histórico Concentrado"].append(len(hgroups & result))
+2792:         n=len(hits)
+2793:         return {
+2794:             "available":True,"rounds":n,
+2795:             "avg_coverage":round(sum(hits)/n,4),
+2796:             "pct_2plus":round(sum(v>=2 for v in hits)/n*100.0,2),
+2797:             "pct_3plus":round(sum(v>=3 for v in hits)/n*100.0,2),
+2798:             "random_expected":round(sum(random_expected)/n,4),
+2799:             "uplift_vs_random":round((sum(hits)-sum(random_expected))/n,4),
+2800:             "benchmarks":{k:round(sum(v)/len(v),4) if v else None for k,v in benchmarks.items()},
+2801:             "note":"Holdout temporal preliminar: bloco final nunca participa do treino. O Walk-Forward completo fica para a fase seguinte.",
+2802:         }
+2803: 
+2804:     def meta_walk_forward(self, window=30, progress_callback=None, cancel_event=None):
+2805:         """
+2806:         Walk-Forward rigoroso do GP-H Meta v0.1, exclusivamente diagnóstico.
+2807: 
+2808:         Reconstrói sinais históricos com os métodos atuais e cutoff da própria
+2809:         extração-base. Para cada rodada avaliada:
+2810:           1) usa somente registros anteriores como treino;
+2811:           2) reaplica EXATAMENTE o cérebro Meta v0.1 congelado;
+2812:           3) prevê Top 5;
+2813:           4) só então usa o resultado-alvo para medir desempenho;
+2814:           5) avança uma rodada e repete.
+2815: 
+2816:         Não alimenta o Meta prospectivo, não calibra score, não muda pesos e não
+2817:         promove método. A janela de avaliação é limitada a 60 por custo do treino
+2818:         nativo repetido; cada ajuste pode usar até 160 rodadas anteriores.
+2819:         """
+2820:         try:
+2821:             window=max(5,min(60,int(window)))
+2822:         except Exception:
+2823:             window=30
+2824:         min_train=20
+2825:         training_limit=160
+2826:         benchmark_names=(
+2827:             "Reset Cobertura","Puxada Combinada","Similaridade","Histórico Concentrado"
+2828:         )
+2829:         method_order=("GP-H Meta v0.1",)+benchmark_names
+2830: 
+2831:         draws=self._draws_in_order()
+2832:         key_to_index={(d["data"],d["sorteio"],d["hora"]):i for i,d in enumerate(draws)}
+2833:         candidates=[]
+2834:         for i,base in enumerate(draws):
+2835:             if i < 35 or not self._is_operational_draw(base) or len(base.get("prizes") or []) < 5:
+2836:                 continue
+2837:             expected=self._reset_expected_target(base)
+2838:             target_index=key_to_index.get((expected["data"],expected["sorteio"],expected["hora"]))
+2839:             if target_index is None or target_index <= i:
+2840:                 continue
+2841:             target=draws[target_index]
+2842:             if len(target.get("prizes") or []) < 5:
+2843:                 continue
+2844:             candidates.append((i,base,target_index,target))
+2845: 
+2846:         # Reconstrói só o necessário para a janela móvel do cérebro (160), a
+2847:         # janela pedida e uma folga para casos indisponíveis.
+2848:         source=candidates[-min(len(candidates),training_limit+window+40):]
+2849:         reconstructed=[]
+2850:         cancelled=False
+2851:         total_rebuild=len(source)
+2852: 
+2853:         def notify(done,total,phase,base=None):
+2854:             if progress_callback:
+===== L3056-L3189 =====
+3056:             robustness.append({
+3057:                 "method":method,"first_rounds":fm["rounds"],"second_rounds":sm["rounds"],
+3058:                 "first_avg":fm["avg_coverage"],"second_avg":sm["avg_coverage"],
+3059:                 "delta":sm["avg_coverage"]-fm["avg_coverage"],
+3060:             })
+3061: 
+3062:         date_from=details[0]["target"]["data"] if details else None
+3063:         date_to=details[-1]["target"]["data"] if details else None
+3064:         return {
+3065:             "window":window,"requested_rounds":window,"reconstructed_rounds":len(reconstructed),
+3066:             "simulated_rounds":len(details),"cancelled":cancelled,
+3067:             "min_training_rounds":min_train,"training_limit":training_limit,
+3068:             "methods":list(method_order),"summary":summary,"paired_rounds":len(paired),
+3069:             "paired_summary":paired_summary,"best_paired":paired_summary[0] if paired_summary else None,
+3070:             "meta_head_to_head":meta_head_to_head,"random_baseline":random_baseline,
+3071:             "robustness":robustness,"details":details,"date_from":date_from,"date_to":date_to,
+3072:             "model_version":"META_LOGIT_NATIVE_V1","brain_frozen":True,
+3073:             "lookahead_safe":all(
+3074:                 bool(sig.get("lookahead_safe",True))
+3075:                 for row in details for sig in row.get("methods",{}).values() if sig.get("available")
+3076:             ),
+3077:             "note":"Walk-Forward diagnóstico. O cérebro Meta v0.1 permanece congelado e o resultado de cada rodada entra somente depois da previsão.",
+3078:         }
+3079: 
+3080: 
+3081:     def meta_shadow_prediction(self, target, base_draw, signals, training_limit=160):
+3082:         target=dict(target or {}); base_draw=dict(base_draw or {}); signals=signals or {}
+3083:         if not target or not base_draw:
+3084:             return {"available":False,"status":"SEM DADOS","reason":"Alvo/base indisponível."}
+3085:         if self.get_draw(target.get("data"),target.get("sorteio"),target.get("hora")):
+3086:             return {"available":False,"status":"BLOQUEADO","reason":"Resultado-alvo já existe; Meta não é reconstruído retroativamente."}
+3087:         records=self._meta_training_records(before_target=target,limit=training_limit)
+3088:         n=len(records)
+3089:         same_hour=sum(1 for r in records if str(r.get("target_hora") or "") == str(target.get("hora") or ""))
+3090:         if n < 20:
+3091:             return {
+3092:                 "available":False,"status":"AMOSTRA INSUFICIENTE","training_snapshots":n,
+3093:                 "same_hour_snapshots":same_hour,"minimum_snapshots":20,
+3094:                 "reason":"O GP-H Meta começa somente com 20 snapshots auditados anteriores.",
+3095:                 "model_version":"META_LOGIT_NATIVE_V1","lookahead_safe":True,
+3096:             }
+3097:         try:
+3098:             historical=self.method_historico_concentrado_v01(
+3099:                 base_draw.get("data"),base_draw.get("sorteio"),base_draw.get("hora"),top_n=5
+3100:             )
+3101:         except Exception:
+3102:             historical={"selected":[]}
+3103:         examples=self._meta_examples(records,focus_target=target)
+3104:         model=self._meta_fit_logit(examples)
+3105:         if not model:
+3106:             return {"available":False,"status":"SEM MODELO","training_snapshots":n,"reason":"Ajuste logístico indisponível."}
+3107:         ranking=[]
+3108:         for group in range(1,26):
+3109:             x=self._meta_feature_vector(group,signals,historical,base_draw)
+3110:             ranking.append({
+3111:                 "grupo":group,"bicho":BICHOS[group],
+3112:                 "score":round(self._meta_model_score(model,x),3),
+3113:                 "features":[round(v,6) for v in x],
+3114:             })
+3115:         ranking.sort(key=lambda r:(-r["score"],r["grupo"]))
+3116:         for idx,row in enumerate(ranking,start=1): row["rank"]=idx
+3117:         holdout=self._meta_temporal_holdout(records)
+3118:         status="SOMBRA ATIVA" if n>=30 and same_hour>=6 else "EXPERIMENTAL"
+3119:         return {
+3120:             "available":True,"status":status,"objective":"1º–5º",
+3121:             "model_version":"META_LOGIT_NATIVE_V1","training_snapshots":n,
+3122:             "training_examples":len(examples),"same_hour_snapshots":same_hour,
+3123:             "groups":[r["grupo"] for r in ranking[:5]],
+3124:             "animals":[r["bicho"] for r in ranking[:5]],
+3125:             "scores":[r["score"] for r in ranking[:5]],
+3126:             "ranking":ranking,"holdout":holdout,
+3127:             "input_groups":{
+3128:                 "Reset Cobertura":list((signals.get("Reset Cobertura") or {}).get("groups") or [])[:5],
+3129:                 "Puxada Combinada":list((signals.get("Puxada Combinada") or {}).get("groups") or [])[:5],
+3130:                 "Similaridade":list((signals.get("Similaridade") or {}).get("groups") or [])[:5],
+3131:                 "Histórico Concentrado":[int(r.get("grupo")) for r in (historical.get("selected") or [])[:5]],
+3132:             },
+3133:             "model":{**model,"feature_names":list(self._meta_feature_names())},
+3134:             "lookahead_safe":True,
+3135:             "note":"Score interno de ranking; NÃO é probabilidade calibrada e NÃO altera o Reset + 3+1 oficial.",
+3136:         }
+3137: 
+3138: 
+3139:     def meta_play_formation_prediction(self, target, base_draw, signals, training_limit=160):
+3140:         """Ranking jogável do Meta antes da maturidade mínima de 20 snapshots.
+3141: 
+3142:         Esta camada NÃO altera o Meta sombra nem sua trava científica de 20
+3143:         snapshots. Ela usa exatamente as mesmas características, exemplos,
+3144:         regressão logística L2 e corte temporal do Meta, mas permite que a tela
+3145:         Jogar use o aprendizado disponível desde o primeiro snapshot auditado.
+3146:         Até 19 snapshots o resultado é explicitamente rotulado EM FORMAÇÃO.
+3147:         """
+3148:         target = dict(target or {})
+3149:         base_draw = dict(base_draw or {})
+3150:         signals = signals or {}
+3151:         if not target or not base_draw:
+3152:             return {"available": False, "status": "SEM DADOS", "reason": "Alvo/base indisponível."}
+3153:         if self.get_draw(target.get("data"), target.get("sorteio"), target.get("hora")):
+3154:             return {
+3155:                 "available": False,
+3156:                 "status": "BLOQUEADO",
+3157:                 "reason": "Resultado-alvo já existe; Meta em formação não é reconstruído retroativamente.",
+3158:             }
+3159: 
+3160:         records = self._meta_training_records(before_target=target, limit=training_limit)
+3161:         n = len(records)
+3162:         same_hour = sum(
+3163:             1 for r in records
+3164:             if str(r.get("target_hora") or "") == str(target.get("hora") or "")
+3165:         )
+3166:         if n < 1:
+3167:             return {
+3168:                 "available": False,
+3169:                 "status": "SEM AMOSTRA AUDITADA",
+3170:                 "training_snapshots": 0,
+3171:                 "same_hour_snapshots": 0,
+3172:                 "minimum_play_snapshots": 1,
+3173:                 "minimum_maturity_snapshots": 20,
+3174:                 "reason": "O GP-H Meta precisa de pelo menos 1 snapshot auditado anterior para iniciar o modo jogável em formação.",
+3175:                 "model_version": "META_LOGIT_NATIVE_V1",
+3176:                 "lookahead_safe": True,
+3177:                 "play_only": True,
+3178:             }
+3179: 
+3180:         try:
+3181:             historical = self.method_historico_concentrado_v01(
+3182:                 base_draw.get("data"), base_draw.get("sorteio"), base_draw.get("hora"), top_n=5
+3183:             )
+3184:         except Exception:
+3185:             historical = {"selected": []}
+3186: 
+3187:         examples = self._meta_examples(records, focus_target=target)
+3188:         model = self._meta_fit_logit(examples)
+3189:         if not model:
+===== L3215-L3342 =====
+3215:             "objective": "1º–5º",
+3216:             "model_version": "META_LOGIT_NATIVE_V1",
+3217:             "training_snapshots": n,
+3218:             "training_examples": len(examples),
+3219:             "same_hour_snapshots": same_hour,
+3220:             "minimum_play_snapshots": 1,
+3221:             "minimum_maturity_snapshots": 20,
+3222:             "formation_progress_pct": round(min(100.0, (n / 20.0) * 100.0), 1),
+3223:             "groups": [r["grupo"] for r in ranking[:5]],
+3224:             "animals": [r["bicho"] for r in ranking[:5]],
+3225:             "scores": [r["score"] for r in ranking[:5]],
+3226:             "ranking": ranking,
+3227:             "input_groups": {
+3228:                 "Reset Cobertura": list((signals.get("Reset Cobertura") or {}).get("groups") or [])[:5],
+3229:                 "Puxada Combinada": list((signals.get("Puxada Combinada") or {}).get("groups") or [])[:5],
+3230:                 "Similaridade": list((signals.get("Similaridade") or {}).get("groups") or [])[:5],
+3231:                 "Histórico Concentrado": [int(r.get("grupo")) for r in (historical.get("selected") or [])[:5]],
+3232:             },
+3233:             "model": {**model, "feature_names": list(self._meta_feature_names())},
+3234:             "lookahead_safe": True,
+3235:             "play_only": True,
+3236:             "shadow_gate_preserved": True,
+3237:             "note": "Ranking preliminar jogável. Mesma arquitetura do Meta; maturidade oficial continua em 20 snapshots auditados.",
+3238:         }
+3239: 
+3240:     def freeze_meta_snapshot(self, snapshot=None, force=False):
+3241:         """Congela o primeiro GP-H Meta da rodada; jamais recria depois do resultado."""
+3242:         snapshot=snapshot or self.latest_decision_snapshot()
+3243:         if not snapshot:
+3244:             raise ValueError("Não há snapshot prospectivo para congelar o GP-H Meta.")
+3245:         target={"data":snapshot.get("target_data"),"sorteio":snapshot.get("target_sorteio"),"hora":snapshot.get("target_hora")}
+3246:         if not all(target.values()):
+3247:             raise ValueError("Snapshot sem rodada-alvo completa.")
+3248:         if self.get_draw(target["data"],target["sorteio"],target["hora"]):
+3249:             return snapshot,False
+3250:         if (snapshot.get("meta") or {}) and not force:
+3251:             return snapshot,False
+3252:         base=self.get_draw(snapshot.get("base_data"),snapshot.get("base_sorteio"),snapshot.get("base_hora"))
+3253:         if not base:
+3254:             raise ValueError("Extração-base do GP-H Meta não encontrada.")
+3255:         payload=self.meta_shadow_prediction(target,base,snapshot.get("signals") or {})
+3256:         frozen_at=datetime.now().isoformat(timespec="seconds")
+3257:         payload=copy.deepcopy(payload or {})
+3258:         payload.update({"schema":1,"frozen_at":frozen_at,"frozen_app_version":APP_VERSION,"frozen_mode":"META_SOMBRA_AUTO"})
+3259:         with self.connect() as con:
+3260:             row=con.execute("SELECT * FROM decision_snapshots WHERE id=?",(int(snapshot["id"]),)).fetchone()
+3261:             if row is None: raise ValueError("Snapshot de Decisão não encontrado.")
+3262:             current=self._decision_row_to_dict(row)
+3263:             if (current.get("meta") or {}) and not force:
+3264:                 return current,False
+3265:             if self.get_draw(target["data"],target["sorteio"],target["hora"]):
+3266:                 return current,False
+3267:             con.execute(
+3268:                 "UPDATE decision_snapshots SET meta_json=?,meta_frozen_at=? WHERE id=?",
+3269:                 (json.dumps(payload,ensure_ascii=False),frozen_at,int(snapshot["id"])),
+3270:             )
+3271:             row=con.execute("SELECT * FROM decision_snapshots WHERE id=?",(int(snapshot["id"]),)).fetchone()
+3272:         return self._decision_row_to_dict(row),True
+3273: 
+3274:     @staticmethod
+3275:     def _meta_audit_payload(meta,result_groups):
+3276:         meta=meta or {}; result_groups=[int(g) for g in (result_groups or [])]
+3277:         groups=[int(g) for g in (meta.get("groups") or [])]
+3278:         result_set=set(result_groups)
+3279:         ranking={int(r.get("grupo")):int(r.get("rank") or 99) for r in (meta.get("ranking") or []) if r.get("grupo")}
+3280:         if not meta.get("available") or not groups:
+3281:             return {"schema":1,"available":False,"classification":"SEM_DADOS","result_groups":result_groups}
+3282:         hits=len(set(groups)&result_set)
+3283:         ranks=sorted(ranking[g] for g in result_set if g in ranking)
+3284:         return {
+3285:             "schema":1,"available":True,"groups":groups,"coverage_hits":hits,
+3286:             "first_prize_hit":bool(result_groups and result_groups[0] in set(groups)),
+3287:             "result_groups":result_groups,"best_result_rank":ranks[0] if ranks else None,
+3288:             "result_ranks":ranks,"random_expected":round(5.0*len(result_set)/25.0,4),
+3289:             "classification":f"{hits}/5","status":meta.get("status"),
+3290:         }
+3291: 
+3292:     def meta_shadow_summary(self, limit=120):
+3293:         with self.connect() as con:
+3294:             rows=con.execute(
+3295:                 "SELECT * FROM decision_snapshots WHERE status='AUDITADO' "
+3296:                 "AND meta_json IS NOT NULL AND TRIM(meta_json)<>'' "
+3297:                 "AND meta_audit_json IS NOT NULL AND TRIM(meta_audit_json)<>'' "
+3298:                 "ORDER BY target_data DESC,id DESC LIMIT ?",(max(1,int(limit)),)
+3299:             ).fetchall()
+3300:         parsed=[self._decision_row_to_dict(r) for r in rows]
+3301:         valid=[]; recent=[]
+3302:         for row in parsed:
+3303:             audit=row.get("meta_audit") or {}; meta=row.get("meta") or {}
+3304:             if not audit.get("available"): continue
+3305:             valid.append((row,audit,meta))
+3306:             if len(recent)<12:
+3307:                 recent.append({
+3308:                     "data":row.get("target_data"),"sorteio":row.get("target_sorteio"),"hora":row.get("target_hora"),
+3309:                     "hits":int(audit.get("coverage_hits") or 0),"status":meta.get("status"),
+3310:                     "groups":meta.get("groups") or [],
+3311:                 })
+3312:         n=len(valid)
+3313:         if not n:
+3314:             return {"rounds":0,"avg_coverage":None,"pct_2plus":None,"pct_3plus":None,"first_rate":None,"random_expected":None,"uplift_vs_random":None,"recent":[]}
+3315:         hits=[int(a.get("coverage_hits") or 0) for _,a,_ in valid]
+3316:         rnd=[float(a.get("random_expected") or 0.0) for _,a,_ in valid]
+3317:         first=[bool(a.get("first_prize_hit")) for _,a,_ in valid]
+3318:         return {
+3319:             "rounds":n,"avg_coverage":sum(hits)/n,
+3320:             "pct_2plus":sum(v>=2 for v in hits)/n*100.0,"pct_3plus":sum(v>=3 for v in hits)/n*100.0,
+3321:             "first_rate":sum(first)/n*100.0,"random_expected":sum(rnd)/n,
+3322:             "uplift_vs_random":sum(hits)/n-sum(rnd)/n,"recent":recent,
+3323:         }
+3324: 
+3325:     def freeze_decision_contextual(self, snapshot=None, force=False):
+3326:         """
+3327:         Congela a primeira Decisão Contextual da rodada sem olhar o resultado.
+3328: 
+3329:         O congelamento automático usa a versão reproduzível sem Walk-Forward de
+3330:         sessão. Uma simulação executada depois pode continuar como diagnóstico,
+3331:         mas nunca reescreve o líder que será auditado.
+3332:         """
+3333:         snapshot = snapshot or self.latest_decision_snapshot()
+3334:         if not snapshot:
+3335:             raise ValueError("Não há snapshot prospectivo para congelar a Decisão Contextual.")
+3336: 
+3337:         target = {
+3338:             "data": snapshot.get("target_data"),
+3339:             "sorteio": snapshot.get("target_sorteio"),
+3340:             "hora": snapshot.get("target_hora"),
+3341:         }
+3342:         if not all(target.values()):
+===== L5547-L5622 =====
+5547:                         c for c in remote.keys()
+5548:                         if c != "id" and c in local_d
+5549:                     ]
+5550:                     if not cols:
+5551:                         continue
+5552:                     sql = "UPDATE resultados SET " + ",".join(f"{c}=?" for c in cols) + \
+5553:                           " WHERE data=? AND sorteio=? AND hora=? AND premio=?"
+5554:                     con.execute(sql, [remote.get(c) for c in cols] + list(key))
+5555:                     updated += 1
+5556:                 else:
+5557:                     cols = [
+5558:                         c for c in remote.keys()
+5559:                         if c != "id"
+5560:                     ]
+5561:                     placeholders = ",".join("?" for _ in cols)
+5562:                     try:
+5563:                         con.execute(
+5564:                             f"INSERT INTO resultados ({','.join(cols)}) VALUES ({placeholders})",
+5565:                             [remote.get(c) for c in cols],
+5566:                         )
+5567:                         added += 1
+5568:                     except sqlite3.IntegrityError:
+5569:                         pass
+5570:         return added, updated
+5571: 
+5572:     def _merge_sync_meta(self, rows):
+5573:         changed = 0
+5574:         allowed = {"bankroll_initial", "bankroll_start_date"}
+5575:         with self.connect() as con:
+5576:             for row in rows or []:
+5577:                 key = str(row.get("chave") or "")
+5578:                 if not (key.startswith("quote_") or key in allowed):
+5579:                     continue
+5580:                 value = row.get("valor")
+5581:                 current = con.execute(
+5582:                     "SELECT valor FROM meta WHERE chave=?", (key,)
+5583:                 ).fetchone()
+5584:                 if current is None or str(current[0]) != str(value):
+5585:                     con.execute(
+5586:                         "INSERT OR REPLACE INTO meta(chave, valor) VALUES(?, ?)",
+5587:                         (key, value),
+5588:                     )
+5589:                     changed += 1
+5590:         return changed
+5591: 
+5592:     def _sync_ticket_lookup_maps(self, con):
+5593:         by_uid = {}
+5594:         by_fp = {}
+5595:         for r in con.execute("SELECT * FROM bilhetes").fetchall():
+5596:             d = dict(r)
+5597:             if d.get("sync_uid"):
+5598:                 by_uid[str(d["sync_uid"])] = d
+5599:             by_fp.setdefault(self._sync_ticket_fingerprint(d), d)
+5600:         return by_uid, by_fp
+5601: 
+5602:     def _sync_game_lookup_maps(self, con):
+5603:         by_uid = {}
+5604:         by_fp = {}
+5605:         games = [dict(r) for r in con.execute("SELECT * FROM jogos_congelados").fetchall()]
+5606:         for d in games:
+5607:             items = [dict(r) for r in con.execute(
+5608:                 "SELECT * FROM jogos_itens WHERE jogo_id=? ORDER BY ordem, id",
+5609:                 (int(d["id"]),),
+5610:             ).fetchall()]
+5611:             if d.get("sync_uid"):
+5612:                 by_uid[str(d["sync_uid"])] = d
+5613:             by_fp.setdefault(self._sync_game_fingerprint(d, items), d)
+5614:         return by_uid, by_fp
+5615: 
+5616:     def _insert_or_update_sync_ticket(self, con, remote, by_uid, by_fp):
+5617:         uid = str(remote.get("sync_uid") or "").strip()
+5618:         if not uid:
+5619:             return None, False, False
+5620:         local = by_uid.get(uid)
+5621:         adopted = False
+5622:         if local is None:
+===== L6846-L6921 =====
+6846:                     if len(gaps) >= int(limit):
+6847:                         return gaps
+6848: 
+6849:             current += timedelta(days=1)
+6850: 
+6851:         return gaps
+6852: 
+6853:     def record_network_check(self, check_type, error_count):
+6854:         with self.connect() as con:
+6855:             con.execute(
+6856:                 "INSERT OR REPLACE INTO meta(chave, valor) VALUES(?, ?)",
+6857:                 ("last_network_check_type", str(check_type)),
+6858:             )
+6859:             con.execute(
+6860:                 "INSERT OR REPLACE INTO meta(chave, valor) VALUES(?, ?)",
+6861:                 (
+6862:                     "last_network_check_at",
+6863:                     datetime.now().isoformat(timespec="seconds"),
+6864:                 ),
+6865:             )
+6866:             con.execute(
+6867:                 "INSERT OR REPLACE INTO meta(chave, valor) VALUES(?, ?)",
+6868:                 ("last_network_error_count", str(int(error_count))),
+6869:             )
+6870: 
+6871:     def _meta_value(self, key, default=None):
+6872:         with self.connect() as con:
+6873:             row = con.execute(
+6874:                 "SELECT valor FROM meta WHERE chave=?",
+6875:                 (key,),
+6876:             ).fetchone()
+6877:         return row["valor"] if row else default
+6878: 
+6879:     def base_health(self):
+6880:         audit = self.audit()
+6881:         gaps = self.possible_operational_gaps()
+6882: 
+6883:         last_check = self._meta_value("last_network_check_at")
+6884:         last_check_type = self._meta_value("last_network_check_type")
+6885: 
+6886:         try:
+6887:             last_errors = int(
+6888:                 self._meta_value("last_network_error_count", "0") or 0
+6889:             )
+6890:         except Exception:
+6891:             last_errors = 0
+6892: 
+6893:         structural_ok = (
+6894:             not audit["problems"]
+6895:             and not audit["incomplete"]
+6896:         )
+6897: 
+6898:         if not structural_ok:
+6899:             state = "ALERTA ESTRUTURAL"
+6900:         elif gaps:
+6901:             state = "OK ESTRUTURAL • REVISAR LACUNAS"
+6902:         else:
+6903:             state = "OK"
+6904: 
+6905:         return {
+6906:             "state": state,
+6907:             "audit": audit,
+6908:             "possible_gaps": gaps,
+6909:             "possible_gap_count": len(gaps),
+6910:             "pending_games": self.pending_game_count(),
+6911:             "last_network_check": last_check,
+6912:             "last_network_check_type": last_check_type,
+6913:             "last_network_errors": last_errors,
+6914:         }
+6915: 
+6916:     def auto_backup(self, reason="automatico", keep=5):
+6917:         backup_dir = Path(self.path).parent / "backups_automaticos"
+6918:         backup_dir.mkdir(parents=True, exist_ok=True)
+6919: 
+6920:         safe_reason = re.sub(
+6921:             r"[^A-Za-z0-9_-]+",
+===== L7918-L8017 =====
+7918:                 "rank_no_bicho": 4,
+7919:                 "rank_bicho": rank_group,
+7920:                 "frozen": frozen,
+7921:                 "principal": principal["numero"],
+7922:                 "segunda": segunda["numero"],
+7923:                 "terceira": terceira["numero"],
+7924:                 "principal_tied": principal_tied,
+7925:             })
+7926: 
+7927:         return {
+7928:             "kind": "Centena",
+7929:             "strategy": "Oficial 3+1",
+7930:             "scope": "1º–5º",
+7931:             "groups": unique_groups,
+7932:             "counts": {g: 4 for g in unique_groups},
+7933:             "requested_total": 20,
+7934:             "generated_total": len(rows),
+7935:             "rows": rows,
+7936:             "animals": animals,
+7937:             "previous_draw": previous_draw,
+7938:             "previous_dezenas": sorted(previous_dezenas),
+7939:             "freeze_rule": "principal_sai_congela__mesmo_bicho_reaparece_descongela",
+7940:         }
+7941: 
+7942: 
+7943:     def generate_centenas_meta_21(
+7944:         self,
+7945:         groups: list[int],
+7946:         total=20,
+7947:         previous_draw=None,
+7948:     ):
+7949:         """Centenas flexíveis do GP-H Meta usando proporção aproximada 2:1.
+7950: 
+7951:         A seleção de bichos vem do ranking Meta. A quantidade total é dividida
+7952:         de forma equilibrada entre os bichos; sobras ficam primeiro com os
+7953:         líderes do ranking. Dentro de cada bicho, aproximadamente 2/3 das
+7954:         Centenas usam a dezena principal ativa e 1/3 a segunda ativa.
+7955: 
+7956:         A máquina de congelamento do 3+1 é REUTILIZADA, sem alteração:
+7957:         principal livre -> principal + segunda; principal congelada -> segunda
+7958:         + terceira. Assim, 4 Centenas continuam sendo 3+1, 5 viram 3+2,
+7959:         6 viram 4+2, 8 viram 5+3 e 9 viram 6+3.
+7960:         """
+7961:         unique_groups = []
+7962:         for value in groups:
+7963:             g = int(value)
+7964:             if 1 <= g <= 25 and g not in unique_groups:
+7965:                 unique_groups.append(g)
+7966:         if not unique_groups:
+7967:             raise ValueError("O GP-H Meta não forneceu bichos para gerar Centenas.")
+7968: 
+7969:         total = max(1, int(total))
+7970:         if total < len(unique_groups):
+7971:             raise ValueError(
+7972:                 f"Com {len(unique_groups)} bichos, informe pelo menos {len(unique_groups)} Centenas "
+7973:                 "para que cada bicho receba ao menos uma."
+7974:             )
+7975: 
+7976:         counts = self.distribute_game_counts(total, unique_groups, kind="Centena")
+7977:         if sum(counts.values()) != total:
+7978:             raise ValueError("Não foi possível distribuir a quantidade pedida entre os bichos do Meta.")
+7979: 
+7980:         # Cada dezena possui 10 Centenas possíveis. Para preservar a proporção
+7981:         # 2:1 usando exatamente duas dezenas ativas, o limite íntegro é 15 por
+7982:         # bicho (10 + 5). Acima disso seria necessário quebrar a regra acordada.
+7983:         overloaded = [(g, qty) for g, qty in counts.items() if int(qty) > 15]
+7984:         if overloaded:
+7985:             worst = max(qty for _g, qty in overloaded)
+7986:             raise ValueError(
+7987:                 f"A distribuição 2:1 suporta até 15 Centenas por bicho; a configuração atual "
+7988:                 f"chegaria a {worst}. Aumente a quantidade de bichos do Meta ou reduza as Centenas."
+7989:             )
+7990: 
+7991:         if previous_draw is None:
+7992:             previous_draw = self.latest_operational_draw()
+7993:         if previous_draw is None:
+7994:             raise ValueError("Não há extração-base para aplicar o estado das dezenas.")
+7995: 
+7996:         rows = []
+7997:         animals = []
+7998: 
+7999:         for rank_group, g in enumerate(unique_groups, start=1):
+8000:             qty = int(counts[g])
+8001:             dez_rank = self.number_rankings_for_group(g, kind="Dezena", scope="1º–5º")
+8002:             if len(dez_rank) < 3:
+8003:                 raise ValueError(f"Ranking de dezenas insuficiente para o grupo {g:02d}.")
+8004: 
+8005:             principal, segunda, terceira = dez_rank[:3]
+8006:             freeze_state = self.centena_31_freeze_state(
+8007:                 g, principal["numero"], previous_draw=previous_draw
+8008:             )
+8009:             frozen = bool(freeze_state.get("frozen"))
+8010: 
+8011:             if frozen:
+8012:                 main_dez = segunda["numero"]
+8013:                 extra_dez = terceira["numero"]
+8014:                 main_name = "2/3 na 2ª dezena (principal congelada)"
+8015:                 extra_name = "1/3 na 3ª dezena"
+8016:             else:
+8017:                 main_dez = principal["numero"]
+===== L9555-L9633 =====
+9555:         if game["status"] == "AUDITADO":
+9556:             self.settle_game_financial(game_id)
+9557: 
+9558:         return self.frozen_game_details(game_id)["game"]
+9559: 
+9560:     def _parse_group_combo(self, number):
+9561:         groups = []
+9562:         for part in re.split(r"[-,/+ ]+", str(number)):
+9563:             part = part.strip()
+9564:             if not part:
+9565:                 continue
+9566:             try:
+9567:                 g = int(part)
+9568:             except Exception:
+9569:                 continue
+9570:             if 1 <= g <= 25 and g not in groups:
+9571:                 groups.append(g)
+9572:         return groups
+9573: 
+9574:     def _game_item_events(self, game, item, target_rows):
+9575:         kind = game["tipo"]
+9576:         number = str(item["numero"])
+9577:         sub = game.get("submodalidade")
+9578:         events = []
+9579: 
+9580:         if kind in GROUP_COMBO_SIZES:
+9581:             wanted = set(self._parse_group_combo(number))
+9582:             present = {int(r["grupo"]) for r in target_rows}
+9583:             expected = GROUP_COMBO_SIZES[kind]
+9584:             if len(wanted) == expected and wanted.issubset(present):
+9585:                 events.append({
+9586:                     "category": kind,
+9587:                     "premio": None,
+9588:                     "milhar": None,
+9589:                     "row": None,
+9590:                     "number": number,
+9591:                 })
+9592:             return events
+9593: 
+9594:         if kind in DEZENA_COMBO_SIZES:
+9595:             wanted = {
+9596:                 p.zfill(2)
+9597:                 for p in re.split(r"[-,/+ ]+", number)
+9598:                 if p.strip()
+9599:             }
+9600:             present = {
+9601:                 str(r["dezena"]).zfill(2)
+9602:                 for r in target_rows
+9603:             }
+9604:             expected = DEZENA_COMBO_SIZES[kind]
+9605:             if len(wanted) == expected and wanted.issubset(present):
+9606:                 events.append({
+9607:                     "category": kind,
+9608:                     "premio": None,
+9609:                     "milhar": None,
+9610:                     "row": None,
+9611:                     "number": number,
+9612:                 })
+9613:             return events
+9614: 
+9615:         if kind in PASSE_MODALITIES:
+9616:             groups = self._parse_group_combo(number)
+9617:             if len(groups) != 2:
+9618:                 return events
+9619: 
+9620:             first_row = next(
+9621:                 (
+9622:                     r for r in target_rows
+9623:                     if int(r.get("premio") or 0) == 1
+9624:                 ),
+9625:                 None,
+9626:             )
+9627:             tail_groups = {
+9628:                 int(r["grupo"])
+9629:                 for r in target_rows
+9630:                 if 2 <= int(r.get("premio") or 0) <= 5
+9631:             }
+9632: 
+9633:             if first_row:
+===== L9982-L10379 =====
+9982:                 / rec["indication_count"]
+9983:             )
+9984:             ranking.append(rec)
+9985: 
+9986:         ranking.sort(key=lambda r: (
+9987:             -r["indication_count"],
+9988:             -r["sum_prob"],
+9989:             -r["avg_lift"],
+9990:             r["grupo"],
+9991:         ))
+9992:         for idx, rec in enumerate(ranking, start=1):
+9993:             rec["rank"] = idx
+9994: 
+9995:         return {
+9996:             "method": "GP-H Histórico Concentrado v0.1",
+9997:             "base": base,
+9998:             "ranking": ranking,
+9999:             "selected": ranking[:top_n],
+10000:             "source_details": source_details,
+10001:             "top_n": top_n,
+10002:             "lookahead_safe": True,
+10003:             "repeated_sources_count_again": True,
+10004:         }
+10005: 
+10006:     @staticmethod
+10007:     def minimum_animals_for_combinations(size, quantity, max_animals=15):
+10008:         size = int(size)
+10009:         quantity = max(0, int(quantity))
+10010:         max_animals = max(size, int(max_animals))
+10011:         if quantity == 0:
+10012:             return 0
+10013:         for animals in range(size, max_animals + 1):
+10014:             if comb(animals, size) >= quantity:
+10015:                 return animals
+10016:         return None
+10017: 
+10018:     @staticmethod
+10019:     def generate_historical_concentrated_bundle(ranking, top_animals, requests, scope="1º–5º"):
+10020:         """Monta Duplas/Ternos/Quadras/Quinas com concentração progressiva nos líderes."""
+10021:         top_animals = max(2, min(15, int(top_animals)))
+10022:         selected = [dict(r) for r in list(ranking or [])[:top_animals]]
+10023:         if len(selected) < top_animals:
+10024:             raise ValueError(
+10025:                 f"O Histórico v0.1 produziu somente {len(selected)} bichos com sinal; "
+10026:                 f"foram solicitados {top_animals}."
+10027:             )
+10028: 
+10029:         definitions = (
+10030:             ("Dupla de Grupo", 2, "Dupla"),
+10031:             ("Terno de Grupo", 3, "Terno"),
+10032:             ("Quadra de Grupo", 4, "Quadra"),
+10033:             ("Quina de Grupo", 5, "Quina"),
+10034:         )
+10035:         bundle = []
+10036:         preview_rows = []
+10037: 
+10038:         for kind, size, short_name in definitions:
+10039:             qty = max(0, int((requests or {}).get(kind, 0)))
+10040:             if qty == 0:
+10041:                 continue
+10042:             if top_animals < size:
+10043:                 raise ValueError(f"{short_name} precisa de pelo menos {size} bichos.")
+10044:             available = comb(top_animals, size)
+10045:             if qty > available:
+10046:                 minimum = Database.minimum_animals_for_combinations(size, qty, max_animals=15)
+10047:                 extra = (
+10048:                     f" Use pelo menos {minimum} bichos."
+10049:                     if minimum is not None else
+10050:                     " O pedido excede o limite do método."
+10051:                 )
+10052:                 raise ValueError(
+10053:                     f"{qty} {short_name.lower()}(s) distintos não cabem em {top_animals} bichos: "
+10054:                     f"existem somente {available}.{extra}"
+10055:                 )
+10056: 
+10057:             # Cada combinação trabalha com índices do ranking. A primeira chave
+10058:             # (maior índice usado) faz o método esgotar o menor núcleo de líderes
+10059:             # antes de abrir para o próximo bicho. A segunda concentra ainda mais
+10060:             # nos primeiros colocados. Isso reproduz ABC, ABD, ACD, BCD, ABE.
+10061:             candidates = []
+10062:             for idx_combo in combinations(range(top_animals), size):
+10063:                 rows = [selected[i] for i in idx_combo]
+10064:                 candidates.append((
+10065:                     max(idx_combo),
+10066:                     sum(idx_combo),
+10067:                     -sum(int(r.get("indication_count") or 0) for r in rows),
+10068:                     -sum(float(r.get("sum_prob") or 0.0) for r in rows),
+10069:                     tuple(int(r["grupo"]) for r in rows),
+10070:                     idx_combo,
+10071:                 ))
+10072:             candidates.sort()
+10073: 
+10074:             game_rows = []
+10075:             for order, candidate in enumerate(candidates[:qty], start=1):
+10076:                 idx_combo = candidate[-1]
+10077:                 combo = [selected[i] for i in idx_combo]
+10078:                 groups = [int(r["grupo"]) for r in combo]
+10079:                 row = {
+10080:                     "grupo": None,
+10081:                     "bicho": " + ".join(BICHOS[g] for g in groups),
+10082:                     "numero": "-".join(f"{g:02d}" for g in groups),
+10083:                     "dezena_base": "—",
+10084:                     "regra": "GP-H Histórico Concentrado v0.1",
+10085:                     "modalidade": short_name,
+10086:                     "combo_groups": groups,
+10087:                     "combo_ranks": [int(selected[i].get("rank") or (i + 1)) for i in idx_combo],
+10088:                     "ordem_forca": order,
+10089:                 }
+10090:                 game_rows.append(row)
+10091:                 preview_rows.append(dict(row))
+10092: 
+10093:             bundle.append({
+10094:                 "kind": kind,
+10095:                 "strategy": "Histórico • Concentrado",
+10096:                 "scope": scope,
+10097:                 "selector": "GP-H Histórico Concentrado v0.1",
+10098:                 "groups": [int(r["grupo"]) for r in selected],
+10099:                 "rows": game_rows,
+10100:                 "historical_concentrated": True,
+10101:             })
+10102: 
+10103:         if not bundle:
+10104:             raise ValueError("Escolha pelo menos uma Dupla, Terno, Quadra ou Quina.")
+10105: 
+10106:         return {
+10107:             "kind": "Fechamento de Grupo",
+10108:             "strategy": "Histórico • Concentrado",
+10109:             "scope": scope,
+10110:             "selector": "GP-H Histórico Concentrado v0.1",
+10111:             "groups": [int(r["grupo"]) for r in selected],
+10112:             "rows": preview_rows,
+10113:             "bundle_generations": bundle,
+10114:             "ranking": selected,
+10115:             "requests": {k: int(v) for k, v in (requests or {}).items()},
+10116:             "top_animals": top_animals,
+10117:             "historical_concentrated": True,
+10118:         }
+10119: 
+10120:     def generate_group_combinations(
+10121:         self,
+10122:         groups,
+10123:         kind,
+10124:         total=5,
+10125:     ):
+10126:         size = GROUP_COMBO_SIZES.get(kind)
+10127:         if not size:
+10128:             raise ValueError("Modalidade de grupo combinada inválida.")
+10129: 
+10130:         unique = []
+10131:         for g in groups:
+10132:             g = int(g)
+10133:             if g not in unique:
+10134:                 unique.append(g)
+10135: 
+10136:         if len(unique) < size:
+10137:             raise ValueError(
+10138:                 f"{kind} precisa de pelo menos {size} grupos distintos."
+10139:             )
+10140: 
+10141:         combos = list(combinations(unique, size))
+10142:         rows = []
+10143: 
+10144:         for combo in combos[:max(1, int(total))]:
+10145:             rows.append({
+10146:                 "grupo": None,
+10147:                 "bicho": " + ".join(BICHOS[g] for g in combo),
+10148:                 "numero": "-".join(f"{g:02d}" for g in combo),
+10149:                 "dezena_base": "—",
+10150:                 "regra": kind,
+10151:             })
+10152: 
+10153:         return {
+10154:             "kind": kind,
+10155:             "strategy": "Combinação",
+10156:             "scope": "1º–5º",
+10157:             "groups": unique,
+10158:             "rows": rows,
+10159:         }
+10160: 
+10161:     def generate_passe_combinations(
+10162:         self,
+10163:         groups,
+10164:         kind,
+10165:         total=5,
+10166:     ):
+10167:         if kind not in PASSE_MODALITIES:
+10168:             raise ValueError("Modalidade Passe inválida.")
+10169: 
+10170:         unique = []
+10171:         for g in groups:
+10172:             g = int(g)
+10173:             if g not in unique:
+10174:                 unique.append(g)
+10175: 
+10176:         if len(unique) < 2:
+10177:             raise ValueError("Passe precisa de dois grupos distintos.")
+10178: 
+10179:         if kind == "Passe vai":
+10180:             pairs = [
+10181:                 (a, b)
+10182:                 for a in unique
+10183:                 for b in unique
+10184:                 if a != b
+10185:             ]
+10186:         else:
+10187:             pairs = list(combinations(unique, 2))
+10188: 
+10189:         rows = []
+10190:         for a, b in pairs[:max(1, int(total))]:
+10191:             rows.append({
+10192:                 "grupo": None,
+10193:                 "bicho": f"{BICHOS[a]} → {BICHOS[b]}" if kind == "Passe vai"
+10194:                     else f"{BICHOS[a]} ↔ {BICHOS[b]}",
+10195:                 "numero": f"{a:02d}-{b:02d}",
+10196:                 "dezena_base": "—",
+10197:                 "regra": kind,
+10198:             })
+10199: 
+10200:         return {
+10201:             "kind": kind,
+10202:             "strategy": "Passe",
+10203:             "scope": "1º–5º",
+10204:             "groups": unique,
+10205:             "rows": rows,
+10206:         }
+10207: 
+10208:     def generate_dezena_combinations(
+10209:         self,
+10210:         groups,
+10211:         kind,
+10212:         total=5,
+10213:     ):
+10214:         size = DEZENA_COMBO_SIZES.get(kind)
+10215:         if not size:
+10216:             raise ValueError("Modalidade de dezenas combinadas inválida.")
+10217: 
+10218:         candidates = []
+10219:         seen = set()
+10220: 
+10221:         for g in groups:
+10222:             ranking = self.number_rankings_for_group(
+10223:                 int(g),
+10224:                 kind="Dezena",
+10225:                 scope="1º–5º",
+10226:             )
+10227:             for row in ranking[:4]:
+10228:                 number = str(row["numero"]).zfill(2)
+10229:                 if number in seen:
+10230:                     continue
+10231:                 seen.add(number)
+10232:                 candidates.append({
+10233:                     "numero": number,
+10234:                     "grupo": int(g),
+10235:                     "bicho": BICHOS[int(g)],
+10236:                     "ocorrencias": int(row.get("ocorrencias") or 0),
+10237:                     "ultima": row.get("ultima") or "",
+10238:                 })
+10239: 
+10240:         candidates.sort(
+10241:             key=lambda r: (
+10242:                 -r["ocorrencias"],
+10243:                 r["ultima"],
+10244:                 r["numero"],
+10245:             )
+10246:         )
+10247: 
+10248:         combos = list(combinations(candidates, size))
+10249:         rows = []
+10250: 
+10251:         for combo in combos[:max(1, int(total))]:
+10252:             nums = [r["numero"] for r in combo]
+10253:             rows.append({
+10254:                 "grupo": None,
+10255:                 "bicho": " + ".join(nums),
+10256:                 "numero": "-".join(nums),
+10257:                 "dezena_base": "—",
+10258:                 "regra": kind,
+10259:             })
+10260: 
+10261:         return {
+10262:             "kind": kind,
+10263:             "strategy": "Dezenas históricas",
+10264:             "scope": "1º–5º",
+10265:             "groups": [int(g) for g in groups],
+10266:             "rows": rows,
+10267:         }
+10268: 
+10269:     def generate_inverted_numbers(
+10270:         self,
+10271:         groups,
+10272:         kind,
+10273:         total=10,
+10274:         scope="1º–5º",
+10275:     ):
+10276:         base_kind, _digits = INVERTED_MODALITIES[kind]
+10277:         generation = self.generate_historical_numbers(
+10278:             groups=groups,
+10279:             kind=base_kind,
+10280:             total=total,
+10281:             scope=scope,
+10282:         )
+10283:         generation["kind"] = kind
+10284:         generation["scope"] = scope
+10285:         generation["strategy"] = "Histórica invertida"
+10286: 
+10287:         for row in generation["rows"]:
+10288:             row["regra"] = (
+10289:                 f"{kind} • {self._unique_permutation_count(row['numero'])} inversões"
+10290:             )
+10291: 
+10292:         return generation
+10293: 
+10294:     def manual_generation(
+10295:         self,
+10296:         kind,
+10297:         numbers_text,
+10298:         scope="1º–5º",
+10299:         submodalidade=None,
+10300:     ):
+10301:         raw = str(numbers_text or "").strip()
+10302:         if not raw:
+10303:             raise ValueError("Informe pelo menos um palpite.")
+10304: 
+10305:         combo_kinds = (
+10306:             set(GROUP_COMBO_SIZES)
+10307:             | set(DEZENA_COMBO_SIZES)
+10308:             | set(PASSE_MODALITIES)
+10309:         )
+10310: 
+10311:         if kind in combo_kinds:
+10312:             tokens = [
+10313:                 t.strip()
+10314:                 for t in re.split(r"[,;\n]+", raw)
+10315:                 if t.strip()
+10316:             ]
+10317:         else:
+10318:             tokens = [
+10319:                 t.strip()
+10320:                 for t in re.split(r"[,;\s]+", raw)
+10321:                 if t.strip()
+10322:             ]
+10323: 
+10324:         rows = []
+10325:         seen = set()
+10326: 
+10327:         for token in tokens:
+10328:             if kind in GROUP_COMBO_SIZES:
+10329:                 expected = GROUP_COMBO_SIZES[kind]
+10330:                 groups = self._parse_group_combo(token)
+10331:                 if len(groups) != expected:
+10332:                     raise ValueError(
+10333:                         f"{kind} inválida: {token}. "
+10334:                         f"Informe {expected} grupos."
+10335:                     )
+10336:                 normalized_groups = sorted(groups)
+10337:                 normalized = "-".join(
+10338:                     f"{g:02d}" for g in normalized_groups
+10339:                 )
+10340:                 groups = normalized_groups
+10341:                 if normalized in seen:
+10342:                     continue
+10343:                 seen.add(normalized)
+10344:                 rows.append({
+10345:                     "grupo": None,
+10346:                     "bicho": " + ".join(BICHOS[g] for g in groups),
+10347:                     "numero": normalized,
+10348:                     "dezena_base": "—",
+10349:                     "regra": "Manual",
+10350:                 })
+10351:                 continue
+10352: 
+10353:             if kind in PASSE_MODALITIES:
+10354:                 groups = self._parse_group_combo(token)
+10355:                 if len(groups) != 2:
+10356:                     raise ValueError(
+10357:                         f"{kind} inválido: {token}. Informe dois grupos."
+10358:                     )
+10359:                 if kind == "Passe vai e vem":
+10360:                     groups = sorted(groups)
+10361:                 normalized = "-".join(
+10362:                     f"{g:02d}" for g in groups
+10363:                 )
+10364:                 if normalized in seen:
+10365:                     continue
+10366:                 seen.add(normalized)
+10367:                 rows.append({
+10368:                     "grupo": None,
+10369:                     "bicho": (
+10370:                         f"{BICHOS[groups[0]]} → {BICHOS[groups[1]]}"
+10371:                         if kind == "Passe vai"
+10372:                         else f"{BICHOS[groups[0]]} ↔ {BICHOS[groups[1]]}"
+10373:                     ),
+10374:                     "numero": normalized,
+10375:                     "dezena_base": "—",
+10376:                     "regra": "Manual",
+10377:                 })
+10378:                 continue
+10379: 
+===== L12876-L12951 =====
+12876: 
+12877:         target = db.game_planned_target(self.game) or {}
+12878:         target_date = target.get("data") or datetime.now().strftime("%Y-%m-%d")
+12879:         try:
+12880:             target_date_br = datetime.strptime(
+12881:                 target_date, "%Y-%m-%d"
+12882:             ).strftime("%d/%m/%Y")
+12883:         except Exception:
+12884:             target_date_br = target_date
+12885: 
+12886:         self.target_date = tk.StringVar(value=target_date_br)
+12887:         self.target_sort = tk.StringVar(
+12888:             value=target.get("sorteio") or "PT"
+12889:         )
+12890:         self.target_hour = tk.StringVar(
+12891:             value=target.get("hora") or "14:00"
+12892:         )
+12893: 
+12894:         fields = [
+12895:             (
+12896:                 "Tipo",
+12897:                 self.kind,
+12898:                 [
+12899:                     "Grupo",
+12900:                     "Dupla de Grupo",
+12901:                     "Terno de Grupo",
+12902:                     "Quadra de Grupo",
+12903:                     "Quina de Grupo",
+12904:                     "Passe vai",
+12905:                     "Passe vai e vem",
+12906:                     "Dezena",
+12907:                     "Duque de Dezena",
+12908:                     "Terno de Dezena",
+12909:                     "Dezena Invertida",
+12910:                     "Centena",
+12911:                     "Centena Invertida",
+12912:                     "Milhar",
+12913:                     "Milhar Invertida",
+12914:                 ],
+12915:             ),
+12916:             ("Colocação", self.scope, ["1º","1º–5º"]),
+12917:             ("Milhar", self.sub, ["Milhar","Milhar/Centena"]),
+12918:         ]
+12919: 
+12920:         for col, (label, var, values) in enumerate(fields):
+12921:             ttk.Label(
+12922:                 form,
+12923:                 text=label,
+12924:                 style="Card.TLabel",
+12925:             ).grid(row=0,column=col,sticky="w",padx=(0,8))
+12926: 
+12927:             cb = ttk.Combobox(
+12928:                 form,
+12929:                 textvariable=var,
+12930:                 values=values,
+12931:                 width=16,
+12932:                 state="readonly",
+12933:             )
+12934:             cb.grid(row=1,column=col,sticky="w",padx=(0,8),pady=(2,7))
+12935: 
+12936:         ttk.Label(
+12937:             form,
+12938:             text="Data alvo",
+12939:             style="Card.TLabel",
+12940:         ).grid(row=2,column=0,sticky="w",padx=(0,8))
+12941: 
+12942:         ttk.Entry(
+12943:             form,
+12944:             textvariable=self.target_date,
+12945:             width=16,
+12946:         ).grid(row=3,column=0,sticky="w",padx=(0,8),pady=(2,7))
+12947: 
+12948:         ttk.Label(
+12949:             form,
+12950:             text="Sorteio",
+12951:             style="Card.TLabel",
+===== L13080-L13155 =====
+13080: 
+13081: class PayoutConfigDialog(tk.Toplevel):
+13082:     def __init__(self, master, db: Database, on_saved=None):
+13083:         super().__init__(master)
+13084:         self.db = db
+13085:         self.on_saved = on_saved
+13086: 
+13087:         self.title("Cotações / Tabela de prêmios")
+13088:         fit_toplevel_to_screen(self, 860, 650, min_width=780, min_height=590, parent=master)
+13089:         self.resizable(True, True)
+13090: 
+13091:         outer = ttk.Frame(self, padding=14)
+13092:         outer.pack(fill="both", expand=True)
+13093: 
+13094:         ttk.Label(
+13095:             outer,
+13096:             text="Cotações da banca",
+13097:             font=("Segoe UI Semibold", 16),
+13098:         ).pack(anchor="w")
+13099: 
+13100:         ttk.Label(
+13101:             outer,
+13102:             text=(
+13103:                 "Valores por R$ 1,00. Em 1º–5º a cotação é a mesma, "
+13104:                 "mas o valor do palpite é dividido por 5 posições. "
+13105:                 "Terno de Grupo é colocação fixa e não divide por 5."
+13106:             ),
+13107:             wraplength=810,
+13108:         ).pack(anchor="w", pady=(4,10))
+13109: 
+13110:         current = db.quote_catalog()
+13111:         self.vars = {}
+13112: 
+13113:         simple = ttk.Frame(
+13114:             outer,
+13115:             style="Card.TFrame",
+13116:             padding=10,
+13117:         )
+13118:         simple.pack(fill="x")
+13119: 
+13120:         modalities = list(DEFAULT_QUOTES.keys())
+13121:         split = (len(modalities) + 1) // 2
+13122: 
+13123:         for side, subset in enumerate(
+13124:             [modalities[:split], modalities[split:]]
+13125:         ):
+13126:             base_col = side * 3
+13127: 
+13128:             ttk.Label(
+13129:                 simple,
+13130:                 text="Modalidade",
+13131:                 style="Card.TLabel",
+13132:                 font=("Segoe UI Semibold", 9),
+13133:             ).grid(
+13134:                 row=0,column=base_col,sticky="w",padx=(0,8),pady=(0,5)
+13135:             )
+13136: 
+13137:             ttk.Label(
+13138:                 simple,
+13139:                 text="Cotação",
+13140:                 style="Card.TLabel",
+13141:                 font=("Segoe UI Semibold", 9),
+13142:             ).grid(
+13143:                 row=0,column=base_col+1,sticky="w",padx=(0,18),pady=(0,5)
+13144:             )
+13145: 
+13146:             for row, modality in enumerate(subset, start=1):
+13147:                 ttk.Label(
+13148:                     simple,
+13149:                     text=modality,
+13150:                     style="Card.TLabel",
+13151:                 ).grid(
+13152:                     row=row,column=base_col,sticky="w",padx=(0,8),pady=3
+13153:                 )
+13154: 
+13155:                 var = tk.StringVar(
+===== L18028-L18144 =====
+18028: 
+18029:         self.manual_builder_family_changed(clear_rows=False)
+18030:         self.manual_number_entry.focus_set()
+18031:         self.after_idle(self._play_finalize_layout)
+18032: 
+18033:     def manual_builder_get_target(self):
+18034:         target = self.manual_target_map.get(self.manual_target_var.get())
+18035:         return dict(target) if target else None
+18036: 
+18037:     def manual_builder_family_changed(self, _event=None, clear_rows=True):
+18038:         variants = {
+18039:             "Grupo": ["Simples", "Dupla", "Terno", "Quadra", "Quina", "Passe vai", "Passe vai e vem"],
+18040:             "Dezena": ["Normal", "Duque", "Terno", "Invertida"],
+18041:             "Centena": ["Normal", "Invertida"],
+18042:             "Milhar": ["Normal", "Invertida"],
+18043:         }.get(self.manual_family.get(), ["Normal"])
+18044:         self.manual_variant_cb.configure(values=variants)
+18045:         if self.manual_variant.get() not in variants:
+18046:             self.manual_variant.set(variants[0])
+18047:         self.manual_builder_variant_changed(clear_rows=clear_rows)
+18048: 
+18049:     def manual_builder_variant_changed(self, _event=None, clear_rows=True):
+18050:         mapping = {
+18051:             ("Grupo", "Simples"): "Grupo",
+18052:             ("Grupo", "Dupla"): "Dupla de Grupo",
+18053:             ("Grupo", "Terno"): "Terno de Grupo",
+18054:             ("Grupo", "Quadra"): "Quadra de Grupo",
+18055:             ("Grupo", "Quina"): "Quina de Grupo",
+18056:             ("Grupo", "Passe vai"): "Passe vai",
+18057:             ("Grupo", "Passe vai e vem"): "Passe vai e vem",
+18058:             ("Dezena", "Normal"): "Dezena",
+18059:             ("Dezena", "Duque"): "Duque de Dezena",
+18060:             ("Dezena", "Terno"): "Terno de Dezena",
+18061:             ("Dezena", "Invertida"): "Dezena Invertida",
+18062:             ("Centena", "Normal"): "Centena",
+18063:             ("Centena", "Invertida"): "Centena Invertida",
+18064:             ("Milhar", "Normal"): "Milhar",
+18065:             ("Milhar", "Invertida"): "Milhar Invertida",
+18066:         }
+18067:         kind = mapping.get((self.manual_family.get(), self.manual_variant.get()), self.manual_family.get())
+18068:         changed = self.manual_kind.get() != kind
+18069:         self.manual_kind.set(kind)
+18070:         if clear_rows and changed and self.manual_builder_rows:
+18071:             self.manual_builder_rows.clear()
+18072:             self.manual_add_status.configure(text="Lista limpa porque a modalidade mudou.", style="CardMuted.TLabel")
+18073:         self.manual_builder_controls_changed()
+18074: 
+18075:     def manual_builder_controls_changed(self):
+18076:         kind = self.manual_kind.get()
+18077:         if kind == "Milhar":
+18078:             self.manual_submode_label.grid()
+18079:             self.manual_submode_cb.grid()
+18080:             self.manual_submode_cb.configure(state="readonly")
+18081:         else:
+18082:             self.manual_submode_label.grid_remove()
+18083:             self.manual_submode_cb.grid_remove()
+18084: 
+18085:         if kind in FIXED_PLACEMENT_MODALITIES:
+18086:             self.manual_scope.set("1º–5º")
+18087:             self.manual_scope_cb.configure(state="disabled")
+18088:         else:
+18089:             self.manual_scope_cb.configure(state="readonly")
+18090: 
+18091:         hints = {
+18092:             "Grupo": "Digite um grupo por vez. Ex.: 01",
+18093:             "Dupla de Grupo": "Digite os dois grupos. Ex.: 01-10",
+18094:             "Terno de Grupo": "Ex.: 01-10-23",
+18095:             "Quadra de Grupo": "Ex.: 01-05-10-23",
+18096:             "Quina de Grupo": "Ex.: 01-05-10-19-23",
+18097:             "Passe vai": "Ordem importa. Ex.: 05-22",
+18098:             "Passe vai e vem": "Ex.: 05-22",
+18099:             "Dezena": "Digite uma dezena por vez. Ex.: 38",
+18100:             "Duque de Dezena": "Ex.: 23-71",
+18101:             "Terno de Dezena": "Ex.: 23-71-05",
+18102:             "Dezena Invertida": "Ex.: 38",
+18103:             "Centena": "Digite uma centena por vez. Ex.: 904",
+18104:             "Centena Invertida": "Ex.: 538",
+18105:             "Milhar": "Digite uma milhar por vez. Ex.: 1000",
+18106:             "Milhar Invertida": "Ex.: 4825",
+18107:         }
+18108:         self.manual_kind_hint.configure(text=hints.get(kind, "Digite o palpite e pressione Adicionar."))
+18109:         self.manual_builder_refresh()
+18110: 
+18111:     def manual_builder_add_number(self):
+18112:         raw = self.manual_number.get().strip()
+18113:         if not raw:
+18114:             return
+18115:         kind = self.manual_kind.get()
+18116:         try:
+18117:             generation = self.db.manual_generation(
+18118:                 kind,
+18119:                 raw,
+18120:                 scope=self.manual_scope.get(),
+18121:                 submodalidade=(self.manual_submode.get() if kind == "Milhar" else None),
+18122:             )
+18123:         except Exception as exc:
+18124:             self.manual_add_status.configure(text=str(exc), style="Danger.TLabel")
+18125:             return
+18126: 
+18127:         existing = {str(r.get("numero")) for r in self.manual_builder_rows}
+18128:         added = 0
+18129:         last = None
+18130:         for row in generation["rows"]:
+18131:             number = str(row.get("numero"))
+18132:             if number in existing:
+18133:                 continue
+18134:             self.manual_builder_rows.append(dict(row))
+18135:             existing.add(number)
+18136:             added += 1
+18137:             last = number
+18138: 
+18139:         if added:
+18140:             self.manual_number.set("")
+18141:             self.manual_add_status.configure(
+18142:                 text=f"✓ {last} adicionado" if added == 1 else f"✓ {added} palpites adicionados",
+18143:                 style="Success.TLabel",
+18144:             )
+===== L18256-L18477 =====
+18256:             report = self.db.register_ticket(
+18257:                 [{
+18258:                     "generation": generation,
+18259:                     "stake_per_item": unit,
+18260:                     "origem_jogada": "Manual",
+18261:                 }],
+18262:                 base_draw=self.db.latest_operational_draw(),
+18263:             )
+18264:         except Exception as exc:
+18265:             messagebox.showerror("Jogo manual", str(exc), parent=self)
+18266:             return
+18267: 
+18268:         ticket_id = report["ticket_id"]
+18269:         self.manual_builder_rows.clear()
+18270:         self._update_results_nav_badge()
+18271:         messagebox.showinfo(
+18272:             "Bilhete salvo",
+18273:             f"Bilhete #{ticket_id} registrado.\nTotal apostado: {self._money(total)}.",
+18274:             parent=self,
+18275:         )
+18276:         self.play_show_games(select_ticket_id=ticket_id)
+18277: 
+18278:     def play_hc_requested_counts(self):
+18279:         values = (
+18280:             ("Dupla de Grupo", self.play_hc_duplas),
+18281:             ("Terno de Grupo", self.play_hc_ternos),
+18282:             ("Quadra de Grupo", self.play_hc_quadras),
+18283:             ("Quina de Grupo", self.play_hc_quinas),
+18284:         )
+18285:         out = {}
+18286:         for kind, variable in values:
+18287:             try:
+18288:                 out[kind] = max(0, int(str(variable.get()).strip() or "0"))
+18289:             except Exception:
+18290:                 out[kind] = 0
+18291:         return out
+18292: 
+18293:     def play_hc_minimum_needed(self):
+18294:         requests = self.play_hc_requested_counts()
+18295:         sizes = {
+18296:             "Dupla de Grupo": 2, "Terno de Grupo": 3,
+18297:             "Quadra de Grupo": 4, "Quina de Grupo": 5,
+18298:         }
+18299:         needed = 2
+18300:         for kind, qty in requests.items():
+18301:             if qty <= 0:
+18302:                 continue
+18303:             value = self.db.minimum_animals_for_combinations(sizes[kind], qty, max_animals=15)
+18304:             if value is None:
+18305:                 return None
+18306:             needed = max(needed, value)
+18307:         return needed
+18308: 
+18309:     def play_hc_use_minimum(self):
+18310:         minimum = self.play_hc_minimum_needed()
+18311:         if minimum is None:
+18312:             messagebox.showerror(
+18313:                 "Histórico Concentrado",
+18314:                 "A quantidade pedida excede o limite de 15 bichos com sinal do método.",
+18315:                 parent=self,
+18316:             )
+18317:             return
+18318:         self.play_hc_base_animals.set(str(minimum))
+18319: 
+18320:     def play_hc_refresh(self):
+18321:         if not hasattr(self, "play_hc_status"):
+18322:             return
+18323:         requests = self.play_hc_requested_counts()
+18324:         try:
+18325:             animals = max(2, min(15, int(str(self.play_hc_base_animals.get()).strip() or "2")))
+18326:         except Exception:
+18327:             animals = 2
+18328:         total = sum(requests.values())
+18329:         self.play_total.set(str(max(1, total)))
+18330:         maxima = {
+18331:             "Dupla": comb(animals, 2) if animals >= 2 else 0,
+18332:             "Terno": comb(animals, 3) if animals >= 3 else 0,
+18333:             "Quadra": comb(animals, 4) if animals >= 4 else 0,
+18334:             "Quina": comb(animals, 5) if animals >= 5 else 0,
+18335:         }
+18336:         minimum = self.play_hc_minimum_needed()
+18337:         if total <= 0:
+18338:             status = "Escolha pelo menos um jogo. "
+18339:         elif minimum is None:
+18340:             status = "Pedido acima do limite do método. "
+18341:         elif animals < minimum:
+18342:             status = f"Pedido exige no mínimo {minimum} bichos. "
+18343:         else:
+18344:             status = f"Pedido válido com {animals} bichos. "
+18345:         status += (
+18346:             f"Disponíveis: {maxima['Dupla']} Duplas • {maxima['Terno']} Ternos • "
+18347:             f"{maxima['Quadra']} Quadras • {maxima['Quina']} Quinas. "
+18348:             "As combinações mais concentradas nos líderes vêm primeiro."
+18349:         )
+18350:         self.play_hc_status.configure(text=status)
+18351:         if hasattr(self, "play_financial_label"):
+18352:             self.play_financial_refresh()
+18353: 
+18354:     def play_hide_hc_state(self):
+18355:         card = getattr(self, "play_hc_state_card", None)
+18356:         if card is not None:
+18357:             try:
+18358:                 card.pack_forget()
+18359:             except Exception:
+18360:                 pass
+18361: 
+18362:     def play_render_hc_state(self, generation):
+18363:         self.play_hide_hc_state()
+18364:         if not generation or not generation.get("historical_concentrated"):
+18365:             return
+18366:         card = getattr(self, "play_hc_state_card", None)
+18367:         rows_host = getattr(self, "play_hc_state_rows", None)
+18368:         note = getattr(self, "play_hc_state_note", None)
+18369:         before = getattr(self, "play_generation_card", None)
+18370:         if card is None or rows_host is None or note is None or before is None:
+18371:             return
+18372:         for child in rows_host.winfo_children():
+18373:             child.destroy()
+18374:         ranking = list(generation.get("ranking") or [])
+18375:         requests = generation.get("requests") or {}
+18376:         requested_text = " • ".join(
+18377:             f"{int(qty)} {label}"
+18378:             for kind, label in (("Dupla de Grupo","Duplas"),("Terno de Grupo","Ternos"),("Quadra de Grupo","Quadras"),("Quina de Grupo","Quinas"))
+18379:             if (qty := int(requests.get(kind, 0))) > 0
+18380:         )
+18381:         if generation.get("meta_bundle"):
+18382:             note.configure(text=(
+18383:                 f"{len(ranking)} bichos-base • {requested_text} • ranking GP-H Meta congelado antes do resultado"
+18384:             ))
+18385:         else:
+18386:             note.configure(text=(
+18387:                 f"{len(ranking)} bichos-base • {requested_text} • repetição na extração-base conta novamente, como no Histórico v0.1"
+18388:             ))
+18389:         for idx, row in enumerate(ranking, start=1):
+18390:             letter = chr(64 + idx) if idx <= 26 else str(idx)
+18391:             if generation.get("meta_bundle"):
+18392:                 detail_text = f"• score Meta {float(row.get('score') or 0.0):.3f}"
+18393:             else:
+18394:                 detail_text = (
+18395:                     f"• {int(row.get('indication_count') or 0)} indicação(ões)  "
+18396:                     f"• soma {float(row.get('sum_prob') or 0.0)*100:.2f}%"
+18397:                 )
+18398:             label = ttk.Label(
+18399:                 rows_host,
+18400:                 text=(
+18401:                     f"{letter}  {BICHOS[int(row['grupo'])]} · G{int(row['grupo']):02d}  "
+18402:                     f"{detail_text}"
+18403:                 ),
+18404:                 style="Card.TLabel" if idx <= 3 else "CardMuted.TLabel",
+18405:             )
+18406:             label.pack(anchor="w", pady=(0, 1))
+18407:         card.pack(fill="x", pady=(0, 6), before=before)
+18408: 
+18409:     def play_family_changed(self, _event=None):
+18410:         variants = {
+18411:             "Grupo": ["Simples", "Dupla", "Terno", "Quadra", "Quina", "Fechamento", "Passe vai", "Passe vai e vem"],
+18412:             "Dezena": ["Normal", "Duque", "Terno", "Invertida"],
+18413:             "Centena": ["Normal", "Invertida"],
+18414:             "Milhar": ["Normal", "Invertida"],
+18415:         }.get(self.play_family.get(), ["Normal"])
+18416:         self.play_variant_cb.configure(values=variants)
+18417:         if self.play_variant.get() not in variants:
+18418:             self.play_variant.set(variants[0])
+18419:         self.play_variant_changed()
+18420: 
+18421:     def play_variant_changed(self, _event=None):
+18422:         family = self.play_family.get()
+18423:         variant = self.play_variant.get()
+18424:         mapping = {
+18425:             ("Grupo", "Simples"): "Grupo",
+18426:             ("Grupo", "Dupla"): "Dupla de Grupo",
+18427:             ("Grupo", "Terno"): "Terno de Grupo",
+18428:             ("Grupo", "Quadra"): "Quadra de Grupo",
+18429:             ("Grupo", "Quina"): "Quina de Grupo",
+18430:             ("Grupo", "Fechamento"): "Fechamento de Grupo",
+18431:             ("Grupo", "Passe vai"): "Passe vai",
+18432:             ("Grupo", "Passe vai e vem"): "Passe vai e vem",
+18433:             ("Dezena", "Normal"): "Dezena",
+18434:             ("Dezena", "Duque"): "Duque de Dezena",
+18435:             ("Dezena", "Terno"): "Terno de Dezena",
+18436:             ("Dezena", "Invertida"): "Dezena Invertida",
+18437:             ("Centena", "Normal"): "Centena",
+18438:             ("Centena", "Invertida"): "Centena Invertida",
+18439:             ("Milhar", "Normal"): "Milhar",
+18440:             ("Milhar", "Invertida"): "Milhar Invertida",
+18441:         }
+18442:         self.play_kind.set(mapping.get((family, variant), family))
+18443:         self.play_controls_changed()
+18444: 
+18445:     def play_get_selected_target(self):
+18446:         label = self.play_target_var.get()
+18447:         target = self.play_target_map.get(label)
+18448:         return dict(target) if target else None
+18449: 
+18450:     def play_target_changed(self, _event=None):
+18451:         self.play_generation = None
+18452: 
+18453:         for child in self.play_grid_container.winfo_children():
+18454:             child.destroy()
+18455: 
+18456:         target = self.play_get_selected_target()
+18457:         ttk.Label(
+18458:             self.play_grid_container,
+18459:             text="Alvo alterado para " + self._format_target(target) + ". Gere novamente os palpites.",
+18460:             style="CardMuted.TLabel",
+18461:         ).pack(pady=10)
+18462: 
+18463:         self.play_controls_changed()
+18464:         self.play_refresh_ticket()
+18465:         self._play_refresh_shadow_recommendation()
+18466: 
+18467:     def play_scope_changed(self, _event=None):
+18468:         self.play_financial_refresh()
+18469:         self._play_refresh_shadow_recommendation()
+18470: 
+18471:     def play_value_details(self, count=None):
+18472:         if count is None:
+18473:             count = (
+18474:                 len(self.play_generation.get("rows", []))
+18475:                 if self.play_generation
+18476:                 else int(self.play_total.get() or 0)
+18477:             )
+===== L18491-L18566 =====
+18491:             stake = raw
+18492:             total = stake * count
+18493: 
+18494:         return {
+18495:             "stake_per_item": stake,
+18496:             "total": total,
+18497:             "input_value": raw,
+18498:             "mode": self.play_value_mode.get(),
+18499:         }
+18500: 
+18501:     def play_manual_input(self):
+18502:         kind = self.play_kind.get()
+18503:         target = self.play_get_selected_target()
+18504: 
+18505:         if not target:
+18506:             messagebox.showerror(
+18507:                 "Entrada manual",
+18508:                 "Selecione a rodada-alvo.",
+18509:                 parent=self,
+18510:             )
+18511:             return
+18512: 
+18513:         hints = {
+18514:             "Grupo":"Ex.: 01, 10, 23",
+18515:             "Dupla de Grupo":"Ex.: 01-10, 05-23",
+18516:             "Terno de Grupo":"Ex.: 01-02-03, 05-10-22",
+18517:             "Quadra de Grupo":"Ex.: 01-02-03-04",
+18518:             "Quina de Grupo":"Ex.: 01-02-03-04-05",
+18519:             "Passe vai":"Ex.: 05-22 (primeiro grupo → segundo)",
+18520:             "Passe vai e vem":"Ex.: 05-22",
+18521:             "Dezena":"Ex.: 05, 38, 90",
+18522:             "Duque de Dezena":"Ex.: 23-71, 05-38",
+18523:             "Terno de Dezena":"Ex.: 23-71-05",
+18524:             "Dezena Invertida":"Ex.: 38, 25",
+18525:             "Centena":"Ex.: 238, 904, 167",
+18526:             "Centena Invertida":"Ex.: 538, 774",
+18527:             "Milhar":"Ex.: 1238, 5904, 0167",
+18528:             "Milhar Invertida":"Ex.: 4825, 1123",
+18529:         }
+18530: 
+18531:         text = simpledialog.askstring(
+18532:             "Entrada manual",
+18533:             (
+18534:                 f"{kind} • {self.play_scope.get()}\n"
+18535:                 f"{hints.get(kind, '')}\n\n"
+18536:                 "Cole ou digite os palpites:"
+18537:             ),
+18538:             parent=self,
+18539:         )
+18540: 
+18541:         if text is None:
+18542:             return
+18543: 
+18544:         try:
+18545:             generation = self.db.manual_generation(
+18546:                 kind,
+18547:                 text,
+18548:                 scope=self.play_scope.get(),
+18549:                 submodalidade=(
+18550:                     self.play_submode.get()
+18551:                     if kind == "Milhar"
+18552:                     else None
+18553:                 ),
+18554:             )
+18555: 
+18556:             generation["intended_target"] = target
+18557:             generation["target_mode"] = "ALVO_ESPECIFICO"
+18558:             generation["selector"] = "Manual"
+18559:             generation["strategy"] = "Manual"
+18560: 
+18561:             self.play_generation = generation
+18562:             self.play_total.set(
+18563:                 str(len(generation["rows"]))
+18564:             )
+18565:             self.play_render_generation()
+18566:             self.play_financial_refresh()
+===== L19053-L19249 =====
+19053:                 "Oficial • Reset + 3+1",
+19054:                 "★ META • GP-H Meta v0.1",
+19055:                 "Oficial • Reset + Histórica",
+19056:                 "Especial • Seca do Dia 1º",
+19057:                 "Experimental • Puxada Combinada",
+19058:                 "Experimental • Similaridade do Dia",
+19059:                 "Manual",
+19060:             ]
+19061:         elif kind == "Milhar":
+19062:             methods = [
+19063:                 "Oficial • Reset + Histórica",
+19064:                 "★ META • GP-H Meta v0.1",
+19065:                 "Especial • Seca do Dia 1º",
+19066:                 "Experimental • Puxada Combinada",
+19067:                 "Experimental • Similaridade do Dia",
+19068:                 "Manual",
+19069:             ]
+19070:         elif kind == "Grupo":
+19071:             methods = [
+19072:                 "Oficial • Reset",
+19073:                 "★ META • GP-H Meta v0.1",
+19074:                 "Experimental • Puxada Combinada",
+19075:                 "Experimental • Similaridade do Dia",
+19076:                 "Manual",
+19077:             ]
+19078:         elif kind in GROUP_COMBO_SIZES or kind in PASSE_MODALITIES:
+19079:             methods = [
+19080:                 "Oficial • Reset combinações",
+19081:                 "★ META • GP-H Meta v0.1",
+19082:                 "Experimental • Puxada Combinada",
+19083:                 "Experimental • Similaridade combinações",
+19084:                 "Manual",
+19085:             ]
+19086:         elif kind in DEZENA_COMBO_SIZES or kind in INVERTED_MODALITIES or kind == "Dezena":
+19087:             methods = [
+19088:                 "Oficial • Reset + Histórica",
+19089:                 "★ META • GP-H Meta v0.1",
+19090:                 "Experimental • Puxada Combinada",
+19091:                 "Experimental • Similaridade do Dia",
+19092:                 "Manual",
+19093:             ]
+19094:         else:
+19095:             methods = ["Manual"]
+19096: 
+19097:         if method not in methods:
+19098:             self.play_method.set(methods[0])
+19099:             method = methods[0]
+19100:         self.play_method_cb.configure(values=methods, state="readonly")
+19101: 
+19102:         # Milhar/Centena só faz sentido na Milhar normal.
+19103:         if kind == "Milhar":
+19104:             self.play_submode_label.grid()
+19105:             self.play_submode_cb.grid()
+19106:             self.play_submode_cb.configure(state="readonly")
+19107:         else:
+19108:             self.play_submode_cb.configure(state="disabled")
+19109:             self.play_submode_label.grid_remove()
+19110:             self.play_submode_cb.grid_remove()
+19111: 
+19112:         # A colocação é escolha do bilhete, não uma trava do método.
+19113:         # Somente modalidades que são estruturalmente de colocação fixa
+19114:         # continuam bloqueadas por regra própria da modalidade.
+19115:         if fixed:
+19116:             self.play_scope.set("1º–5º")
+19117:             self.play_scope_cb.configure(state="disabled")
+19118:         else:
+19119:             self.play_scope_cb.configure(state="readonly")
+19120: 
+19121:         if kind == "Fechamento de Grupo":
+19122:             self.play_hc_card.pack(fill="x", pady=(0, 6), before=self.play_stake_card)
+19123:             self.play_total_label.grid_remove()
+19124:             self.play_total_spin.grid_remove()
+19125:             self.play_hc_refresh()
+19126:         else:
+19127:             self.play_hc_card.pack_forget()
+19128:             self.play_total_label.grid()
+19129:             self.play_total_spin.grid()
+19130:             if kind == "Centena" and method == "Oficial • Reset + 3+1":
+19131:                 self.play_total.set("20")
+19132:                 self.play_total_spin.configure(state="disabled")
+19133:             else:
+19134:                 self.play_total_spin.configure(state="normal")
+19135: 
+19136:         is_meta = method.startswith("★ META")
+19137:         if is_meta:
+19138:             self.play_meta_card.pack(fill="x", pady=(0, 6), before=self.play_stake_card)
+19139:             if kind == "Fechamento de Grupo":
+19140:                 self.play_meta_animals_label.grid_remove()
+19141:                 self.play_meta_animals_spin.grid_remove()
+19142:                 self.play_meta_status.configure(
+19143:                     text="No Fechamento, a quantidade de bichos é definida no cartão Fechamento configurável abaixo."
+19144:                 )
+19145:             else:
+19146:                 self.play_meta_animals_label.grid()
+19147:                 self.play_meta_animals_spin.grid()
+19148:                 self.play_meta_status.configure(
+19149:                     text="Escolha quantos bichos do topo do Meta entrarão no jogo. Sobras de quantidade favorecem os primeiros do ranking."
+19150:                 )
+19151:         else:
+19152:             self.play_meta_card.pack_forget()
+19153: 
+19154:         if kind == "Grupo" and self.play_total.get() == "20":
+19155:             self.play_total.set("5")
+19156:         if kind in GROUP_COMBO_SIZES:
+19157:             default_qty = {
+19158:                 "Dupla de Grupo":"5", "Terno de Grupo":"3", "Quadra de Grupo":"2", "Quina de Grupo":"1"
+19159:             }[kind]
+19160:             if self.play_total.get() == "20":
+19161:                 self.play_total.set(default_qty)
+19162: 
+19163:         target = self.play_get_selected_target()
+19164:         is_next = self.db.is_next_operational_target(target)
+19165: 
+19166:         # Etiqueta visual de origem do método.
+19167:         if method.startswith("★ META"):
+19168:             badge = ("META • ADAPTATIVO", "#0B6273", "#E7FDFF")
+19169:             help_text = (
+19170:                 "GP-H Meta v0.1 usa o ranking aprendido com snapshots auditados. "
+19171:                 "A estrutura do cérebro permanece congelada e a previsão usada no jogo é congelada antes do resultado."
+19172:             )
+19173:         elif method.startswith("Oficial"):
+19174:             badge = ("OFICIAL", "#124A7A", "#DCEEFF")
+19175:             help_text = "Reset é o seletor oficial. Métodos oficiais geram apenas para a próxima rodada operacional."
+19176:         elif method.startswith("Histórico"):
+19177:             badge = ("HISTÓRICO", "#155E63", "#D9FAF5")
+19178:             help_text = (
+19179:                 "Recupera o GP-H Histórico v0.1 que teve o melhor resultado nos Ternos. "
+19180:                 "Terno preserva o fechamento concentrado; Dupla, Quadra e Quina são extensões prospectivas da mesma regra."
+19181:             )
+19182:         elif method.startswith("Experimental"):
+19183:             badge = ("EXPERIMENTAL", "#4C2A78", "#E9D9FF")
+19184:             if "Puxada" in method:
+19185:                 help_text = "Puxada Combinada usa convergência histórica por estado ×1/×2/×3+ e permanece em avaliação prospectiva."
+19186:             else:
+19187:                 help_text = "Similaridade do Dia permanece separada do desempenho oficial e só gera para a próxima rodada."
+19188:         elif method.startswith("Especial"):
+19189:             badge = ("ESPECIAL", "#7A4D10", "#FFE7B0")
+19190:             help_text = "Seca do Dia usa o dia anterior ao alvo e joga somente no 1º prêmio da rodada escolhida."
+19191:         else:
+19192:             badge = ("MANUAL", "#34465A", "#E3EDF6")
+19193:             help_text = "Você informa os números. O modo Manual permite preparar qualquer rodada futura exibida."
+19194: 
+19195:         self.play_method_badge.configure(text=badge[0], bg=badge[1], fg=badge[2])
+19196:         self.play_generate_btn.configure(
+19197:             text=(
+19198:                 "INSERIR NÚMEROS" if method == "Manual" else
+19199:                 "GERAR COM META" if method.startswith("★ META") else
+19200:                 "GERAR FECHAMENTO" if method == "Histórico • Concentrado" else
+19201:                 "GERAR JOGO"
+19202:             )
+19203:         )
+19204: 
+19205:         if target and not is_next and method != "Manual" and method != "Especial • Seca do Dia 1º":
+19206:             help_text += " O alvo escolhido não é o próximo; selecione Manual ou volte para a próxima rodada."
+19207:         self.play_method_help.configure(text=help_text)
+19208: 
+19209:         if hasattr(self, "play_target_hint"):
+19210:             if target:
+19211:                 prefix = "PRÓXIMA • " if is_next else "FUTURA • "
+19212:                 hint = prefix + self._format_target(target)
+19213:                 if not is_next:
+19214:                     hint += " — métodos automáticos ficam bloqueados para preservar o teste prospectivo."
+19215:             else:
+19216:                 hint = "Selecione uma rodada."
+19217:             self.play_target_hint.configure(text=hint)
+19218: 
+19219:         self.play_generation = None
+19220:         self.play_financial_refresh()
+19221:         if hasattr(self, "play_recommendation_label"):
+19222:             self._play_refresh_shadow_recommendation()
+19223: 
+19224:     def play_hide_31_state(self):
+19225:         card = getattr(self, "play_31_state_card", None)
+19226:         if card is not None:
+19227:             try:
+19228:                 card.pack_forget()
+19229:             except Exception:
+19230:                 pass
+19231: 
+19232:     def play_render_31_state(self, generation):
+19233:         self.play_hide_31_state()
+19234: 
+19235:         if (
+19236:             not generation
+19237:             or generation.get("strategy") not in ("Oficial 3+1", "Meta 2:1")
+19238:             or not generation.get("animals")
+19239:         ):
+19240:             return
+19241: 
+19242:         card = getattr(self, "play_31_state_card", None)
+19243:         rows_host = getattr(self, "play_31_state_rows", None)
+19244:         note = getattr(self, "play_31_state_note", None)
+19245:         before = getattr(self, "play_generation_card", None)
+19246:         if card is None or rows_host is None or note is None or before is None:
+19247:             return
+19248: 
+19249:         for child in rows_host.winfo_children():
+===== L19493-L19571 =====
+19493:                 if (
+19494:                     snap_target.get("data"), snap_target.get("sorteio"), snap_target.get("hora")
+19495:                 ) != (
+19496:                     target.get("data"), target.get("sorteio"), target.get("hora")
+19497:                 ):
+19498:                     raise ValueError("O snapshot Meta congelado não corresponde à rodada selecionada.")
+19499: 
+19500:                 snapshot, _meta_created = self.db.freeze_meta_snapshot(snapshot=snapshot)
+19501:                 meta_payload = copy.deepcopy(snapshot.get("meta") or {})
+19502:                 if not meta_payload.get("available"):
+19503:                     if meta_payload.get("status") == "AMOSTRA INSUFICIENTE":
+19504:                         meta_base = self.db.get_draw(
+19505:                             snapshot.get("base_data"),
+19506:                             snapshot.get("base_sorteio"),
+19507:                             snapshot.get("base_hora"),
+19508:                         ) or latest
+19509:                         formation = self.db.meta_play_formation_prediction(
+19510:                             target=snap_target,
+19511:                             base_draw=meta_base,
+19512:                             signals=snapshot.get("signals") or {},
+19513:                         )
+19514:                         if formation.get("available"):
+19515:                             meta_payload = formation
+19516:                         else:
+19517:                             reason = formation.get("reason") or formation.get("status") or "Meta em formação indisponível"
+19518:                             raise ValueError(f"GP-H Meta v0.1 ainda não pode gerar esta rodada: {reason}")
+19519:                     else:
+19520:                         reason = meta_payload.get("reason") or meta_payload.get("status") or "Meta indisponível"
+19521:                         raise ValueError(f"GP-H Meta v0.1 ainda não pode gerar esta rodada: {reason}")
+19522: 
+19523:                 ranking = list(meta_payload.get("ranking") or [])
+19524:                 if len(ranking) < top_animals:
+19525:                     raise ValueError(
+19526:                         f"O Meta disponibilizou {len(ranking)} bichos no ranking; foram pedidos {top_animals}."
+19527:                     )
+19528:                 groups = [int(r["grupo"]) for r in ranking[:top_animals]]
+19529:                 selector = "GP-H Meta v0.1"
+19530:                 if hasattr(self, "play_meta_status"):
+19531:                     names = ", ".join(BICHOS[g].title() for g in groups[:8])
+19532:                     suffix = "..." if len(groups) > 8 else ""
+19533:                     n_train = int(meta_payload.get("training_snapshots") or 0)
+19534:                     if meta_payload.get("status") == "EM FORMAÇÃO":
+19535:                         status_text = (
+19536:                             f"META EM FORMAÇÃO • Top {len(groups)} • treino: {n_train}/20 snapshots • "
+19537:                             f"{names}{suffix}"
+19538:                         )
+19539:                     else:
+19540:                         status_text = (
+19541:                             f"{meta_payload.get('status') or 'META'} • Top {len(groups)} congelado para esta rodada • "
+19542:                             f"treino: {n_train} snapshots • {names}{suffix}"
+19543:                         )
+19544:                     self.play_meta_status.configure(text=status_text)
+19545: 
+19546:             elif method.startswith("Experimental"):
+19547:                 if "Puxada" in method:
+19548:                     pull = self.db.method_convergencia_g5(
+19549:                         latest["data"], latest["sorteio"], latest["hora"], top_n=5
+19550:                     )
+19551:                     groups = [int(r["grupo"]) for r in pull.get("selected", [])]
+19552:                     selector = "Puxada Combinada"
+19553:                 else:
+19554:                     similarity = self.db.method_similarity_day(
+19555:                         latest["data"],
+19556:                         latest["sorteio"],
+19557:                         latest["hora"],
+19558:                     )
+19559: 
+19560:                     groups = []
+19561:                     for row in similarity["selected"]:
+19562:                         g = int(row["grupo"])
+19563:                         if g not in groups:
+19564:                             groups.append(g)
+19565: 
+19566:                     selector = "Sombra Similaridade do Dia"
+19567: 
+19568:             else:
+19569:                 reset = self.db.method_reset_coverage_v1(
+19570:                     latest["data"],
+19571:                     latest["sorteio"],
+===== L19615-L19709 =====
+19615:                 self._shadow_freeze_async(target, latest)
+19616:                 self.play_render_generation()
+19617:                 self.play_financial_refresh()
+19618:                 return
+19619: 
+19620:             if kind == "Grupo":
+19621:                 use_groups = groups[:min(total, len(groups))]
+19622:                 generation = {
+19623:                     "kind":"Grupo",
+19624:                     "strategy":method,
+19625:                     "scope":self.play_scope.get(),
+19626:                     "selector":selector,
+19627:                     "groups":use_groups,
+19628:                     "rows":[
+19629:                         {
+19630:                             "grupo":g,
+19631:                             "bicho":BICHOS[g],
+19632:                             "numero":f"{g:02d}",
+19633:                             "dezena_base":"—",
+19634:                             "regra":method,
+19635:                         }
+19636:                         for g in use_groups
+19637:                     ],
+19638:                 }
+19639: 
+19640:             elif kind in GROUP_COMBO_SIZES:
+19641:                 generation = self.db.generate_group_combinations(
+19642:                     groups,
+19643:                     kind,
+19644:                     total=total,
+19645:                 )
+19646:                 generation["selector"] = selector
+19647:                 generation["strategy"] = method
+19648: 
+19649:             elif kind in PASSE_MODALITIES:
+19650:                 generation = self.db.generate_passe_combinations(
+19651:                     groups,
+19652:                     kind,
+19653:                     total=total,
+19654:                 )
+19655:                 generation["selector"] = selector
+19656:                 generation["strategy"] = method
+19657: 
+19658:             elif kind in DEZENA_COMBO_SIZES:
+19659:                 generation = self.db.generate_dezena_combinations(
+19660:                     groups,
+19661:                     kind,
+19662:                     total=total,
+19663:                 )
+19664:                 generation["selector"] = selector
+19665:                 generation["strategy"] = method
+19666: 
+19667:             elif kind in INVERTED_MODALITIES:
+19668:                 generation = self.db.generate_inverted_numbers(
+19669:                     groups,
+19670:                     kind,
+19671:                     total=total,
+19672:                     scope=self.play_scope.get(),
+19673:                 )
+19674:                 generation["selector"] = selector
+19675:                 generation["strategy"] = method
+19676: 
+19677:             elif kind == "Centena" and method.startswith("★ META"):
+19678:                 generation = self.db.generate_centenas_meta_21(
+19679:                     groups=groups,
+19680:                     total=total,
+19681:                     previous_draw=latest,
+19682:                 )
+19683:                 generation["selector"] = selector
+19684:                 generation["strategy"] = "Meta 2:1"
+19685:                 generation["meta_ranking"] = copy.deepcopy((meta_payload or {}).get("ranking") or [])
+19686:                 generation["meta_training_snapshots"] = int((meta_payload or {}).get("training_snapshots") or 0)
+19687: 
+19688:             elif (
+19689:                 kind == "Centena"
+19690:                 and method == "Oficial • Reset + 3+1"
+19691:             ):
+19692:                 generation = self.db.generate_centenas_3plus1(
+19693:                     groups=groups[:5],
+19694:                     previous_draw=latest,
+19695:                 )
+19696:                 generation["selector"] = selector
+19697:                 generation["strategy"] = "Oficial 3+1"
+19698: 
+19699:             else:
+19700:                 generation = self.db.generate_historical_numbers(
+19701:                     groups=groups,
+19702:                     kind=kind,
+19703:                     total=total,
+19704:                     scope=self.play_scope.get(),
+19705:                 )
+19706:                 generation["selector"] = selector
+19707:                 generation["strategy"] = method
+19708: 
+19709:             if method.startswith("★ META") and meta_payload is not None:
+===== L23994-L24356 =====
+23994: 
+23995:         frozen_at = str(snapshot.get("contextual_frozen_at") or result.get("frozen_at") or "—").replace("T", " ")
+23996:         wf_note = (
+23997:             f"Leitura auditável congelada em {frozen_at}. "
+23998:             "O congelamento automático não usa Walk-Forward de sessão; simulações posteriores "
+23999:             "continuam como diagnóstico e não reescrevem esta escolha."
+24000:         )
+24001:         ttk.Label(
+24002:             card,
+24003:             text=(
+24004:                 "Pesos-base: horário 35% • recente 20% • estabilidade 15% • "
+24005:                 "Walk-Forward 10% • dia da semana 8% • convergência atual 7% • geral 5%. "
+24006:                 + wf_note
+24007:             ),
+24008:             style="CardMuted.TLabel", wraplength=1080, justify="left",
+24009:         ).pack(anchor="w", pady=(2, 1))
+24010:         ttk.Label(
+24011:             card,
+24012:             text=(
+24013:                 "O índice serve para comparar evidência relativa entre métodos. "
+24014:                 "Não é porcentagem de chance de prêmio e não altera o método oficial."
+24015:             ),
+24016:             style="CardMuted.TLabel", wraplength=1080,
+24017:         ).pack(anchor="w")
+24018: 
+24019:     def _decision_build_meta(self, body, snapshot):
+24020:         meta=(snapshot or {}).get("meta") or {}
+24021:         summary=self.db.meta_shadow_summary(limit=120)
+24022:         card=ttk.Frame(body,style="Card.TFrame",padding=11)
+24023:         card.pack(fill="x",pady=(0,8))
+24024:         head=ttk.Frame(card,style="Card.TFrame"); head.pack(fill="x")
+24025:         ttk.Label(head,text="GP-H META v0.1 — SOMBRA",style="CardTitle.TLabel").pack(side="left")
+24026:         ttk.Label(head,text=meta.get("status") or "AGUARDANDO",style="CardMuted.TLabel").pack(side="right")
+24027: 
+24028:         if not meta:
+24029:             ttk.Label(card,text="A leitura Meta ainda não foi congelada para esta rodada.",style="CardMuted.TLabel").pack(anchor="w",pady=(6,0))
+24030:         elif not meta.get("available"):
+24031:             n=int(meta.get("training_snapshots") or 0); minimum=int(meta.get("minimum_snapshots") or 20)
+24032:             ttk.Label(card,text=f"Aprendizado em formação: {n}/{minimum} snapshots auditados.",style="Card.TLabel",font=("Segoe UI Semibold",12)).pack(anchor="w",pady=(6,2))
+24033:             ttk.Label(card,text=meta.get("reason") or "Aguardando amostra suficiente.",style="CardMuted.TLabel",wraplength=1060).pack(anchor="w")
+24034:         else:
+24035:             groups=meta.get("groups") or []; animals=meta.get("animals") or []; scores=meta.get("scores") or []
+24036:             ttk.Label(
+24037:                 card,
+24038:                 text=f"Ranking aprendido para a rodada • {int(meta.get('training_snapshots') or 0)} snapshots de treino • {int(meta.get('same_hour_snapshots') or 0)} no mesmo horário",
+24039:                 style="Card.TLabel",font=("Segoe UI Semibold",12),wraplength=1060,
+24040:             ).pack(anchor="w",pady=(6,6))
+24041:             row=ttk.Frame(card,style="Card.TFrame"); row.pack(fill="x")
+24042:             for i,(g,a,s) in enumerate(zip(groups,animals,scores),start=1):
+24043:                 box=ttk.Frame(row,style="Card2.TFrame",padding=8)
+24044:                 box.pack(side="left",fill="x",expand=True,padx=(0,5 if i<5 else 0))
+24045:                 ttk.Label(box,text=f"{i}º • {a}",style="Card.TLabel",font=("Segoe UI Semibold",9)).pack(anchor="w")
+24046:                 ttk.Label(box,text=f"Grupo {int(g):02d} • score {float(s):.1f}",style="CardMuted.TLabel").pack(anchor="w")
+24047: 
+24048:             hold=meta.get("holdout") or {}
+24049:             if hold.get("available"):
+24050:                 htxt=(
+24051:                     f"Holdout temporal preliminar ({int(hold.get('rounds') or 0)} rodadas): "
+24052:                     f"Meta {float(hold.get('avg_coverage') or 0):.2f}/5 • acaso esperado {float(hold.get('random_expected') or 0):.2f}/5 • "
+24053:                     f"diferença {float(hold.get('uplift_vs_random') or 0):+.2f}."
+24054:                 )
+24055:             else:
+24056:                 htxt=hold.get("note") or "Holdout temporal ainda indisponível."
+24057:             ttk.Label(card,text=htxt,style="CardMuted.TLabel",wraplength=1060).pack(anchor="w",pady=(7,2))
+24058: 
+24059:             rounds=int(summary.get("rounds") or 0)
+24060:             if rounds:
+24061:                 atxt=(
+24062:                     f"Auditoria prospectiva do Meta: {rounds} rodada(s) • cobertura média {float(summary.get('avg_coverage') or 0):.2f}/5 • "
+24063:                     f"2+ bichos {float(summary.get('pct_2plus') or 0):.1f}% • 3+ bichos {float(summary.get('pct_3plus') or 0):.1f}% • "
+24064:                     f"diferença vs acaso {float(summary.get('uplift_vs_random') or 0):+.2f}."
+24065:                 )
+24066:             else:
+24067:                 atxt="Auditoria prospectiva: começa a acumular somente com previsões Meta congeladas a partir da v0.41.0."
+24068:             ttk.Label(card,text=atxt,style="CardMuted.TLabel",wraplength=1060).pack(anchor="w",pady=(1,2))
+24069: 
+24070:         ttk.Label(
+24071:             card,
+24072:             text="O score do Meta é apenas um ranking interno ainda não calibrado; não é porcentagem de chance. O Meta permanece 100% em sombra e não altera o Reset + 3+1 oficial.",
+24073:             style="CardMuted.TLabel",wraplength=1060,
+24074:         ).pack(anchor="w",pady=(4,0))
+24075: 
+24076:         ttk.Separator(card,orient="horizontal").pack(fill="x",pady=(10,8))
+24077:         wf_head=ttk.Frame(card,style="Card.TFrame"); wf_head.pack(fill="x")
+24078:         ttk.Label(wf_head,text="WALK-FORWARD RIGOROSO DO META",style="CardTitle.TLabel").pack(side="left")
+24079:         ttk.Label(wf_head,text="v0.45 • cérebro v0.1 congelado",style="CardMuted.TLabel").pack(side="right")
+24080:         ttk.Label(
+24081:             card,
+24082:             text="Treina somente nas rodadas anteriores, prevê a próxima sem ver o resultado e avança no tempo. Compara Meta, Reset, Puxada, Similaridade, Histórico Concentrado e o acaso esperado.",
+24083:             style="CardMuted.TLabel",wraplength=1060,
+24084:         ).pack(anchor="w",pady=(3,6))
+24085: 
+24086:         controls=ttk.Frame(card,style="Card.TFrame"); controls.pack(fill="x")
+24087:         ttk.Label(controls,text="Rodadas avaliadas",style="CardMuted.TLabel").pack(side="left")
+24088:         if not hasattr(self,"meta_wf_window"):
+24089:             self.meta_wf_window=tk.StringVar(value="30")
+24090:         ttk.Combobox(controls,textvariable=self.meta_wf_window,values=["20","30","60"],width=6,state="readonly").pack(side="left",padx=(5,8))
+24091:         self.meta_wf_run_btn=ttk.Button(controls,text="SIMULAR META",command=self._meta_walk_forward_start)
+24092:         self.meta_wf_run_btn.pack(side="left")
+24093:         self.meta_wf_cancel_btn=ttk.Button(controls,text="Cancelar",command=self._meta_walk_forward_cancel)
+24094:         self.meta_wf_cancel_btn.pack(side="left",padx=(6,0))
+24095:         self.meta_wf_export_btn=ttk.Button(controls,text="Exportar CSV",command=self._meta_walk_forward_export)
+24096:         self.meta_wf_export_btn.pack(side="right")
+24097: 
+24098:         self.meta_wf_progress=ttk.Progressbar(card,mode="determinate",maximum=100)
+24099:         self.meta_wf_progress.pack(fill="x",pady=(8,3))
+24100:         self.meta_wf_status=ttk.Label(card,text="Escolha 20, 30 ou 60 rodadas e clique em SIMULAR META.",style="CardMuted.TLabel",wraplength=1060)
+24101:         self.meta_wf_status.pack(anchor="w")
+24102: 
+24103:         cols=("method","rounds","avg","p2","p3","uplift")
+24104:         self.meta_wf_tree=ttk.Treeview(card,columns=cols,show="headings",height=6)
+24105:         heads={"method":"Método","rounds":"N","avg":"Cobertura","p2":"2+","p3":"3+","uplift":"vs. acaso"}
+24106:         widths={"method":230,"rounds":55,"avg":100,"p2":85,"p3":85,"uplift":95}
+24107:         for c in cols:
+24108:             self.meta_wf_tree.heading(c,text=heads[c]); self.meta_wf_tree.column(c,width=widths[c],anchor="w" if c=="method" else "center")
+24109:         self.meta_wf_tree.pack(fill="x",pady=(7,3))
+24110: 
+24111:         ttk.Label(card,text="Meta × cada método nas mesmas rodadas",style="Card.TLabel",font=("Segoe UI Semibold",9)).pack(anchor="w",pady=(6,2))
+24112:         hcols=("method","rounds","wins","ties","losses","diff")
+24113:         self.meta_wf_h2h_tree=ttk.Treeview(card,columns=hcols,show="headings",height=4)
+24114:         hheads={"method":"Comparado com","rounds":"N","wins":"Meta melhor","ties":"Empate","losses":"Meta pior","diff":"Δ média"}
+24115:         hwidths={"method":230,"rounds":55,"wins":90,"ties":75,"losses":85,"diff":85}
+24116:         for c in hcols:
+24117:             self.meta_wf_h2h_tree.heading(c,text=hheads[c]); self.meta_wf_h2h_tree.column(c,width=hwidths[c],anchor="w" if c=="method" else "center")
+24118:         self.meta_wf_h2h_tree.pack(fill="x",pady=(0,3))
+24119:         self.meta_wf_note=ttk.Label(card,text="",style="CardMuted.TLabel",wraplength=1060)
+24120:         self.meta_wf_note.pack(anchor="w")
+24121: 
+24122:         running=bool(getattr(self,"_meta_wf_running",False))
+24123:         if running:
+24124:             self.meta_wf_run_btn.configure(state="disabled"); self.meta_wf_cancel_btn.configure(state="normal")
+24125:             st=getattr(self,"_meta_wf_progress_state",None) or (0,1,"Preparando…")
+24126:             done,total,label=st
+24127:             self.meta_wf_progress.configure(value=(done/max(1,total))*100.0); self.meta_wf_status.configure(text=label)
+24128:         else:
+24129:             self.meta_wf_cancel_btn.configure(state="disabled")
+24130:         result=getattr(self,"meta_walk_forward_last_result",None)
+24131:         if result:
+24132:             self._meta_walk_forward_render(result)
+24133:         else:
+24134:             self.meta_wf_export_btn.configure(state="disabled")
+24135: 
+24136:     def _meta_walk_forward_ui_alive(self):
+24137:         try:
+24138:             return self._page=="decision" and self.meta_wf_tree.winfo_exists()
+24139:         except Exception:
+24140:             return False
+24141: 
+24142:     def _meta_walk_forward_start(self):
+24143:         if getattr(self,"_meta_wf_running",False):
+24144:             return
+24145:         try:
+24146:             window=int(self.meta_wf_window.get())
+24147:         except Exception:
+24148:             window=30
+24149: 
+24150:         self._meta_wf_running=True
+24151:         self._meta_wf_progress_state=(0,1,"Preparando o histórico do Meta…")
+24152:         self._meta_wf_dead_polls=0
+24153:         if self._meta_walk_forward_ui_alive():
+24154:             self.meta_wf_run_btn.configure(state="disabled")
+24155:             self.meta_wf_cancel_btn.configure(state="normal")
+24156:             self.meta_wf_export_btn.configure(state="disabled")
+24157:             self.meta_wf_progress.configure(value=0)
+24158:             self.meta_wf_status.configure(text="Iniciando processo isolado do Walk-Forward…")
+24159: 
+24160:         try:
+24161:             # v0.42.1: CPU-bound Meta sai do processo do Tk. Em thread, o treino
+24162:             # Python puro disputava o GIL com a interface e causava microtravadas.
+24163:             ctx=mp.get_context("spawn")
+24164:             self._meta_wf_queue=ctx.Queue()
+24165:             self._meta_wf_cancel_event=ctx.Event()
+24166:             proc=ctx.Process(
+24167:                 target=_meta_walk_forward_process_worker,
+24168:                 args=(str(self.db.path),window,self._meta_wf_queue,self._meta_wf_cancel_event),
+24169:                 daemon=True,
+24170:                 name="GPH-MetaWalkForward",
+24171:             )
+24172:             self._meta_wf_process=proc
+24173:             proc.start()
+24174:         except Exception as exc:
+24175:             self._meta_wf_running=False
+24176:             self._meta_wf_process=None
+24177:             if self._meta_walk_forward_ui_alive():
+24178:                 self.meta_wf_status.configure(text="Falha ao iniciar o processo do Walk-Forward: "+str(exc))
+24179:                 self.meta_wf_run_btn.configure(state="normal")
+24180:                 self.meta_wf_cancel_btn.configure(state="disabled")
+24181:             return
+24182:         self.after(120,self._meta_walk_forward_poll)
+24183: 
+24184:     def _meta_walk_forward_cancel(self):
+24185:         event=getattr(self,"_meta_wf_cancel_event",None)
+24186:         if event is not None:
+24187:             try:
+24188:                 event.set()
+24189:             except Exception:
+24190:                 pass
+24191:         if self._meta_walk_forward_ui_alive():
+24192:             self.meta_wf_status.configure(text="Cancelamento solicitado…")
+24193: 
+24194:     def _meta_walk_forward_process_cleanup(self):
+24195:         proc=getattr(self,"_meta_wf_process",None)
+24196:         if proc is not None:
+24197:             try:
+24198:                 proc.join(timeout=0.15)
+24199:             except Exception:
+24200:                 pass
+24201:         self._meta_wf_process=None
+24202:         q=getattr(self,"_meta_wf_queue",None)
+24203:         if q is not None:
+24204:             try:
+24205:                 q.close()
+24206:             except Exception:
+24207:                 pass
+24208:         self._meta_wf_queue=None
+24209:         self._meta_wf_cancel_event=None
+24210: 
+24211:     def _meta_walk_forward_poll(self):
+24212:         q=getattr(self,"_meta_wf_queue",None)
+24213:         if q is None:
+24214:             return
+24215:         finished=False
+24216:         while True:
+24217:             try:
+24218:                 msg=q.get_nowait()
+24219:             except queue.Empty:
+24220:                 break
+24221:             except (EOFError,OSError):
+24222:                 break
+24223:             kind=msg[0]
+24224:             if kind=="progress":
+24225:                 _k,done,total,label=msg
+24226:                 self._meta_wf_progress_state=(done,total,label)
+24227:                 if self._meta_walk_forward_ui_alive():
+24228:                     self.meta_wf_progress.configure(value=(done/max(1,total))*100.0)
+24229:                     self.meta_wf_status.configure(text=label)
+24230:             elif kind=="done":
+24231:                 self.meta_walk_forward_last_result=msg[1]
+24232:                 self._meta_wf_running=False
+24233:                 finished=True
+24234:                 if self._meta_walk_forward_ui_alive():
+24235:                     self._meta_walk_forward_render(msg[1])
+24236:             elif kind=="error":
+24237:                 self._meta_wf_running=False
+24238:                 finished=True
+24239:                 if self._meta_walk_forward_ui_alive():
+24240:                     self.meta_wf_status.configure(text="Falha no Walk-Forward Meta: "+str(msg[1]))
+24241:                     self.meta_wf_run_btn.configure(state="normal")
+24242:                     self.meta_wf_cancel_btn.configure(state="disabled")
+24243: 
+24244:         proc=getattr(self,"_meta_wf_process",None)
+24245:         if finished:
+24246:             self._meta_walk_forward_process_cleanup()
+24247:             return
+24248: 
+24249:         # Se o worker caiu sem conseguir enviar a mensagem de erro, não deixa a
+24250:         # interface presa para sempre em "processando". Exit 0 recebe alguns polls
+24251:         # extras para a fila terminar de descarregar o resultado.
+24252:         if proc is not None and not proc.is_alive():
+24253:             exitcode=proc.exitcode
+24254:             self._meta_wf_dead_polls=int(getattr(self,"_meta_wf_dead_polls",0))+1
+24255:             if exitcode not in (None,0) or self._meta_wf_dead_polls>=5:
+24256:                 self._meta_wf_running=False
+24257:                 if self._meta_walk_forward_ui_alive():
+24258:                     self.meta_wf_status.configure(text=f"O processo do Walk-Forward encerrou inesperadamente (código {exitcode}).")
+24259:                     self.meta_wf_run_btn.configure(state="normal")
+24260:                     self.meta_wf_cancel_btn.configure(state="disabled")
+24261:                 self._meta_walk_forward_process_cleanup()
+24262:                 return
+24263:         else:
+24264:             self._meta_wf_dead_polls=0
+24265: 
+24266:         if getattr(self,"_meta_wf_running",False):
+24267:             self.after(120,self._meta_walk_forward_poll)
+24268: 
+24269:     def _meta_walk_forward_render(self, result):
+24270:         if not self._meta_walk_forward_ui_alive(): return
+24271:         for tree in (self.meta_wf_tree,self.meta_wf_h2h_tree):
+24272:             for item in tree.get_children(): tree.delete(item)
+24273:         for row in result.get("summary") or []:
+24274:             self.meta_wf_tree.insert("","end",values=(
+24275:                 row.get("method"),int(row.get("rounds") or 0),f"{float(row.get('avg_coverage') or 0):.2f}/5",
+24276:                 f"{float(row.get('pct_2plus') or 0):.1f}%",f"{float(row.get('pct_3plus') or 0):.1f}%",
+24277:                 f"{float(row.get('uplift_vs_random') or 0):+.2f}",
+24278:             ))
+24279:         rb=result.get("random_baseline") or {}
+24280:         if rb:
+24281:             self.meta_wf_tree.insert("","end",values=(
+24282:                 "Acaso esperado",int(rb.get("rounds") or 0),f"{float(rb.get('avg_coverage') or 0):.2f}/5",
+24283:                 f"{float(rb.get('pct_2plus') or 0):.1f}%",f"{float(rb.get('pct_3plus') or 0):.1f}%","+0.00",
+24284:             ))
+24285:         for row in result.get("meta_head_to_head") or []:
+24286:             self.meta_wf_h2h_tree.insert("","end",values=(
+24287:                 row.get("method"),int(row.get("rounds") or 0),int(row.get("meta_wins") or 0),
+24288:                 int(row.get("ties") or 0),int(row.get("meta_losses") or 0),f"{float(row.get('avg_diff') or 0):+.2f}",
+24289:             ))
+24290:         n=int(result.get("simulated_rounds") or 0)
+24291:         if result.get("cancelled"):
+24292:             status=f"Simulação cancelada • {n} rodada(s) concluída(s)."
+24293:         elif n:
+24294:             status=f"Walk-Forward concluído • {n} rodada(s) avaliadas • {result.get('date_from') or '—'} a {result.get('date_to') or '—'}."
+24295:         else:
+24296:             status=result.get("note") or "Nenhuma rodada pôde ser avaliada."
+24297:         self.meta_wf_progress.configure(value=100 if not result.get("cancelled") else self.meta_wf_progress["value"])
+24298:         self.meta_wf_status.configure(text=status)
+24299:         self.meta_wf_note.configure(text=(
+24300:             f"Treino mínimo {int(result.get('min_training_rounds') or 20)} • até {int(result.get('training_limit') or 160)} rodadas anteriores por previsão. "
+24301:             "O cérebro META_LOGIT_NATIVE_V1 é o mesmo da v0.41; este simulador só mede desempenho e não alimenta nem altera o Meta prospectivo."
+24302:         ))
+24303:         self.meta_wf_run_btn.configure(state="normal"); self.meta_wf_cancel_btn.configure(state="disabled")
+24304:         self.meta_wf_export_btn.configure(state="normal" if n else "disabled")
+24305: 
+24306:     def _meta_walk_forward_export(self):
+24307:         result=getattr(self,"meta_walk_forward_last_result",None)
+24308:         if not result or not result.get("details"):
+24309:             messagebox.showinfo("Walk-Forward Meta","Execute uma simulação primeiro.",parent=self); return
+24310:         path=filedialog.asksaveasfilename(
+24311:             parent=self,defaultextension=".csv",filetypes=[("CSV","*.csv")],
+24312:             initialdir=str(EXPORT_DIR),initialfile="gph_meta_walk_forward.csv",
+24313:         )
+24314:         if not path: return
+24315:         with open(path,"w",newline="",encoding="utf-8-sig") as f:
+24316:             w=csv.writer(f,delimiter=";")
+24317:             w.writerow(["Base","Alvo","Método","Grupos previstos","Acertos","Treino anterior"])
+24318:             for row in result.get("details") or []:
+24319:                 base=f"{row['base'].get('data')} {row['base'].get('sorteio')} {row['base'].get('hora')}"
+24320:                 target=f"{row['target'].get('data')} {row['target'].get('sorteio')} {row['target'].get('hora')}"
+24321:                 for method,sig in (row.get("methods") or {}).items():
+24322:                     if not sig.get("available"): continue
+24323:                     w.writerow([
+24324:                         base,target,method," ".join(f"{int(g):02d}" for g in sig.get("groups") or []),
+24325:                         sig.get("coverage_hits"),sig.get("training_rounds","")
+24326:                     ])
+24327:         messagebox.showinfo("Walk-Forward Meta",f"Relatório exportado em:\n{path}",parent=self)
+24328: 
+24329: 
+24330: 
+24331:     def _decision_build_adaptive(self, body, snapshot):
+24332:         """Etapa C: mostra a camada adaptativa e sua auditoria A/B prospectiva."""
+24333:         contextual = (snapshot or {}).get("contextual") or {}
+24334:         adaptive = contextual.get("adaptive") or {}
+24335:         card = ttk.Frame(body, style="Card.TFrame", padding=10)
+24336:         card.pack(fill="x", pady=(0, 8))
+24337:         head = ttk.Frame(card, style="Card.TFrame"); head.pack(fill="x")
+24338:         ttk.Label(head, text="DECISÃO ADAPTATIVA — ETAPA C", style="CardTitle.TLabel").pack(side="left")
+24339:         ttk.Label(head, text="correção conservadora • auditável A/B", style="CardMuted.TLabel").pack(side="right")
+24340: 
+24341:         if int(adaptive.get("schema") or 0) != 1:
+24342:             ttk.Label(
+24343:                 card,
+24344:                 text=(
+24345:                     "Esta rodada foi congelada antes da Etapa C. Ela não será reconstruída. "
+24346:                     "A camada adaptativa começa a ser registrada na próxima rodada congelada pela v0.44.0."
+24347:                 ),
+24348:                 style="CardMuted.TLabel", wraplength=1050,
+24349:             ).pack(anchor="w", pady=(6, 0))
+24350:             return
+24351: 
+24352:         state = adaptive.get("state") or "EM FORMAÇÃO"
+24353:         base_leader = adaptive.get("base_leader") or "—"
+24354:         final_leader = adaptive.get("final_leader") or base_leader
+24355:         changed = "SIM" if adaptive.get("changed_leader") else "NÃO"
+24356:         defs = (
+===== L26741-L26816 =====
+26741:         path = filedialog.asksaveasfilename(
+26742:             defaultextension=".csv",
+26743:             filetypes=[("CSV", "*.csv")],
+26744:             initialdir=str(EXPORT_DIR),
+26745:             initialfile="gph_pesquisa.csv",
+26746:         )
+26747:         if not path:
+26748:             return
+26749:         with open(path, "w", newline="", encoding="utf-8-sig") as f:
+26750:             w = csv.writer(f, delimiter=";")
+26751:             w.writerow(["Data","Sorteio","Hora","Prêmio","Milhar","Centena","Dezena","Grupo","Bicho","Fonte"])
+26752:             for r in self.last_rows:
+26753:                 values = [
+26754:                     r["data"], r["sorteio"], r["hora"],
+26755:                     str(r["premio"]), str(r["milhar"]).zfill(4),
+26756:                     str(r["centena"]).zfill(3), str(r["dezena"]).zfill(2),
+26757:                     str(r["grupo"]).zfill(2), r["bicho"], r["fonte"],
+26758:                 ]
+26759:                 w.writerow([self._csv_text(v) for v in values])
+26760:         messagebox.showinfo(
+26761:             "Exportar",
+26762:             f"Arquivo criado com campos em formato de texto e zeros preservados:\n{path}"
+26763:         )
+26764: 
+26765: 
+26766: def _meta_walk_forward_process_worker(db_path, window, out_queue, cancel_event):
+26767:     """Worker CPU-bound do Meta em processo separado; não toca na interface."""
+26768:     try:
+26769:         # Prioridade menor preserva fluidez do processo principal mesmo em PCs
+26770:         # com poucos núcleos. Isso não altera cálculo, ordem ou dados do modelo.
+26771:         try:
+26772:             if os.name == "nt":
+26773:                 import ctypes
+26774:                 BELOW_NORMAL_PRIORITY_CLASS=0x00004000
+26775:                 kernel32=ctypes.windll.kernel32
+26776:                 kernel32.SetPriorityClass(kernel32.GetCurrentProcess(),BELOW_NORMAL_PRIORITY_CLASS)
+26777:             else:
+26778:                 os.nice(5)
+26779:         except Exception:
+26780:             pass
+26781: 
+26782:         db=Database(Path(db_path))
+26783:         def progress(done,total,info):
+26784:             phase=(info or {}).get("phase") or "PROCESSANDO"
+26785:             suffix=f"{(info or {}).get('data') or '—'} {(info or {}).get('sorteio') or ''} {(info or {}).get('hora') or ''}".strip()
+26786:             out_queue.put(("progress",done,total,f"{phase} • {done}/{total} • {suffix}"))
+26787:         result=db.meta_walk_forward(
+26788:             window=window,
+26789:             progress_callback=progress,
+26790:             cancel_event=cancel_event,
+26791:         )
+26792:         out_queue.put(("done",result))
+26793:     except BaseException as exc:
+26794:         try:
+26795:             out_queue.put(("error",f"{type(exc).__name__}: {exc}"))
+26796:         except Exception:
+26797:             pass
+26798: 
+26799: 
+26800: 
+26801: if __name__ == "__main__":
+26802:     mp.freeze_support()
+26803:     try:
+26804:         app = App()
+26805:         if not getattr(app, "_startup_cancelled", False):
+26806:             app.mainloop()
+26807:     except BaseException as exc:
+26808:         log_path = write_crash_log(exc)
+26809:         try:
+26810:             # Cria uma raiz mínima só para mostrar o erro, caso a janela principal tenha falhado.
+26811:             err_root = tk.Tk()
+26812:             err_root.withdraw()
+26813:             msg = "O GP-H encontrou um erro ao abrir."
+26814:             if log_path:
+26815:                 msg += f"\n\nFoi criado o arquivo:\n{log_path}\n\nEnvie esse arquivo ou uma foto para o ChatGPT."
+26816:             else:
