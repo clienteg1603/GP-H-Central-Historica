@@ -1,0 +1,152 @@
+name: Reforma GP-H - Etapa 2 temporaria
+
+on:
+  push:
+    branches:
+      - refactor-ui-limpeza-v045
+    paths:
+      - ".github/workflows/refactor-stage2-temp.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  refactor:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: refactor-ui-limpeza-v045
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Reorganizar Decisao e recomendacoes sem mudar o cerebro
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import ast
+
+          path = Path('source/gph_central.py')
+          text = path.read_text(encoding='utf-8')
+          before_tree = ast.parse(text)
+
+          def sensitive_map(tree):
+              tokens = (
+                  'meta', 'reset', 'similar', 'convergencia',
+                  'historico_concentrado', 'decision_contextual',
+                  'decision_operational_recommendation',
+              )
+              out = {}
+              for node in ast.walk(tree):
+                  if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                      low = node.name.lower()
+                      if any(token in low for token in tokens):
+                          out[node.name] = ast.dump(node, include_attributes=False)
+              return out
+
+          sensitive_before = sensitive_map(before_tree)
+
+          # ------------------------------------------------------------
+          # DECISAO: quatro visoes reais. Resumo e a entrada padrao;
+          # Analise/Auditoria/Laboratorio deixam de ficar empilhados.
+          # ------------------------------------------------------------
+          old_sig = '    def show_decision_page(self, open_lab=False):\n'
+          new_sig = '    def show_decision_page(self, open_lab=False, view=None):\n'
+          if text.count(old_sig) != 1:
+              raise SystemExit('Assinatura show_decision_page inesperada')
+          text = text.replace(old_sig, new_sig, 1)
+
+          old_start = '''        self._page = "decision"\n        try:\n'''
+          new_start = '''        self._page = "decision"\n        view = view or ("lab" if open_lab else "summary")\n        if view not in {"summary", "analysis", "audit", "lab"}:\n            view = "summary"\n        self.decision_view = view\n        try:\n'''
+          if text.count(old_start) != 1:
+              raise SystemExit('Inicio da tela Decisao nao localizado')
+          text = text.replace(old_start, new_start, 1)
+
+          old_title = '''        self._page_title(\n            "Decisão da rodada",\n            "Qual leitura tem melhor evidência para a próxima rodada. O índice não é probabilidade de prêmio.",\n        )\n        body = self._make_scrollable_page_body(self.content, "decision")\n'''
+          new_title = '''        self._page_title(\n            "Decisão da rodada",\n            "Primeiro a resposta prática; detalhes técnicos ficam separados para não poluir a leitura.",\n        )\n\n        decision_nav = ttk.Frame(self.content)\n        decision_nav.pack(fill="x", pady=(0, 9))\n        for key, label in (\n            ("summary", "Resumo"),\n            ("analysis", "Análise"),\n            ("audit", "Auditoria"),\n            ("lab", "Laboratório"),\n        ):\n            ttk.Button(\n                decision_nav,\n                text=label,\n                style="SubnavActive.TButton" if view == key else "Subnav.TButton",\n                command=lambda selected=key: self.show_decision_page(view=selected),\n            ).pack(side="left", padx=(0 if key == "summary" else 5, 0))\n\n        body = self._make_scrollable_page_body(self.content, "decision")\n'''
+          if text.count(old_title) != 1:
+              raise SystemExit('Cabecalho da Decisao nao localizado')
+          text = text.replace(old_title, new_title, 1)
+
+          old_stack = '''        # v0.37.0/v0.40.0 — leitura contextual agora é congelada e auditável.\n        self._decision_build_contextual(body, snapshot)\n        self._decision_build_self_audit(body)\n        self._decision_build_confidence_calibration(body)\n        self._decision_build_adaptive(body, snapshot)\n        self._decision_build_operational(body, snapshot)\n        self._decision_build_meta(body, snapshot)\n\n        # Componentes transparentes do índice.\n'''
+          new_stack = '''        # A resposta pratica fica curta. As camadas profundas continuam\n        # disponiveis, mas em visoes separadas da mesma tela.\n        if view == "summary":\n            self._decision_build_operational(body, snapshot)\n            self._decision_build_contextual(body, snapshot)\n            return\n\n        if view == "audit":\n            self._decision_build_self_audit(body)\n            self._decision_build_confidence_calibration(body)\n            self._decision_build_meta(body, snapshot)\n            return\n\n        if view == "lab":\n            self._build_shadow_lab_section(body)\n            return\n\n        # ANALISE: leitura contextual + adaptacao + recomendacao e\n        # comparacoes detalhadas que ja existiam.\n        self._decision_build_contextual(body, snapshot)\n        self._decision_build_adaptive(body, snapshot)\n        self._decision_build_operational(body, snapshot)\n\n        # Componentes transparentes do índice.\n'''
+          if text.count(old_stack) != 1:
+              raise SystemExit('Pilha antiga da Decisao nao localizada')
+          text = text.replace(old_stack, new_stack, 1)
+
+          old_lab_tail = '''        # v0.36.0 — Laboratório deixa de ser página paralela e vira seção da Decisão.\n        self._build_shadow_lab_section(body)\n        if open_lab:\n            canvas = getattr(self, "_smart_scroll_canvases", {}).get("decision")\n            if canvas is not None:\n                self.after_idle(lambda c=canvas: c.yview_moveto(1.0))\n\n'''
+          if text.count(old_lab_tail) != 1:
+              raise SystemExit('Cauda antiga do Laboratorio nao localizada')
+          text = text.replace(old_lab_tail, '', 1)
+
+          # ------------------------------------------------------------
+          # JOGAR: uma recomendacao PRINCIPAL (Etapa D) e, abaixo,
+          # o antigo ranking sombra renomeado como apoio a construcao.
+          # ------------------------------------------------------------
+          old_card = '''        ttk.Label(rec_card, text="RECOMENDAÇÃO DA RODADA", style="CardMuted.TLabel").pack(anchor="w")\n        self.play_recommendation_label = ttk.Label(\n            rec_card, text="", style="Recommendation.TLabel", wraplength=1040, justify="left"\n        )\n        self.play_recommendation_label.pack(fill="x", anchor="w", pady=(4, 0))\n        self.play_recommendation_note = ttk.Label(\n            rec_card, text="", style="CardMuted.TLabel", wraplength=1040, justify="left"\n        )\n        self.play_recommendation_note.pack(fill="x", anchor="w", pady=(2, 0))\n        self._bind_wraplength(self.play_recommendation_label, rec_card, margin=12, minimum=240)\n        self._bind_wraplength(self.play_recommendation_note, rec_card, margin=12, minimum=240)\n'''
+          new_card = '''        ttk.Label(rec_card, text="DECISÃO DA RODADA", style="CardMuted.TLabel").pack(anchor="w")\n        self.play_recommendation_label = ttk.Label(\n            rec_card, text="", style="Recommendation.TLabel", wraplength=1040, justify="left"\n        )\n        self.play_recommendation_label.pack(fill="x", anchor="w", pady=(4, 0))\n        self.play_recommendation_note = ttk.Label(\n            rec_card, text="", style="CardMuted.TLabel", wraplength=1040, justify="left"\n        )\n        self.play_recommendation_note.pack(fill="x", anchor="w", pady=(2, 0))\n        self._bind_wraplength(self.play_recommendation_label, rec_card, margin=12, minimum=240)\n        self._bind_wraplength(self.play_recommendation_note, rec_card, margin=12, minimum=240)\n\n        ttk.Separator(rec_card, orient="horizontal").pack(fill="x", pady=(8, 7))\n        ttk.Label(\n            rec_card, text="APOIO À CONSTRUÇÃO", style="CardMuted.TLabel"\n        ).pack(anchor="w")\n        self.play_construction_label = ttk.Label(\n            rec_card, text="", style="Card.TLabel",\n            font=(UI_FONT_SEMIBOLD, UI_FONT_SIZES["body"]), wraplength=1040, justify="left"\n        )\n        self.play_construction_label.pack(fill="x", anchor="w", pady=(3, 0))\n        self.play_construction_note = ttk.Label(\n            rec_card, text="", style="CardMuted.TLabel", wraplength=1040, justify="left"\n        )\n        self.play_construction_note.pack(fill="x", anchor="w", pady=(2, 0))\n        self._bind_wraplength(self.play_construction_label, rec_card, margin=12, minimum=240)\n        self._bind_wraplength(self.play_construction_note, rec_card, margin=12, minimum=240)\n'''
+          if text.count(old_card) != 1:
+              raise SystemExit('Cartao antigo de recomendacao nao localizado')
+          text = text.replace(old_card, new_card, 1)
+
+          marker = '    def _play_refresh_shadow_recommendation(self):\n'
+          if text.count(marker) != 1:
+              raise SystemExit('Refresh sombra nao localizado')
+          helper = '''    def _play_refresh_decision_recommendation(self):\n        """Mostra em Jogar a mesma recomendacao principal congelada da Decisao."""\n        label = getattr(self, "play_recommendation_label", None)\n        note = getattr(self, "play_recommendation_note", None)\n        if label is None:\n            return\n\n        target = self.play_get_selected_target()\n        if not target:\n            label.configure(text="Selecione uma rodada para consultar a Decisão.")\n            if note is not None:\n                note.configure(text="")\n            return\n\n        if not self.db.is_next_operational_target(target):\n            label.configure(text="Decisão principal disponível para a próxima rodada operacional.")\n            if note is not None:\n                note.configure(text="Rodadas posteriores continuam disponíveis para montagem manual.")\n            return\n\n        try:\n            snapshot = self.db.latest_decision_snapshot() or {}\n            contextual = snapshot.get("contextual") or {}\n            operational = contextual.get("operational") or {}\n            headline = str(operational.get("headline") or "").strip()\n            reason = str(operational.get("reason") or "").strip()\n\n            if headline:\n                label.configure(text=headline)\n                if note is not None:\n                    suffix = " Leitura congelada antes do resultado; não altera automaticamente o jogo oficial."\n                    note.configure(text=(reason + suffix).strip())\n                return\n\n            best = contextual.get("best") or {}\n            method = best.get("method")\n            status = contextual.get("status")\n            if method:\n                label.configure(text=f"Leitura principal: {method} • {status or 'em avaliação'}")\n                if note is not None:\n                    note.configure(text="A Decisão Contextual já possui líder; a tradução operacional ainda não está disponível neste snapshot.")\n                return\n\n            label.configure(text="Ainda não há evidência suficiente para uma Decisão principal.")\n            if note is not None:\n                note.configure(text="A Central continua acumulando evidência prospectiva sem alterar o método oficial.")\n        except Exception:\n            label.configure(text="Decisão principal temporariamente indisponível.")\n            if note is not None:\n                note.configure(text="Você pode consultar os detalhes completos na tela Decisão.")\n\n\n'''
+          text = text.replace(marker, helper + marker, 1)
+
+          old_refresh_head = '''    def _play_refresh_shadow_recommendation(self):\n        label = getattr(self, "play_recommendation_label", None)\n        note = getattr(self, "play_recommendation_note", None)\n'''
+          new_refresh_head = '''    def _play_refresh_shadow_recommendation(self):\n        # A recomendacao principal vem da Etapa D. O ranking sombra abaixo\n        # continua util, mas agora aparece apenas como apoio a construcao.\n        self._play_refresh_decision_recommendation()\n        label = getattr(self, "play_construction_label", None)\n        note = getattr(self, "play_construction_note", None)\n'''
+          if text.count(old_refresh_head) != 1:
+              raise SystemExit('Cabecalho do refresh sombra inesperado')
+          text = text.replace(old_refresh_head, new_refresh_head, 1)
+
+          after_tree = ast.parse(text)
+          if sensitive_map(after_tree) != sensitive_before:
+              before = sensitive_before
+              after = sensitive_map(after_tree)
+              changed = sorted(
+                  (set(before) ^ set(after)) |
+                  {name for name in set(before) & set(after) if before[name] != after[name]}
+              )
+              raise SystemExit('Cerebro sensivel alterado: ' + ', '.join(changed[:30]))
+
+          path.write_text(text, encoding='utf-8')
+          print('Etapa 2 aplicada sem alterar AST do cerebro sensivel.')
+          PY
+
+      - name: Validar Etapa 2
+        shell: bash
+        run: |
+          python -m py_compile source/gph_central.py source/gph_updater.py
+          python - <<'PY'
+          from pathlib import Path
+          import ast
+          text = Path('source/gph_central.py').read_text(encoding='utf-8')
+          tree = ast.parse(text)
+          funcs = {n.name:n for n in ast.walk(tree) if isinstance(n, ast.FunctionDef)}
+          assert 'show_decision_page' in funcs
+          assert len(funcs['show_decision_page'].args.args) == 4, [a.arg for a in funcs['show_decision_page'].args.args]
+          assert '_play_refresh_decision_recommendation' in funcs
+          assert text.count('play_construction_label') >= 3
+          assert text.count('DECISÃO DA RODADA') >= 1
+          assert text.count('APOIO À CONSTRUÇÃO') >= 1
+          assert 'self._build_shadow_lab_section(body)\n            return' in text
+          print('Navegacao Decisao OK')
+          print('Recomendacao principal x apoio OK')
+          PY
+          git diff --check
+          git diff --stat
+
+      - name: Gravar Etapa 2 na branch de reforma
+        shell: bash
+        run: |
+          git config user.name "Gzaraki"
+          git config user.email "112765179+clienteg1603@users.noreply.github.com"
+          git rm .github/workflows/refactor-stage2-temp.yml
+          git add source/gph_central.py
+          git commit -m "Etapa 2: simplificar Decisao e recomendacoes"
+          git push origin HEAD:refactor-ui-limpeza-v045
