@@ -1,0 +1,236 @@
+name: Reforma GP-H - Etapa 1 temporaria
+
+on:
+  push:
+    branches:
+      - refactor-ui-limpeza-v045
+    paths:
+      - ".github/workflows/refactor-stage1-temp.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  refactor:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: refactor-ui-limpeza-v045
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Limpeza estrutural segura
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import ast, re
+
+          path = Path("source/gph_central.py")
+          original = path.read_text(encoding="utf-8")
+          tree_before = ast.parse(original)
+
+          # Somente símbolos comprovadamente órfãos na auditoria: uma única
+          # ocorrência lexical no arquivo, a própria definição/atribuição.
+          remove_defs = {
+              "decision_snapshot_history",
+              "minmax_date",
+              "distinct_draws",
+              "search_filter_options",
+              "search_filter_combination_exists",
+              "filter_options",
+              "list_draws",
+              "draw_filter_options",
+              "set_payout_multiplier",
+              "payout_table",
+              "financial_by_kind",
+              "_theme_changed",
+              "home_prepare_next_game",
+              "_set_card_bg",
+              "play_register",
+              "methods_sort_changed",
+              "methods_hour_changed",
+              "show_generator_page",
+              "on_search_sort_changed",
+              "on_search_hour_changed",
+              "open_statistics",
+              "open_pulls",
+              "open_methods_lab",
+              "open_game_generator",
+              "DryDayTechnicalDialog",
+          }
+          remove_assigns = {
+              "UI_FONT_MONO",
+              "UI_CARD_PADDING",
+              "UI_CARD_PADDING_COMPACT",
+              "PLAY_METHOD_LABELS",
+          }
+
+          def sensitive_map(tree):
+              tokens = (
+                  "meta", "reset", "similar", "convergencia",
+                  "historico_concentrado", "decision_contextual",
+                  "decision_operational_recommendation",
+              )
+              out = {}
+              for node in ast.walk(tree):
+                  if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                      low = node.name.lower()
+                      if any(token in low for token in tokens):
+                          out[node.name] = ast.dump(node, include_attributes=False)
+              return out
+
+          sensitive_before = sensitive_map(tree_before)
+          lines = original.splitlines(keepends=True)
+          spans = []
+          removed = []
+
+          def word_count(name):
+              return len(re.findall(r"\b" + re.escape(name) + r"\b", original))
+
+          for node in ast.walk(tree_before):
+              if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)) and node.name in remove_defs:
+                  count = word_count(node.name)
+                  if count != 1:
+                      raise SystemExit(f"ABORTADO: {node.name} teve {count} ocorrencias; esperado 1")
+                  start = min([node.lineno] + [d.lineno for d in getattr(node, "decorator_list", [])])
+                  spans.append((start, node.end_lineno, node.name))
+              elif isinstance(node, (ast.Assign, ast.AnnAssign)):
+                  names = []
+                  targets = node.targets if isinstance(node, ast.Assign) else [node.target]
+                  for target in targets:
+                      if isinstance(target, ast.Name):
+                          names.append(target.id)
+                  for name in names:
+                      if name in remove_assigns:
+                          count = word_count(name)
+                          if count != 1:
+                              raise SystemExit(f"ABORTADO: {name} teve {count} ocorrencias; esperado 1")
+                          spans.append((node.lineno, node.end_lineno, name))
+
+          found = {name for _s, _e, name in spans}
+          expected = remove_defs | remove_assigns
+          missing = sorted(expected - found)
+          if missing:
+              raise SystemExit("ABORTADO: candidatos nao localizados: " + ", ".join(missing))
+
+          keep = [True] * len(lines)
+          for start, end, name in sorted(spans, reverse=True):
+              for idx in range(start - 1, end):
+                  keep[idx] = False
+              removed.append((name, end - start + 1))
+
+          cleaned = "".join(line for idx, line in enumerate(lines) if keep[idx])
+
+          # Micro-polimento seguro: Decisão deixa de compartilhar o mesmo ícone
+          # de Métodos. Reaproveita o ícone generator já existente nos assets.
+          old_icons = '("home","ticket","results","search","statistics","pulls","methods","database","animals")'
+          new_icons = '("home","ticket","results","search","statistics","pulls","methods","generator","database","animals")'
+          if old_icons not in cleaned:
+              raise SystemExit("ABORTADO: lista de icones esperada nao localizada")
+          cleaned = cleaned.replace(old_icons, new_icons, 1)
+
+          old_decision = '("Decisão", self.show_decision_page, "methods")'
+          new_decision = '("Decisão", self.show_decision_page, "generator")'
+          if old_decision not in cleaned:
+              raise SystemExit("ABORTADO: item Decisao esperado nao localizado")
+          cleaned = cleaned.replace(old_decision, new_decision, 1)
+
+          tree_after = ast.parse(cleaned)
+          sensitive_after = sensitive_map(tree_after)
+          if sensitive_before != sensitive_after:
+              before_names = set(sensitive_before)
+              after_names = set(sensitive_after)
+              changed = sorted(
+                  (before_names ^ after_names)
+                  | {n for n in before_names & after_names if sensitive_before[n] != sensitive_after[n]}
+              )
+              raise SystemExit("ABORTADO: cerebro sensivel alterado: " + ", ".join(changed[:30]))
+
+          # Núcleo operacional precisa continuar presente.
+          required = {
+              "method_reset_coverage_v1",
+              "method_convergencia_g5",
+              "method_similarity_day",
+              "method_historico_concentrado_v01",
+              "decision_operational_recommendation",
+              "freeze_meta_snapshot",
+              "show_decision_page",
+              "show_play_page",
+              "play_register_ticket",
+          }
+          after_defs = {
+              n.name for n in ast.walk(tree_after)
+              if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef))
+          }
+          absent = sorted(required - after_defs)
+          if absent:
+              raise SystemExit("ABORTADO: funcoes centrais ausentes: " + ", ".join(absent))
+
+          path.write_text(cleaned, encoding="utf-8")
+          print("Removidos:")
+          for name, qty in sorted(removed):
+              print(f"  {name}: {qty} linha(s)")
+          print("Linhas antes:", len(original.splitlines()))
+          print("Linhas depois:", len(cleaned.splitlines()))
+          print("Bytes antes:", len(original.encode("utf-8")))
+          print("Bytes depois:", len(cleaned.encode("utf-8")))
+          print("Cerebro sensivel: AST identico")
+          PY
+
+          # Documento antigo já foi consolidado em DOCUMENTACAO_GP-H.txt.
+          rm -f source/ATUALIZACOES_PROGRAMA_v0.35.txt
+
+          # O BAT não deve carregar número de versão velho para sempre.
+          python - <<'PY'
+          from pathlib import Path
+          p = Path("source/GERAR_EXE_WINDOWS.bat")
+          t = p.read_text(encoding="utf-8")
+          t = t.replace("title Gerar EXE - GP-H Central v0.36.0", "title Gerar EXE - GP-H Central")
+          t = t.replace("  GP-H CENTRAL - BUILD WINDOWS v0.36.0", "  GP-H CENTRAL - BUILD WINDOWS")
+          p.write_text(t, encoding="utf-8")
+          PY
+
+      - name: Validacao estrutural
+        shell: bash
+        run: |
+          python -m py_compile source/gph_central.py source/gph_updater.py source/CRIAR_PACOTE_ATUALIZACAO.py
+          python - <<'PY'
+          import ast
+          from pathlib import Path
+          text = Path("source/gph_central.py").read_text(encoding="utf-8")
+          tree = ast.parse(text)
+          defs = {n.name for n in ast.walk(tree) if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef))}
+          removed = {
+              "decision_snapshot_history","minmax_date","distinct_draws","search_filter_options",
+              "search_filter_combination_exists","filter_options","list_draws","draw_filter_options",
+              "set_payout_multiplier","payout_table","financial_by_kind","_theme_changed",
+              "home_prepare_next_game","_set_card_bg","play_register","methods_sort_changed",
+              "methods_hour_changed","show_generator_page","on_search_sort_changed","on_search_hour_changed",
+              "open_statistics","open_pulls","open_methods_lab","open_game_generator","DryDayTechnicalDialog",
+          }
+          still = sorted(removed & defs)
+          if still:
+              raise SystemExit("Ainda definidos: " + ", ".join(still))
+          if 'ATUALIZACOES_PROGRAMA_v0.35.txt' in {p.name for p in Path('source').iterdir()}:
+              raise SystemExit('Documento legado ainda presente')
+          print('py_compile OK')
+          print('limpeza orfa OK')
+          print('documentacao consolidada OK')
+          PY
+          git diff --check
+          git diff --stat
+
+      - name: Gravar resultado somente na branch de reforma
+        shell: bash
+        run: |
+          git config user.name "Gzaraki"
+          git config user.email "112765179+clienteg1603@users.noreply.github.com"
+          git rm .github/workflows/refactor-stage1-temp.yml
+          git add source/gph_central.py source/GERAR_EXE_WINDOWS.bat source/ATUALIZACOES_PROGRAMA_v0.35.txt
+          git commit -m "Etapa 1: limpeza estrutural segura"
+          git push origin HEAD:refactor-ui-limpeza-v045
