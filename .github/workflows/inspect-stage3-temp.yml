@@ -1,0 +1,42 @@
+name: Inspecao GP-H Etapa 3 temporaria
+on:
+  push:
+    branches: [refactor-ui-limpeza-v045]
+    paths: [".github/workflows/inspect-stage3-temp.yml"]
+permissions:
+  contents: read
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: refactor-ui-limpeza-v045
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import ast
+          p=Path('source/gph_central.py')
+          text=p.read_text(encoding='utf-8')
+          lines=text.splitlines()
+          tree=ast.parse(text)
+          for wanted in ('show_base_config','_base_scroll_to','show_search'):
+              node=next((n for n in ast.walk(tree) if isinstance(n,ast.FunctionDef) and n.name==wanted),None)
+              print('\n===',wanted,'===')
+              if not node:
+                  print('AUSENTE'); continue
+              print('linhas',node.lineno,node.end_lineno)
+              seg=lines[node.lineno-1:node.end_lineno]
+              if wanted=='show_base_config':
+                  for i,line in enumerate(seg,node.lineno):
+                      if ('base_body' in line or '_box' in line or '_scroll_to' in line or '.pack(' in line and ('box' in line or 'base_' in line)):
+                          print(f'{i}: {line}')
+              elif wanted=='_base_scroll_to':
+                  print('\n'.join(f'{i}: {line}' for i,line in enumerate(seg,node.lineno)))
+              else:
+                  print('\n'.join(f'{i}: {line}' for i,line in enumerate(seg,node.lineno) if i < node.lineno+150))
+          PY
