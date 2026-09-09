@@ -1,0 +1,178 @@
+name: Reforma GP-H - Auditoria final temporaria
+
+on:
+  push:
+    branches:
+      - refactor-ui-limpeza-v045
+    paths:
+      - ".github/workflows/refactor-final-audit-temp.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: refactor-ui-limpeza-v045
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Remover restos internos da propria reforma
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import ast
+          p=Path('source/gph_central.py')
+          text=p.read_text(encoding='utf-8')
+          before=ast.parse(text)
+
+          def sensitive(tree):
+              tokens=('meta','reset','similar','convergencia','historico_concentrado','decision_contextual','decision_operational_recommendation')
+              return {
+                  n.name:ast.dump(n,include_attributes=False)
+                  for n in ast.walk(tree)
+                  if isinstance(n,(ast.FunctionDef,ast.AsyncFunctionDef))
+                  and any(t in n.name.lower() for t in tokens)
+              }
+          sig=sensitive(before)
+
+          unused='''        top_level = list(base_body.winfo_children())\n        fixed_sections = {\n'''
+          replacement='''        fixed_sections = {\n'''
+          if text.count(unused)!=1:
+              raise SystemExit('top_level preliminar inesperado')
+          text=text.replace(unused,replacement,1)
+
+          legacy='''        self._base_section_widgets = {\n            "account": account_box,\n            "appearance": visual_box,\n            "updates": update_box,\n            "data": health_box,\n        }\n\n'''
+          if text.count(legacy)!=1:
+              raise SystemExit('_base_section_widgets inesperado')
+          text=text.replace(legacy,'',1)
+
+          after=ast.parse(text)
+          if sensitive(after)!=sig:
+              raise SystemExit('Cerebro sensivel alterado na limpeza final')
+          p.write_text(text,encoding='utf-8')
+          print('Restos da refatoracao removidos.')
+          PY
+
+      - name: Auditoria integral contra main
+        shell: bash
+        run: |
+          python -m py_compile source/gph_central.py source/gph_updater.py source/CRIAR_PACOTE_ATUALIZACAO.py
+          GPH_DATA_DIR=/tmp/gph-refactor-smoke python - <<'PY'
+          import sys, ast, subprocess, re
+          from pathlib import Path
+          sys.path.insert(0,'source')
+          import gph_central as current
+
+          assert current.APP_VERSION == '0.45.0'
+          db=current.Database(current.DB_PATH)
+          assert db is not None
+
+          branch_text=Path('source/gph_central.py').read_text(encoding='utf-8')
+          main_text=subprocess.check_output(
+              ['git','show','origin/main:source/gph_central.py'], text=True, encoding='utf-8'
+          )
+          branch=ast.parse(branch_text); main=ast.parse(main_text)
+          tokens=('meta','reset','similar','convergencia','historico_concentrado','decision_contextual','decision_operational_recommendation')
+          def sensitive(tree):
+              return {
+                  n.name:ast.dump(n,include_attributes=False)
+                  for n in ast.walk(tree)
+                  if isinstance(n,(ast.FunctionDef,ast.AsyncFunctionDef))
+                  and any(t in n.name.lower() for t in tokens)
+              }
+          a=sensitive(main); b=sensitive(branch)
+          if a != b:
+              changed=sorted((set(a)^set(b))|{n for n in set(a)&set(b) if a[n]!=b[n]})
+              raise SystemExit('CEREBRO DIFERENTE DA MAIN: '+', '.join(changed[:50]))
+
+          funcs={n.name:n for n in ast.walk(branch) if isinstance(n,ast.FunctionDef)}
+          required={
+              'show_home','show_play_page','show_decision_page','show_results','show_search',
+              'show_statistics_page','show_pulls_page','show_methods_page','show_base_config',
+              'play_register_ticket','search_period_mode_changed','_add_sidebar_section_label',
+              'method_reset_coverage_v1','method_similarity_day','method_convergencia_g5',
+              'method_historico_concentrado_v01','freeze_meta_snapshot',
+          }
+          missing=sorted(required-set(funcs))
+          if missing: raise SystemExit('Funcoes essenciais ausentes: '+', '.join(missing))
+
+          forbidden={
+              'show_generator_page','play_register','DryDayTechnicalDialog','_base_scroll_to',
+              'on_search_sort_changed','on_search_hour_changed','open_game_generator',
+          }
+          stale=sorted(forbidden & set(funcs))
+          if stale: raise SystemExit('Legado reapareceu: '+', '.join(stale))
+
+          # Relatorio de candidatos restantes com uma unica ocorrencia lexical.
+          candidates=[]
+          for name,node in funcs.items():
+              count=len(re.findall(r'\b'+re.escape(name)+r'\b',branch_text))
+              if count==1:
+                  candidates.append((node.lineno,name))
+          print('APP_VERSION',current.APP_VERSION)
+          print('linhas_main',len(main_text.splitlines()))
+          print('linhas_branch',len(branch_text.splitlines()))
+          print('bytes_main',len(main_text.encode('utf-8')))
+          print('bytes_branch',len(branch_text.encode('utf-8')))
+          print('cerebro_sensivel_identico_main',len(a),'funcoes')
+          print('candidatos_unica_ocorrencia_restantes',len(candidates))
+          for line,name in sorted(candidates)[:40]: print('  ',line,name)
+          PY
+          git diff --check
+          test ! -f source/ATUALIZACOES_PROGRAMA_v0.35.txt
+
+      - name: Smoke test visual com Xvfb quando disponivel
+        shell: bash
+        run: |
+          if command -v xvfb-run >/dev/null 2>&1; then
+            rm -rf /tmp/gph-ui-smoke
+            GPH_DATA_DIR=/tmp/gph-ui-smoke xvfb-run -a python - <<'PY'
+          import sys
+          sys.path.insert(0,'source')
+          import gph_central as g
+          g.App._ensure_profile_login=lambda self: True
+          app=g.App()
+          app.update_idletasks()
+          app.show_search(); app.update_idletasks()
+          app.var_period_mode.set('Data específica'); app.search_period_mode_changed(); app.update_idletasks()
+          app.var_period_mode.set('Entre datas'); app.search_period_mode_changed(); app.update_idletasks()
+          for section in ('account','appearance','updates','data'):
+              app.show_base_config(section=section); app.update_idletasks()
+          for view in ('summary','analysis','audit','lab'):
+              app.show_decision_page(view=view); app.update_idletasks()
+          app.show_play_page(); app.update_idletasks()
+          app.destroy()
+          print('SMOKE UI OK')
+          PY
+          else
+            echo 'xvfb-run indisponivel; smoke visual ignorado.'
+          fi
+
+      - name: Confirmar arvore limpa e gravar auditoria
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          bad=[]
+          for p in Path('.github/workflows').glob('*temp*'):
+              if p.name != 'refactor-final-audit-temp.yml': bad.append(str(p))
+          if bad: raise SystemExit('Workflows temporarios restantes: '+', '.join(bad))
+          print('Nenhum workflow temporario antigo restante.')
+          PY
+          git config user.name "Gzaraki"
+          git config user.email "112765179+clienteg1603@users.noreply.github.com"
+          git rm .github/workflows/refactor-final-audit-temp.yml
+          git add source/gph_central.py
+          if ! git diff --cached --quiet; then
+            git commit -m "Auditoria final: remover restos da refatoracao"
+            git push origin HEAD:refactor-ui-limpeza-v045
+          else
+            echo 'Nenhuma limpeza adicional necessaria.'
+          fi
