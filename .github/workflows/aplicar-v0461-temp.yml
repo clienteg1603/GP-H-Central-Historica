@@ -1,0 +1,121 @@
+name: Aplicar v0.46.1 Home e números fortes
+
+on:
+  push:
+    branches:
+      - ui-animal-ranking-v0461
+    paths:
+      - "tmp_patch_v0461.py"
+      - ".github/workflows/aplicar-v0461-temp.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  validar-e-aplicar:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Baixar branch
+        uses: actions/checkout@v4
+        with:
+          ref: ui-animal-ranking-v0461
+          fetch-depth: 0
+
+      - name: Preparar Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Aplicar patch v0.46.1
+        run: python tmp_patch_v0461.py
+
+      - name: Validar sintaxe e ranking do Tigre
+        shell: bash
+        run: |
+          python -m py_compile source/gph_central.py source/gph_updater.py source/CRIAR_PACOTE_ATUALIZACAO.py
+          rm -rf /tmp/gph-v0461-test
+          GPH_DATA_DIR=/tmp/gph-v0461-test python - <<'PY'
+          import sys
+          sys.path.insert(0, 'source')
+          import gph_central as g
+          assert g.APP_VERSION == '0.46.1'
+          db = g.Database(g.DB_PATH)
+          expected = {'Dezena': 4, 'Centena': 40, 'Milhar': 400}
+          for kind, total in expected.items():
+              ranking = db.number_rankings_for_group(22, kind=kind, scope='1º–5º')
+              assert len(ranking) == total, (kind, len(ranking))
+              assert all(g.grupo_da_dezena(int(r['numero'][-2:])) == 22 for r in ranking)
+          dezenas = [r['numero'] for r in db.number_rankings_for_group(22, kind='Dezena')]
+          assert dezenas == ['85', '86', '87', '88'], dezenas
+          print('Ranking TIGRE OK:', dezenas)
+          PY
+
+      - name: Confirmar cérebro idêntico à main
+        shell: bash
+        run: |
+          python - <<'PY'
+          import ast, subprocess
+          from pathlib import Path
+          branch = Path('source/gph_central.py').read_text(encoding='utf-8')
+          main = subprocess.check_output(['git','show','origin/main:source/gph_central.py'], text=True, encoding='utf-8')
+          names = [
+              'method_reset_coverage_v1','method_convergencia_g5','method_similarity_day',
+              'method_historico_concentrado_v01','generate_historical_concentrated_bundle',
+              'generate_centenas_3plus1','centena_31_freeze_state',
+              'decision_contextual_evidence','decision_contextual_audit_summary',
+              'decision_confidence_calibration','decision_walk_forward','decision_adaptive_context',
+              'decision_adaptive_audit_summary','decision_operational_recommendation',
+              'decision_operational_audit_summary','meta_shadow_prediction','meta_walk_forward',
+              'freeze_meta_snapshot','historical_pulls','number_rankings_for_group','generate_historical_numbers',
+          ]
+          def sig(src):
+              tree=ast.parse(src)
+              out={}
+              for n in ast.walk(tree):
+                  if isinstance(n,(ast.FunctionDef,ast.AsyncFunctionDef)) and n.name in names:
+                      out[n.name]=ast.dump(n,include_attributes=False)
+              return out
+          a,b=sig(main),sig(branch)
+          changed=[n for n in names if a.get(n)!=b.get(n)]
+          if changed: raise SystemExit('Cérebro alterado: '+', '.join(changed))
+          print('Cérebro protegido idêntico à main:', len(names), 'funções')
+          PY
+
+      - name: Smoke test visual
+        shell: bash
+        run: |
+          if command -v xvfb-run >/dev/null 2>&1; then
+            rm -rf /tmp/gph-v0461-ui
+            GPH_DATA_DIR=/tmp/gph-v0461-ui xvfb-run -a python - <<'PY'
+          import sys
+          sys.path.insert(0, 'source')
+          import gph_central as g
+          g.App._ensure_profile_login=lambda self: True
+          app=g.App()
+          app.update_idletasks()
+          app.show_home(); app.update_idletasks()
+          dialog=g.AnimalQuickDetailsDialog(app, app.db, 22)
+          dialog.update_idletasks()
+          assert dialog.scope_var.get() == '1º–5º'
+          assert set(dialog.number_trees) == {'Dezena','Centena','Milhar'}
+          assert len(dialog.number_trees['Dezena'][0].get_children()) == 4
+          assert len(dialog.number_trees['Centena'][0].get_children()) == 10
+          assert len(dialog.number_trees['Milhar'][0].get_children()) == 10
+          dialog.scope_var.set('1º'); dialog._refresh_number_rankings(); dialog.update_idletasks()
+          dialog.destroy(); app.destroy()
+          print('SMOKE UI v0.46.1 OK')
+          PY
+          fi
+
+      - name: Conferir diff
+        run: git diff --check
+
+      - name: Gravar versão validada e limpar temporários
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git rm -f tmp_patch_v0461.py .github/workflows/aplicar-v0461-temp.yml
+          git add source/gph_central.py source/DOCUMENTACAO_GP-H.txt
+          git commit -m "v0.46.1 Home e numeros fortes por bicho"
+          git push origin HEAD:ui-animal-ranking-v0461
