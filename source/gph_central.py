@@ -16219,7 +16219,7 @@ class App(tk.Tk):
         # nunca exibe mensagens retrospectivas do tipo "se tivesse jogado".
         rec_card = ttk.Frame(self.play_body, style="Card.TFrame", padding=(12, 9))
         rec_card.pack(fill="x", pady=(0, 6))
-        ttk.Label(rec_card, text="RECOMENDAÇÃO DA RODADA", style="CardMuted.TLabel").pack(anchor="w")
+        ttk.Label(rec_card, text="DECISÃO DA RODADA", style="CardMuted.TLabel").pack(anchor="w")
         self.play_recommendation_label = ttk.Label(
             rec_card, text="", style="Recommendation.TLabel", wraplength=1040, justify="left"
         )
@@ -16230,6 +16230,22 @@ class App(tk.Tk):
         self.play_recommendation_note.pack(fill="x", anchor="w", pady=(2, 0))
         self._bind_wraplength(self.play_recommendation_label, rec_card, margin=12, minimum=240)
         self._bind_wraplength(self.play_recommendation_note, rec_card, margin=12, minimum=240)
+
+        ttk.Separator(rec_card, orient="horizontal").pack(fill="x", pady=(8, 7))
+        ttk.Label(
+            rec_card, text="APOIO À CONSTRUÇÃO", style="CardMuted.TLabel"
+        ).pack(anchor="w")
+        self.play_construction_label = ttk.Label(
+            rec_card, text="", style="Card.TLabel",
+            font=(UI_FONT_SEMIBOLD, UI_FONT_SIZES["body"]), wraplength=1040, justify="left"
+        )
+        self.play_construction_label.pack(fill="x", anchor="w", pady=(3, 0))
+        self.play_construction_note = ttk.Label(
+            rec_card, text="", style="CardMuted.TLabel", wraplength=1040, justify="left"
+        )
+        self.play_construction_note.pack(fill="x", anchor="w", pady=(2, 0))
+        self._bind_wraplength(self.play_construction_label, rec_card, margin=12, minimum=240)
+        self._bind_wraplength(self.play_construction_note, rec_card, margin=12, minimum=240)
 
         # 2) JOGO
         game_card = ttk.Frame(self.play_body, style="Card.TFrame", padding=(12, 10))
@@ -16618,9 +16634,64 @@ class App(tk.Tk):
         except Exception:
             return ""
 
-    def _play_refresh_shadow_recommendation(self):
+    def _play_refresh_decision_recommendation(self):
+        """Mostra em Jogar a mesma recomendacao principal congelada da Decisao."""
         label = getattr(self, "play_recommendation_label", None)
         note = getattr(self, "play_recommendation_note", None)
+        if label is None:
+            return
+
+        target = self.play_get_selected_target()
+        if not target:
+            label.configure(text="Selecione uma rodada para consultar a Decisão.")
+            if note is not None:
+                note.configure(text="")
+            return
+
+        if not self.db.is_next_operational_target(target):
+            label.configure(text="Decisão principal disponível para a próxima rodada operacional.")
+            if note is not None:
+                note.configure(text="Rodadas posteriores continuam disponíveis para montagem manual.")
+            return
+
+        try:
+            snapshot = self.db.latest_decision_snapshot() or {}
+            contextual = snapshot.get("contextual") or {}
+            operational = contextual.get("operational") or {}
+            headline = str(operational.get("headline") or "").strip()
+            reason = str(operational.get("reason") or "").strip()
+
+            if headline:
+                label.configure(text=headline)
+                if note is not None:
+                    suffix = " Leitura congelada antes do resultado; não altera automaticamente o jogo oficial."
+                    note.configure(text=(reason + suffix).strip())
+                return
+
+            best = contextual.get("best") or {}
+            method = best.get("method")
+            status = contextual.get("status")
+            if method:
+                label.configure(text=f"Leitura principal: {method} • {status or 'em avaliação'}")
+                if note is not None:
+                    note.configure(text="A Decisão Contextual já possui líder; a tradução operacional ainda não está disponível neste snapshot.")
+                return
+
+            label.configure(text="Ainda não há evidência suficiente para uma Decisão principal.")
+            if note is not None:
+                note.configure(text="A Central continua acumulando evidência prospectiva sem alterar o método oficial.")
+        except Exception:
+            label.configure(text="Decisão principal temporariamente indisponível.")
+            if note is not None:
+                note.configure(text="Você pode consultar os detalhes completos na tela Decisão.")
+
+
+    def _play_refresh_shadow_recommendation(self):
+        # A recomendacao principal vem da Etapa D. O ranking sombra abaixo
+        # continua util, mas agora aparece apenas como apoio a construcao.
+        self._play_refresh_decision_recommendation()
+        label = getattr(self, "play_construction_label", None)
+        note = getattr(self, "play_construction_note", None)
         if label is None:
             return
         target = self.play_get_selected_target()
@@ -22368,10 +22439,14 @@ class App(tk.Tk):
             style="Sub.TLabel", wraplength=1080,
         ).pack(anchor="w", pady=(0,10))
 
-    def show_decision_page(self, open_lab=False):
+    def show_decision_page(self, open_lab=False, view=None):
         self._set_active_nav("Decisão")
         self._clear_content()
         self._page = "decision"
+        view = view or ("lab" if open_lab else "summary")
+        if view not in {"summary", "analysis", "audit", "lab"}:
+            view = "summary"
+        self.decision_view = view
         try:
             self.db.audit_decision_snapshots()
             snapshot, _created = self.db.freeze_decision_snapshot(force=False)
@@ -22385,8 +22460,24 @@ class App(tk.Tk):
 
         self._page_title(
             "Decisão da rodada",
-            "Qual leitura tem melhor evidência para a próxima rodada. O índice não é probabilidade de prêmio.",
+            "Primeiro a resposta prática; detalhes técnicos ficam separados para não poluir a leitura.",
         )
+
+        decision_nav = ttk.Frame(self.content)
+        decision_nav.pack(fill="x", pady=(0, 9))
+        for key, label in (
+            ("summary", "Resumo"),
+            ("analysis", "Análise"),
+            ("audit", "Auditoria"),
+            ("lab", "Laboratório"),
+        ):
+            ttk.Button(
+                decision_nav,
+                text=label,
+                style="SubnavActive.TButton" if view == key else "Subnav.TButton",
+                command=lambda selected=key: self.show_decision_page(view=selected),
+            ).pack(side="left", padx=(0 if key == "summary" else 5, 0))
+
         body = self._make_scrollable_page_body(self.content, "decision")
 
         hero = ttk.Frame(body, style="Card.TFrame", padding=12)
@@ -22413,13 +22504,28 @@ class App(tk.Tk):
         if not snapshot:
             return
 
-        # v0.37.0/v0.40.0 — leitura contextual agora é congelada e auditável.
+        # A resposta pratica fica curta. As camadas profundas continuam
+        # disponiveis, mas em visoes separadas da mesma tela.
+        if view == "summary":
+            self._decision_build_operational(body, snapshot)
+            self._decision_build_contextual(body, snapshot)
+            return
+
+        if view == "audit":
+            self._decision_build_self_audit(body)
+            self._decision_build_confidence_calibration(body)
+            self._decision_build_meta(body, snapshot)
+            return
+
+        if view == "lab":
+            self._build_shadow_lab_section(body)
+            return
+
+        # ANALISE: leitura contextual + adaptacao + recomendacao e
+        # comparacoes detalhadas que ja existiam.
         self._decision_build_contextual(body, snapshot)
-        self._decision_build_self_audit(body)
-        self._decision_build_confidence_calibration(body)
         self._decision_build_adaptive(body, snapshot)
         self._decision_build_operational(body, snapshot)
-        self._decision_build_meta(body, snapshot)
 
         # Componentes transparentes do índice.
         components = snapshot.get("components") or {}
@@ -22503,13 +22609,6 @@ class App(tk.Tk):
 
         # v0.29.0 — Etapa 3: simulador histórico walk-forward sem look-ahead.
         self._decision_build_stage3(body)
-
-        # v0.36.0 — Laboratório deixa de ser página paralela e vira seção da Decisão.
-        self._build_shadow_lab_section(body)
-        if open_lab:
-            canvas = getattr(self, "_smart_scroll_canvases", {}).get("decision")
-            if canvas is not None:
-                self.after_idle(lambda c=canvas: c.yview_moveto(1.0))
 
         hist = ttk.Frame(body,style="Card.TFrame",padding=10)
         hist.pack(fill="x",pady=(0,8))
