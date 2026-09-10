@@ -3,9 +3,10 @@ on:
   push:
     branches: [feat-evolucao-cobertura-v0476]
 permissions:
-  contents: read
+  contents: write
 jobs:
   inspect:
+    if: "!contains(github.event.head_commit.message, '[skip-inspect]')"
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -14,5 +15,12 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.13'
-      - name: Inspecionar arquitetura atual
+      - name: Gerar relatório focado
         run: python _temp_inspect_coverage_v0476.py
+      - name: Persistir relatório no branch
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add _inspection_v0476.txt
+          git commit -m "TEMP relatório arquitetura v0.47.6 [skip-inspect]" || exit 0
+          git push
