@@ -91,7 +91,7 @@ def write_crash_log(exc: BaseException):
 
 
 APP_NAME = "GP-H Central Histórica"
-APP_VERSION = "0.47.3"
+APP_VERSION = "0.47.4"
 START_DATE = date(2026, 1, 2)
 BASE_URL = "https://brasildeunoposte.com.br/resultado-do-jogo-do-bicho-deu-no-poste-{date}/"
 # Ao buscar/atualizar resultados, relê os últimos 7 dias para absorver
@@ -7940,65 +7940,76 @@ class Database:
         }
 
 
-    def generate_centenas_meta_21(
+    def generate_gph_law_numbers(
         self,
         groups: list[int],
+        kind="Centena",
         total=20,
         previous_draw=None,
+        scope="1º–5º",
+        date_to=None,
     ):
-        """Centenas flexíveis do GP-H Meta usando proporção aproximada 2:1.
+        """Lei de Geração GP-H para Centena e Milhar.
 
-        A seleção de bichos vem do ranking Meta. A quantidade total é dividida
-        de forma equilibrada entre os bichos; sobras ficam primeiro com os
-        líderes do ranking. Dentro de cada bicho, aproximadamente 2/3 das
-        Centenas usam a dezena principal ativa e 1/3 a segunda ativa.
+        O método seletor entrega apenas o ranking dos bichos. Esta camada única
+        transforma o ranking em números, independentemente de ele vir de Meta,
+        Reset, Puxada, Similaridade, Seca ou de seletores futuros.
 
-        A máquina de congelamento do 3+1 é REUTILIZADA, sem alteração:
-        principal livre -> principal + segunda; principal congelada -> segunda
-        + terceira. Assim, 4 Centenas continuam sendo 3+1, 5 viram 3+2,
-        6 viram 4+2, 8 viram 5+3 e 9 viram 6+3.
+        Regras estruturais:
+        - quantidade total distribuída por round-robin; sobras favorecem líderes;
+        - aproximadamente 2/3 na dezena principal ativa e 1/3 na segunda ativa;
+        - 4 números por bicho => 3+1; 5=>3+2; 6=>4+2; 7=>5+2;
+          8=>5+3; 9=>6+3; 10=>7+3;
+        - a máquina persistente de congelamento do 3+1 é reutilizada sem mudança:
+          principal livre -> principal+segunda; congelada -> segunda+terceira;
+        - dentro de cada dezena ativa usa os números historicamente mais fortes.
         """
+        if kind not in ("Centena", "Milhar"):
+            raise ValueError("A Lei de Geração GP-H numérica aceita Centena ou Milhar.")
+
         unique_groups = []
         for value in groups:
             g = int(value)
             if 1 <= g <= 25 and g not in unique_groups:
                 unique_groups.append(g)
         if not unique_groups:
-            raise ValueError("O GP-H Meta não forneceu bichos para gerar Centenas.")
+            raise ValueError("O método não forneceu bichos para a Lei de Geração GP-H.")
 
         total = max(1, int(total))
         if total < len(unique_groups):
             raise ValueError(
-                f"Com {len(unique_groups)} bichos, informe pelo menos {len(unique_groups)} Centenas "
-                "para que cada bicho receba ao menos uma."
+                f"Com {len(unique_groups)} bichos, informe pelo menos {len(unique_groups)} {kind.lower()}s "
+                "para que cada bicho receba ao menos um número."
             )
 
-        counts = self.distribute_game_counts(total, unique_groups, kind="Centena")
+        counts = self.distribute_game_counts(total, unique_groups, kind=kind)
         if sum(counts.values()) != total:
-            raise ValueError("Não foi possível distribuir a quantidade pedida entre os bichos do Meta.")
+            raise ValueError("Não foi possível distribuir a quantidade pedida entre os bichos.")
 
-        # Cada dezena possui 10 Centenas possíveis. Para preservar a proporção
-        # 2:1 usando exatamente duas dezenas ativas, o limite íntegro é 15 por
-        # bicho (10 + 5). Acima disso seria necessário quebrar a regra acordada.
-        overloaded = [(g, qty) for g, qty in counts.items() if int(qty) > 15]
+        # Com exatamente duas dezenas ativas, cada dezena comporta 10 Centenas ou
+        # 100 Milhares. 15/150 é o maior total por bicho que preserva 2:1 sem
+        # repetir número ou abrir uma terceira dezena fora da lei.
+        per_group_limit = 15 if kind == "Centena" else 150
+        overloaded = [(g, qty) for g, qty in counts.items() if int(qty) > per_group_limit]
         if overloaded:
             worst = max(qty for _g, qty in overloaded)
             raise ValueError(
-                f"A distribuição 2:1 suporta até 15 Centenas por bicho; a configuração atual "
-                f"chegaria a {worst}. Aumente a quantidade de bichos do Meta ou reduza as Centenas."
+                f"A Lei GP-H 2/3 + 1/3 suporta até {per_group_limit} {kind.lower()}s por bicho; "
+                f"a configuração atual chegaria a {worst}. Aumente a quantidade de bichos ou reduza os números."
             )
 
         if previous_draw is None:
             previous_draw = self.latest_operational_draw()
         if previous_draw is None:
-            raise ValueError("Não há extração-base para aplicar o estado das dezenas.")
+            raise ValueError("Não há extração-base para aplicar o congelamento das dezenas.")
 
         rows = []
         animals = []
-
         for rank_group, g in enumerate(unique_groups, start=1):
             qty = int(counts[g])
-            dez_rank = self.number_rankings_for_group(g, kind="Dezena", scope="1º–5º")
+            dez_rank = self.number_rankings_for_group(
+                g, kind="Dezena", scope=scope, date_to=date_to
+            )
             if len(dez_rank) < 3:
                 raise ValueError(f"Ranking de dezenas insuficiente para o grupo {g:02d}.")
 
@@ -8007,7 +8018,6 @@ class Database:
                 g, principal["numero"], previous_draw=previous_draw
             )
             frozen = bool(freeze_state.get("frozen"))
-
             if frozen:
                 main_dez = segunda["numero"]
                 extra_dez = terceira["numero"]
@@ -8019,14 +8029,18 @@ class Database:
                 main_name = "2/3 na principal"
                 extra_name = "1/3 na 2ª dezena"
 
-            # Arredondamento ao inteiro mais próximo de 2/3, sem banker's round.
+            # Mesmo arredondamento já validado no Meta: 3->2+1, 4->3+1,
+            # 5->3+2, 6->4+2, 7->5+2, 8->5+3, 9->6+3, 10->7+3.
             main_count = (2 * qty + 1) // 3
             extra_count = qty - main_count
 
-            main_rank = self.centena_rankings_for_dezena(g, main_dez, scope="1º–5º")
-            extra_rank = self.centena_rankings_for_dezena(g, extra_dez, scope="1º–5º")
+            number_rank = self.number_rankings_for_group(
+                g, kind=kind, scope=scope, date_to=date_to
+            )
+            main_rank = [r for r in number_rank if str(r["numero"])[-2:] == str(main_dez).zfill(2)]
+            extra_rank = [r for r in number_rank if str(r["numero"])[-2:] == str(extra_dez).zfill(2)]
             if len(main_rank) < main_count or len(extra_rank) < extra_count:
-                raise ValueError(f"Centenas insuficientes nas dezenas ativas do grupo {g:02d}.")
+                raise ValueError(f"{kind}s insuficientes nas dezenas ativas do grupo {g:02d}.")
 
             animals.append({
                 "grupo": g,
@@ -8047,29 +8061,29 @@ class Database:
                 "total_count": qty,
             })
 
-            for pos, c in enumerate(main_rank[:main_count], start=1):
+            for pos, num in enumerate(main_rank[:main_count], start=1):
                 rows.append({
-                    "grupo": g, "bicho": BICHOS[g], "numero": c["numero"],
+                    "grupo": g, "bicho": BICHOS[g], "numero": num["numero"],
                     "dezena_base": main_dez, "regra": main_name,
-                    "ocorrencias": c["ocorrencias"], "ultima": c["ultima"],
+                    "ocorrencias": num["ocorrencias"], "ultima": num["ultima"],
                     "rank_no_bicho": pos, "rank_bicho": rank_group,
                     "frozen": frozen, "principal": principal["numero"],
                     "segunda": segunda["numero"], "terceira": terceira["numero"],
                 })
-            for pos, c in enumerate(extra_rank[:extra_count], start=1):
+            for pos, num in enumerate(extra_rank[:extra_count], start=1):
                 rows.append({
-                    "grupo": g, "bicho": BICHOS[g], "numero": c["numero"],
+                    "grupo": g, "bicho": BICHOS[g], "numero": num["numero"],
                     "dezena_base": extra_dez, "regra": extra_name,
-                    "ocorrencias": c["ocorrencias"], "ultima": c["ultima"],
+                    "ocorrencias": num["ocorrencias"], "ultima": num["ultima"],
                     "rank_no_bicho": main_count + pos, "rank_bicho": rank_group,
                     "frozen": frozen, "principal": principal["numero"],
                     "segunda": segunda["numero"], "terceira": terceira["numero"],
                 })
 
         return {
-            "kind": "Centena",
-            "strategy": "Meta 2:1",
-            "scope": "1º–5º",
+            "kind": kind,
+            "strategy": "Lei de Geração GP-H",
+            "scope": scope,
             "groups": unique_groups,
             "counts": counts,
             "requested_total": total,
@@ -8077,9 +8091,28 @@ class Database:
             "rows": rows,
             "animals": animals,
             "previous_draw": previous_draw,
-            "freeze_rule": "mesma_maquina_do_3plus1",
+            "freeze_rule": "mesma_maquina_persistente_do_3plus1",
             "distribution_rule": "aprox_2_tercos_mais_1_terco",
+            "generation_law": "GP-H v1",
         }
+
+
+    def generate_centenas_meta_21(
+        self,
+        groups: list[int],
+        total=20,
+        previous_draw=None,
+    ):
+        """Compatibilidade: o antigo Meta 2:1 agora usa a Lei de Geração GP-H."""
+        result = self.generate_gph_law_numbers(
+            groups=groups,
+            kind="Centena",
+            total=total,
+            previous_draw=previous_draw,
+            scope="1º–5º",
+        )
+        result["strategy"] = "Meta • Lei de Geração GP-H"
+        return result
 
 
 
@@ -8607,24 +8640,14 @@ class Database:
         targets_per_source=3,
         min_support=3,
         count_repeats=True,
+        previous_draw=None,
     ):
-        """
-        Gerador flexível da Seca do Dia.
-
-        - Tipo: Centena ou Milhar.
-        - Quantidade livre.
-        - Bichos escolhidos pelo motor diário de 1º prêmio.
-        - Números ranqueados somente pelo histórico de 1º prêmio.
-        - Ranking numérico também é cortado no dia-base.
-        """
+        """Seca do Dia: seletor próprio, geração numérica pela Lei GP-H."""
         if kind not in ("Centena", "Milhar"):
-            raise ValueError(
-                "A Seca do Dia gera apenas Centena ou Milhar."
-            )
+            raise ValueError("A Seca do Dia gera apenas Centena ou Milhar.")
 
         total = max(1, int(total))
-        top_animals = max(1, min(10, int(top_animals)))
-
+        top_animals = max(1, min(10, int(top_animals), total))
         method = self.method_dry_day_first_prize(
             base_date=base_date,
             top_n=top_animals,
@@ -8632,59 +8655,23 @@ class Database:
             min_support=min_support,
             count_repeats=count_repeats,
         )
-
-        groups = [
-            r["grupo"] for r in method["selected"]
-        ]
+        groups = [int(r["grupo"]) for r in method["selected"]]
         if not groups:
-            raise ValueError(
-                "Nenhum bicho alcançou o suporte mínimo da Seca do Dia."
-            )
+            raise ValueError("Nenhum bicho alcançou o suporte mínimo da Seca do Dia.")
 
-        counts = self.distribute_game_counts(
-            total=total,
+        generation = self.generate_gph_law_numbers(
             groups=groups,
             kind=kind,
+            total=total,
+            previous_draw=previous_draw,
+            scope="1º",
+            date_to=base_date,
         )
-
-        rows = []
-
-        for rank_group, g in enumerate(groups, start=1):
-            number_ranking = self.number_rankings_for_group(
-                g,
-                kind=kind,
-                scope="1º",
-                date_to=base_date,
-            )
-
-            for pos, num in enumerate(
-                number_ranking[:counts[g]],
-                start=1,
-            ):
-                rows.append({
-                    "grupo": g,
-                    "bicho": BICHOS[g],
-                    "numero": num["numero"],
-                    "dezena_base": num["numero"][-2:],
-                    "regra": "Seca 1º prêmio",
-                    "ocorrencias": num["ocorrencias"],
-                    "ultima": num["ultima"],
-                    "rank_no_bicho": pos,
-                    "rank_bicho": rank_group,
-                })
-
-        return {
-            "kind": kind,
-            "strategy": "Seca do Dia 1º",
-            "scope": "1º",
-            "base_date": str(base_date),
-            "groups": groups,
-            "counts": counts,
-            "requested_total": total,
-            "generated_total": len(rows),
-            "rows": rows,
-            "method": method,
-        }
+        generation["strategy"] = "Seca do Dia 1º • Lei GP-H"
+        generation["base_date"] = str(base_date)
+        generation["method"] = method
+        generation["selector_scope"] = "1º"
+        return generation
 
 
 
@@ -17199,7 +17186,7 @@ class App(tk.Tk):
         self.play_kind = tk.StringVar(value="Centena")
         self.play_submode = tk.StringVar(value="Milhar")
         self.play_scope = tk.StringVar(value="1º–5º")
-        self.play_method = tk.StringVar(value="Oficial • Reset + 3+1")
+        self.play_method = tk.StringVar(value="Oficial • Reset + Lei GP-H")
         self.play_total = tk.StringVar(value="20")
         self.play_meta_animals = tk.StringVar(value="5")
         self.play_hc_base_animals = tk.StringVar(value="5")
@@ -17368,14 +17355,14 @@ class App(tk.Tk):
         ).pack(side="left", padx=(10, 0))
         tk.Label(
             self.play_meta_card,
-            text="Pode jogar desde o primeiro snapshot auditado. Até 20, fica marcado como META EM FORMAÇÃO; a arquitetura do cérebro e o corte anti-lookahead permanecem os mesmos.",
+            text="O método escolhe e ordena os bichos; a Lei GP-H transforma esse ranking em jogo. Em Centena/Milhar usa 2/3 + 1/3 nas dezenas ativas e o mesmo congelamento persistente do 3+1.",
             bg=self.colors["card2"], fg=self.colors["muted"],
             font=("Segoe UI", 8), anchor="w", justify="left",
         ).pack(fill="x", pady=(5, 7))
         meta_controls = tk.Frame(self.play_meta_card, bg=self.colors["card2"])
         meta_controls.pack(fill="x")
         self.play_meta_animals_label = tk.Label(
-            meta_controls, text="Bichos do ranking Meta", bg=self.colors["card2"],
+            meta_controls, text="Bichos do ranking", bg=self.colors["card2"],
             fg=self.colors["text"], font=("Segoe UI", 9),
         )
         self.play_meta_animals_label.grid(row=0, column=0, sticky="w")
@@ -17384,7 +17371,7 @@ class App(tk.Tk):
         )
         self.play_meta_animals_spin.grid(row=1, column=0, sticky="w", pady=(2, 0), padx=(0, 14))
         self.play_meta_status = tk.Label(
-            meta_controls, text="Escolha quantos bichos do topo do Meta entrarão no jogo.",
+            meta_controls, text="Escolha quantos bichos do topo do método entrarão no jogo.",
             bg=self.colors["card2"], fg=self.colors["muted"],
             font=("Segoe UI", 8), anchor="w", justify="left",
         )
@@ -19064,9 +19051,8 @@ class App(tk.Tk):
             ]
         elif kind == "Centena":
             methods = [
-                "Oficial • Reset + 3+1",
+                "Oficial • Reset + Lei GP-H",
                 "★ META • GP-H Meta v0.1",
-                "Oficial • Reset + Histórica",
                 "Especial • Seca do Dia 1º",
                 "Experimental • Puxada Combinada",
                 "Experimental • Similaridade do Dia",
@@ -19074,7 +19060,7 @@ class App(tk.Tk):
             ]
         elif kind == "Milhar":
             methods = [
-                "Oficial • Reset + Histórica",
+                "Oficial • Reset + Lei GP-H",
                 "★ META • GP-H Meta v0.1",
                 "Especial • Seca do Dia 1º",
                 "Experimental • Puxada Combinada",
@@ -19141,27 +19127,20 @@ class App(tk.Tk):
             self.play_hc_card.pack_forget()
             self.play_total_label.grid()
             self.play_total_spin.grid()
-            if kind == "Centena" and method == "Oficial • Reset + 3+1":
-                self.play_total.set("20")
-                self.play_total_spin.configure(state="disabled")
-            else:
-                self.play_total_spin.configure(state="normal")
+            self.play_total_spin.configure(state="normal")
 
-        is_meta = method.startswith("★ META")
-        if is_meta:
+        uses_law_controls = method != "Manual" and kind != "Fechamento de Grupo"
+        if uses_law_controls:
             self.play_meta_card.pack(fill="x", pady=(0, 6), before=self.play_stake_card)
-            if kind == "Fechamento de Grupo":
-                self.play_meta_animals_label.grid_remove()
-                self.play_meta_animals_spin.grid_remove()
-                self.play_meta_status.configure(
-                    text="No Fechamento, a quantidade de bichos é definida no cartão Fechamento configurável abaixo."
-                )
+            self.play_meta_animals_label.grid()
+            self.play_meta_animals_spin.grid()
+            if "Similaridade" in method:
+                law_status = "Bichos do topo dos até 5 slots da Similaridade; repetições podem reduzir os bichos únicos disponíveis."
+            elif method.startswith("Especial"):
+                law_status = "Bichos mais fortes do seletor Seca. A geração numérica segue a Lei GP-H preservando o histórico de 1º prêmio."
             else:
-                self.play_meta_animals_label.grid()
-                self.play_meta_animals_spin.grid()
-                self.play_meta_status.configure(
-                    text="Escolha quantos bichos do topo do Meta entrarão no jogo. Sobras de quantidade favorecem os primeiros do ranking."
-                )
+                law_status = "Escolha quantos bichos do topo do método entrarão no jogo. Sobras favorecem os primeiros do ranking."
+            self.play_meta_status.configure(text=law_status)
         else:
             self.play_meta_card.pack_forget()
 
@@ -19186,7 +19165,7 @@ class App(tk.Tk):
             )
         elif method.startswith("Oficial"):
             badge = ("OFICIAL", "#124A7A", "#DCEEFF")
-            help_text = "Reset é o seletor oficial. Métodos oficiais geram apenas para a próxima rodada operacional."
+            help_text = "Reset é o seletor oficial; a Lei de Geração GP-H é a camada comum que transforma o ranking em jogo."
         elif method.startswith("Histórico"):
             badge = ("HISTÓRICO", "#155E63", "#D9FAF5")
             help_text = (
@@ -19400,6 +19379,10 @@ class App(tk.Tk):
                 )
 
             total = max(1, int(self.play_total.get()))
+            try:
+                requested_animals = max(1, min(25, int(str(self.play_meta_animals.get()).strip() or "5")))
+            except Exception:
+                raise ValueError("Informe uma quantidade válida de bichos do ranking.")
 
             if kind == "Fechamento de Grupo" and method == "Histórico • Concentrado":
                 try:
@@ -19461,7 +19444,8 @@ class App(tk.Tk):
                     base_date=base_date,
                     kind=kind,
                     total=total,
-                    top_animals=min(5, max(2, total)),
+                    top_animals=requested_animals,
+                    previous_draw=latest,
                 )
                 generation["selector"] = "Seca do Dia 1º"
                 generation["strategy"] = "Seca do Dia 1º"
@@ -19493,10 +19477,7 @@ class App(tk.Tk):
                     except Exception:
                         raise ValueError("Informe uma quantidade válida de bichos no Fechamento.")
                 else:
-                    try:
-                        top_animals = max(1, min(25, int(self.play_meta_animals.get())))
-                    except Exception:
-                        raise ValueError("Informe uma quantidade válida de bichos do Meta.")
+                    top_animals = requested_animals
 
                 snapshot, _created = self.db.freeze_decision_snapshot()
                 snap_target = {
@@ -19560,7 +19541,7 @@ class App(tk.Tk):
             elif method.startswith("Experimental"):
                 if "Puxada" in method:
                     pull = self.db.method_convergencia_g5(
-                        latest["data"], latest["sorteio"], latest["hora"], top_n=5
+                        latest["data"], latest["sorteio"], latest["hora"], top_n=requested_animals
                     )
                     groups = [int(r["grupo"]) for r in pull.get("selected", [])]
                     selector = "Puxada Combinada"
@@ -19577,6 +19558,7 @@ class App(tk.Tk):
                         if g not in groups:
                             groups.append(g)
 
+                    groups = groups[:requested_animals]
                     selector = "Sombra Similaridade do Dia"
 
             else:
@@ -19584,7 +19566,7 @@ class App(tk.Tk):
                     latest["data"],
                     latest["sorteio"],
                     latest["hora"],
-                    top_n=5,
+                    top_n=requested_animals,
                 )
                 groups = [
                     int(r["grupo"])
@@ -19688,27 +19670,16 @@ class App(tk.Tk):
                 generation["selector"] = selector
                 generation["strategy"] = method
 
-            elif kind == "Centena" and method.startswith("★ META"):
-                generation = self.db.generate_centenas_meta_21(
+            elif kind in ("Centena", "Milhar"):
+                generation = self.db.generate_gph_law_numbers(
                     groups=groups,
+                    kind=kind,
                     total=total,
                     previous_draw=latest,
+                    scope="1º–5º",
                 )
                 generation["selector"] = selector
-                generation["strategy"] = "Meta 2:1"
-                generation["meta_ranking"] = copy.deepcopy((meta_payload or {}).get("ranking") or [])
-                generation["meta_training_snapshots"] = int((meta_payload or {}).get("training_snapshots") or 0)
-
-            elif (
-                kind == "Centena"
-                and method == "Oficial • Reset + 3+1"
-            ):
-                generation = self.db.generate_centenas_3plus1(
-                    groups=groups[:5],
-                    previous_draw=latest,
-                )
-                generation["selector"] = selector
-                generation["strategy"] = "Oficial 3+1"
+                generation["strategy"] = f"{selector} • Lei GP-H"
 
             else:
                 generation = self.db.generate_historical_numbers(
