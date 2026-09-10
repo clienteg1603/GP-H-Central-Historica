@@ -1,6 +1,7 @@
 from pathlib import Path
 import ast
 import importlib.util
+import sys
 
 BEFORE = Path('/tmp/gph_before_coverage_v0476.py')
 AFTER = Path('source/gph_central.py')
@@ -39,8 +40,11 @@ for name in before_meta:
     assert before_meta[name] == after_meta[name], f'cérebro Meta alterado em {name}'
 
 # Importa a versão patchada para testar os helpers puros sem abrir interface.
+# O módulo precisa estar em sys.modules antes de exec_module para que @dataclass
+# consiga resolver corretamente cls.__module__ durante a importação dinâmica.
 spec = importlib.util.spec_from_file_location('gph_coverage_test', AFTER)
 mod = importlib.util.module_from_spec(spec)
+sys.modules[spec.name] = mod
 spec.loader.exec_module(mod)
 Database = mod.Database
 
