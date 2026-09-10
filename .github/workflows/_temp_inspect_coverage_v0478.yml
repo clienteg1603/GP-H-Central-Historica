@@ -1,37 +1,44 @@
-name: TEMP inspect coverage v0.47.8
+name: TEMP validate coverage v0.47.8
 on:
   push:
     branches: [fix-coverage-history-v0478]
 jobs:
-  inspect:
+  validate:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
-      - uses: actions/checkout@v4
-      - name: Extract relevant methods and SQL
+      - name: Checkout branch
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Prepare environment and baseline
         run: |
-          python - <<'PY'
-          import ast
-          from pathlib import Path
-          p=Path('source/gph_central.py')
-          text=p.read_text(encoding='utf-8')
-          tree=ast.parse(text)
-          lines=text.splitlines()
-          wanted={
-            '_decision_audited_rows','_decision_row_to_dict','decision_coverage_evolution',
-            'audit_decision_snapshots','get_results','find_result','latest_result',
-            '_decision_result_groups_for_snapshot','_target_result_groups'
-          }
-          for node in ast.walk(tree):
-              if isinstance(node,(ast.FunctionDef,ast.AsyncFunctionDef)) and node.name in wanted:
-                  print('\n'+'='*20+' '+node.name+' '+'='*20)
-                  print('\n'.join(lines[node.lineno-1:node.end_lineno]))
-          print('\n=== RESULT TABLE SQL ===')
-          for i,line in enumerate(lines,1):
-              low=line.lower()
-              if ('create table' in low and ('resultado' in low or 'extrac' in low)) or ('from resultados' in low) or ('from extracoes' in low):
-                  print(i, line[:260])
-          print('\n=== decision_snapshots SQL ===')
-          for i,line in enumerate(lines,1):
-              if 'decision_snapshots' in line and any(k in line for k in ('CREATE TABLE','SELECT ','UPDATE ','INSERT ')):
-                  print(i, line[:300])
-          PY
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq python3-tk
+          cp source/gph_central.py /tmp/gph_before_coverage_v0478.py
+      - name: Apply fix
+        run: python _temp_patch_coverage_v0478.py
+      - name: Validate code and Meta isolation
+        run: |
+          python -m py_compile source/gph_central.py source/gph_updater.py source/CRIAR_PACOTE_ATUALIZACAO.py
+          python _temp_test_coverage_v0478.py
+          git diff --check
+      - name: Show diff
+        run: |
+          git diff --stat
+          git diff -- source/DOCUMENTACAO_GP-H.txt | head -120
+          git diff -- source/gph_central.py | head -320
+      - name: Clean temporaries and save validated version
+        run: |
+          git rm -f _temp_patch_coverage_v0478.py _temp_test_coverage_v0478.py .github/workflows/_temp_inspect_coverage_v0478.yml
+          git add source/gph_central.py source/DOCUMENTACAO_GP-H.txt
+          if find . -maxdepth 2 -type f \( -name '*v0478*' -o -name '_temp_*' \) | grep -q .; then
+            echo 'ERROR: temporary files remain'
+            find . -maxdepth 2 -type f \( -name '*v0478*' -o -name '_temp_*' \)
+            exit 1
+          fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git commit -m 'v0.47.8 Corrige bootstrap histórico da Evolução de Cobertura [coverage-history-final]'
+          git push origin HEAD:fix-coverage-history-v0478
