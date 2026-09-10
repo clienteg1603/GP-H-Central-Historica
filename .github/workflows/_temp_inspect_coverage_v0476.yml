@@ -1,0 +1,18 @@
+name: TEMP inspeciona Evolução de Cobertura v0.47.6
+on:
+  push:
+    branches: [feat-evolucao-cobertura-v0476]
+permissions:
+  contents: read
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feat-evolucao-cobertura-v0476
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: Inspecionar arquitetura atual
+        run: python _temp_inspect_coverage_v0476.py
