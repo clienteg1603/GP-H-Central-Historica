@@ -1,3 +1,64 @@
+REVISÃO v0.48.0 — LABORATÓRIO HISTÓRICO EXPERIMENTAL
+
+Acesso: Métodos > LABORATÓRIO HISTÓRICO ou Decisão > Laboratório > Pesquisa histórica.
+Escolha o período avaliado, o seletor e o escopo das Centenas; clique TESTAR NO HISTÓRICO.
+O padrão avalia os últimos 30 dias da base. “Toda a base” amplia o período avaliado.
+Todo o histórico disponível ANTERIOR a cada alvo serve de treino, inclusive antes do início escolhido.
+O cálculo ocorre em processo separado, com progresso e cancelamento; pode-se navegar enquanto ele roda.
+Os relatórios ficam acessíveis ao voltar à página, durante a mesma sessão. Exportar JSON preserva
+protocolo, parâmetros, identificação da base, palpites, acertos, controles, exclusões e auditoria.
+Exportar CSV entrega as rodadas por método, mantendo as listas de números com zeros à esquerda.
+
+O QUE É COMPARADO
+- Centenas: Lei GP-H atual, hierárquica com os mesmos 5 bichos, frequência com os mesmos 5,
+  hierárquica completa e frequência completa. Todos produzem exatamente 20 Centenas distintas.
+- Seletores disponíveis: Reset Cobertura, Puxada Combinada e Histórico Concentrado, sem recalibração.
+  A Lei GP-H atual é executada pelo código existente, incluindo seu congelamento persistente.
+- O modelo numérico usa grupo -> dezena pertencente ao grupo -> algarismo da centena.
+  Há suavização fixa e recuo para a mesma fonte quando o contexto sorteio/horário tem pouca amostra.
+  Cada prêmio tem distribuição própria normalizada. No 1º–5º, o ranking usa a média das cinco massas
+  por prêmio; esse score NÃO é uma probabilidade de acertar em qualquer dos cinco prêmios.
+- Centenas no 1º e Centenas no 1º–5º são execuções separadas; resultados não são somados.
+- Ternos: montagem atual (ABC, ABD, ACD, BCD, ABE) contra otimização exata das 252 carteiras
+  possíveis de cinco Ternos dos MESMOS cinco bichos. Todos os Ternos usam o 1º–5º.
+  A função objetivo é a massa conjunta de resultados cobertos por pelo menos um Terno 3/3,
+  estimada apenas no passado; não é a soma das probabilidades dos Ternos.
+  O otimizador altera a montagem, não a escolha dos bichos. 2/3 é diagnóstico separado, não vitória.
+- Controles com 200 repetições reproduzíveis por rodada: 20 Centenas entre 1.000, quatro Centenas
+  por bicho dos mesmos cinco e cinco Ternos sorteados entre as dez combinações do mesmo núcleo.
+
+AUDITORIA E INTERPRETAÇÃO
+- Verifica datas, horas, presença dos cinco prêmios, duplicações de prêmio, milhar de quatro dígitos,
+  derivados e fonte consistente. Extrações inválidas ficam excluídas com motivo; grupos repetidos
+  reais são preservados. Alvos ausentes da grade operacional não são substituídos por outro sorteio.
+- Audita dígitos por posição numérica, prêmio, fonte e sorteio/horário; repetições na milhar e
+  dependência entre extrações do mesmo contexto. O relatório inclui efeito e metades temporais.
+- Qui-quadrado apenas quando todas as células esperadas têm pelo menos cinco observações.
+  Caso contrário, “amostra insuficiente”. Corrige a família dos testes estruturais por BH.
+  Uniformidade supõe dígitos iid uniformes; um desvio não demonstra capacidade de prever.
+- Taxas incluem intervalo Wilson descritivo. Comparações pareadas usam blocos por dia, 999
+  reamostragens e teste de sinais aleatórios por dia, com correção de Holm entre sete comparações.
+  Essas inferências pressupõem dias aproximadamente independentes; não corrigem toda dependência.
+- “Candidato a teste futuro” exige ganho positivo contra todos os controles da sua família,
+  intervalo por dia acima de zero, p corrigido <= 0,05, ambas as metades positivas e pelo menos
+  20 dias avaliados. Não é aprovação automática nem garantia de previsão; poucas rodadas raras
+  geralmente continuam inconclusivas. Teste interrompido nunca promove candidato.
+- Histórico já explorado continua exploratório. O programa usa a base consolidada atual: não
+  reconstitui a hora em que os resultados foram publicados nem desfaz correções históricas.
+  Um sinal precisa de acompanhamento futuro com parâmetros congelados antes de qualquer mudança.
+
+ISOLAMENTO E DISTRIBUIÇÃO
+- O banco original é aberto em modo somente leitura. Cada rodada usa SQLite temporário na memória
+  contendo apenas o passado já inserido; nem o gerador antigo consegue consultar resultados futuros.
+- Não grava apostas, financeiro, snapshots, decisões, rankings oficiais ou configurações do Meta.
+  Toda a classe Database e os cérebros da 0.47.8 permanecem inalterados.
+- Não importa resultados simulados para a auditoria prospectiva nem calcula lucro hipotético.
+- Publicação pelo GitHub Actions no canal Teste, com testes de causalidade, isolamento, matemática,
+  processo separado e interface Windows antes do build. Executáveis continuam sem console e os
+  dados locais continuam fora da instalação. Nenhuma base pessoal é incluída no pacote.
+- Esta versão foi validada com bases sintéticas reproduzíveis; o RAR anexado continha executáveis,
+  não o banco local do usuário. O botão executará os experimentos sobre a base real instalada.
+
 REVISÃO v0.47.8 — CORREÇÃO DO BOOTSTRAP HISTÓRICO DA COBERTURA
 
 - Corrige a v0.47.7, que ainda iniciava pela função _decision_audited_rows e por isso descartava snapshots antigos antes do bootstrap.

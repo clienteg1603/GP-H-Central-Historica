@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-GP-H Central Histórica v0.46.9
+GP-H Central Histórica v0.48.0
 Pesquisa e manutenção do histórico 2026 do Deu no Poste / PT-Rio.
 
 Escopo desta versão:
@@ -91,7 +91,7 @@ def write_crash_log(exc: BaseException):
 
 
 APP_NAME = "GP-H Central Histórica"
-APP_VERSION = "0.47.8"
+APP_VERSION = "0.48.0"
 START_DATE = date(2026, 1, 2)
 BASE_URL = "https://brasildeunoposte.com.br/resultado-do-jogo-do-bicho-deu-no-poste-{date}/"
 # Ao buscar/atualizar resultados, relê os últimos 7 dias para absorver
@@ -23816,6 +23816,19 @@ class App(tk.Tk):
             d = str(target.get("data") or "—")
         return f"{d} • {target.get('sorteio','—')} {target.get('hora','—')}"
 
+    def show_history_research(self):
+        """Abre a pesquisa histórica sem congelar ou recalcular o Meta."""
+        from gph_history_ui import HistoryLabUI
+        self._set_active_nav("Decisão")
+        self._clear_content()
+        self._page = "history_research"
+        self._page_title("Laboratório histórico", "Auditoria e comparações experimentais com a base já existente.")
+        ttk.Button(self.content, text="Voltar ao Laboratório", command=self.show_shadow_lab_page).pack(anchor="w", pady=(0, 8))
+        body = self._make_scrollable_page_body(self.content, "history_research")
+        if not hasattr(self, "_history_research_ui"):
+            self._history_research_ui = HistoryLabUI(self, CalendarField)
+        self._history_research_ui.build(body)
+
     def _build_shadow_lab_section(self, body):
         """Laboratório Sombra incorporado à Central de Decisão."""
         try:
@@ -24163,6 +24176,10 @@ class App(tk.Tk):
             ).pack(side="left", padx=(0 if key == "summary" else 5, 0))
 
         body = self._make_scrollable_page_body(self.content, "decision")
+
+        if view == "lab":
+            ttk.Button(body, text="Pesquisa histórica · Centenas, Ternos e auditoria",
+                       command=self.show_history_research).pack(anchor="w", pady=(0, 8))
 
         hero = ttk.Frame(body, style="Card.TFrame", padding=12)
         hero.pack(fill="x", pady=(0, 8))
@@ -26081,6 +26098,9 @@ class App(tk.Tk):
             "Área técnica para executar e comparar métodos sobre um resultado-base.",
         )
         body = self._make_scrollable_page_body(self.content, "methods")
+
+        ttk.Button(body, text="LABORATÓRIO HISTÓRICO · TESTAR A BASE",
+                   command=self.show_history_research).pack(anchor="w", pady=(0, 8))
 
         base = ttk.Frame(body, style="Card.TFrame", padding=8)
         base.pack(fill="x", pady=(0, 6))
