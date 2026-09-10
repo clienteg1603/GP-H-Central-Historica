@@ -1,33 +1,46 @@
-name: TEMP inspeciona manual v0.47.5
+name: TEMP valida manual multijogo v0.47.5
 on:
   push:
     branches: [fix-manual-multijogo-v0475]
 permissions:
-  contents: read
+  contents: write
 jobs:
-  inspect:
+  validate:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
         with:
           ref: fix-manual-multijogo-v0475
-      - name: Mapear UI e geração manual
+          fetch-depth: 0
+      - name: Preparar ambiente e baseline
         run: |
-          python - <<'PY'
-          import ast
-          from pathlib import Path
-          p=Path('source/gph_central.py')
-          s=p.read_text(encoding='utf-8')
-          tree=ast.parse(s)
-          wanted={
-            'play_show_new','play_manual_input','play_render_generation','play_add_to_ticket',
-            'play_method_changed','play_kind_changed','play_family_changed','play_variant_changed',
-            'play_scope_changed','play_target_changed','play_refresh_method_ui','play_clear_generation',
-            '_set_play_subnav_active','_draft_description','show_play_page'
-          }
-          for node in ast.walk(tree):
-              if isinstance(node,(ast.FunctionDef,ast.AsyncFunctionDef)) and (node.name in wanted or ('play_' in node.name and any(x in node.name for x in ('kind','method','family','variant','ticket','generation')))):
-                  seg=ast.get_source_segment(s,node) or ''
-                  print(f'\n===== {node.name} L{node.lineno} =====')
-                  print(seg[:40000])
-          PY
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq python3-tk
+          cp source/gph_central.py /tmp/gph_before_manual_v0475.py
+      - name: Aplicar manutenção
+        run: python _temp_patch_manual_v0475.py
+      - name: Validar regressão
+        run: |
+          python -m py_compile source/gph_central.py
+          python _temp_test_manual_v0475.py
+          git diff --check
+      - name: Limpar temporários e salvar versão validada
+        run: |
+          rm -rf source/__pycache__ __pycache__
+          git rm -f .github/workflows/_temp_inspect_manual_v0475.yml
+          git rm -f _temp_patch_manual_v0475.py
+          git rm -f _temp_test_manual_v0475.py
+          git add source/gph_central.py source/DOCUMENTACAO_GP-H.txt
+          if find . -path './.git' -prune -o -type f \( -name '_temp*' -o -name 'temp-*' \) -print | grep -q .; then
+            echo 'ERRO: temporários restantes:'
+            find . -path './.git' -prune -o -type f \( -name '_temp*' -o -name 'temp-*' \) -print
+            exit 1
+          fi
+          git diff --cached --check
+          echo '=== DIFF FINAL ==='
+          git diff --cached --stat
+          git status --short
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git commit -m 'v0.47.5 Manual multijogo em Nova aposta'
+          git push origin HEAD:fix-manual-multijogo-v0475
