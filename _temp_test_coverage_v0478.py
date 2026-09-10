@@ -50,7 +50,7 @@ assert x['available'] and x['coverage_hits'] == 2
 # Regra da meta > 50% segue estrita.
 rows = [{'coverage_hits':2 if i < 11 else 1, 'best_terno':None, 'best_core_terno':None} for i in range(20)]
 s = Database._coverage_evolution_summary(rows, 20, target_pct=50)
-assert s['pct_2plus'] == 55.0 and s['goal_met'] is True
+assert abs(s['pct_2plus'] - 55.0) < 1e-9 and s['goal_met'] is True
 rows50 = [{'coverage_hits':2 if i < 10 else 1, 'best_terno':None, 'best_core_terno':None} for i in range(20)]
 assert Database._coverage_evolution_summary(rows50, 20, target_pct=50)['goal_met'] is False
 
