@@ -1,0 +1,1031 @@
+            else:
+                ttk.Button(
+                    actions, text="USAR", style="Accent.TButton",
+                    command=lambda n=pack_name: self._set_animal_pack(n),
+                ).pack(side="right")
+
+        ttk.Label(
+            visual_box,
+            text=f"Tema atual: {self.theme_name}   •   Bichos: {self.animal_pack_name}",
+            style="CardMuted.TLabel",
+        ).pack(anchor="w", pady=(8, 0))
+
+        health = self.db.base_health()
+        audit = health["audit"]
+        latest = self.db.latest_draw()
+        result_count = self.db.count()
+        game_count = self.db.game_count()
+
+        if latest:
+            latest_txt = (
+                datetime.strptime(
+                    latest["data"], "%Y-%m-%d"
+                ).strftime("%d/%m/%Y")
+                + f" • {latest['sorteio']} {latest['hora']}"
+            )
+        else:
+            latest_txt = "Base vazia"
+
+        health_box = ttk.Frame(
+            base_body,
+            style="Card.TFrame",
+            padding=10,
+        )
+        health_box.pack(fill="x", pady=(0, 7))
+
+        ttk.Label(
+            health_box,
+            text=f"Saúde da base: {health['state']}",
+            style="Card.TLabel",
+            font=("Segoe UI Semibold", 12),
+        ).pack(anchor="w")
+
+        ttk.Label(
+            health_box,
+            text=(
+                f"{result_count:,} prêmio(s) • "
+                f"{audit['draws']:,} extração(ões) • "
+                f"{game_count} jogo(s) congelado(s) • "
+                f"{health['pending_games']} pendente(s) • "
+                f"último: {latest_txt}"
+            ).replace(",", "."),
+            style="Card.TLabel",
+        ).pack(anchor="w", pady=(2, 0))
+
+        ttk.Label(
+            health_box,
+            text=(
+                f"Incompletas: {len(audit['incomplete'])} • "
+                f"Possíveis lacunas operacionais: "
+                f"{health['possible_gap_count']} • "
+                f"Problemas estruturais: {len(audit['problems'])}"
+            ),
+            style="Card.TLabel",
+        ).pack(anchor="w", pady=(2, 0))
+
+        if health["last_network_check"]:
+            try:
+                check_dt = datetime.fromisoformat(
+                    health["last_network_check"]
+                ).strftime("%d/%m/%Y %H:%M")
+            except Exception:
+                check_dt = health["last_network_check"]
+
+            ttk.Label(
+                health_box,
+                text=(
+                    f"Última consulta: {check_dt} • "
+                    f"{health['last_network_check_type'] or '—'} • "
+                    f"{health['last_network_errors']} falha(s) de acesso. "
+                    "Falha de acesso não significa resultado ausente."
+                ),
+                style="Card.TLabel",
+                wraplength=950,
+            ).pack(anchor="w", pady=(2, 0))
+
+        info = ttk.Frame(
+            base_body,
+            style="Card.TFrame",
+            padding=10,
+        )
+        info.pack(fill="x", pady=(0, 7))
+
+        ttk.Label(
+            info,
+            text="Local da base de dados",
+            style="Card.TLabel",
+            font=("Segoe UI Semibold", 11),
+        ).pack(anchor="w")
+
+        ttk.Label(
+            info,
+            text=str(DB_PATH),
+            style="Card.TLabel",
+            wraplength=950,
+        ).pack(anchor="w", pady=(2, 0))
+
+        if self.startup_migration_report.get("mensagem"):
+            ttk.Label(
+                info,
+                text=self.startup_migration_report["mensagem"],
+                style="Card.TLabel",
+                wraplength=950,
+            ).pack(anchor="w", pady=(4, 0))
+
+        # Diagnóstico pré-EXE: caminhos e persistência ficam visíveis para facilitar suporte e atualização.
+        latest_backup = self._latest_auto_backup()
+        latest_backup_txt = "Nenhum backup automático encontrado"
+        if latest_backup:
+            try:
+                latest_backup_txt = (
+                    datetime.fromtimestamp(latest_backup.stat().st_mtime).strftime("%d/%m/%Y %H:%M")
+                    + f" • {latest_backup.name}"
+                )
+            except Exception:
+                latest_backup_txt = latest_backup.name
+
+        diag_box = ttk.Frame(base_body, style="Card.TFrame", padding=10)
+        diag_box.pack(fill="x", pady=(0, 7))
+        ttk.Label(diag_box, text="Diagnóstico da instalação", style="Section.TLabel").pack(anchor="w")
+        ttk.Label(
+            diag_box,
+            text=(
+                f"Versão {APP_VERSION} • Banco: {DB_PATH}\n"
+                f"Dados persistentes: {DATA_DIR}\n"
+                f"Último backup automático: {latest_backup_txt}"
+            ),
+            style="CardMuted.TLabel",
+            wraplength=980,
+            justify="left",
+        ).pack(anchor="w", pady=(3, 7))
+        diag_actions = ttk.Frame(diag_box, style="Card.TFrame")
+        diag_actions.pack(fill="x")
+        diag_specs = [
+            ("Abrir pasta de dados", self.base_open_data_folder),
+            ("Abrir logs", self.base_open_log_folder),
+            ("Copiar diagnóstico", self.base_copy_diagnostics),
+            ("Sobre a Central", self._show_about),
+        ]
+        for idx, (text, command) in enumerate(diag_specs):
+            row, col = divmod(idx, 2)
+            ttk.Button(diag_actions, text=text, command=command).grid(
+                row=row, column=col, sticky="ew", padx=(0 if col == 0 else 4, 4 if col == 0 else 0),
+                pady=(0 if row == 0 else 4, 0),
+            )
+        diag_actions.grid_columnconfigure(0, weight=1, uniform="diagact")
+        diag_actions.grid_columnconfigure(1, weight=1, uniform="diagact")
+
+        actions = ttk.Frame(
+            base_body,
+            style="Card.TFrame",
+            padding=10,
+        )
+        actions.pack(fill="x", pady=(0, 7))
+
+        ttk.Label(
+            actions, text="Ferramentas da base", style="Section.TLabel"
+        ).grid(row=0, column=0, columnspan=3, sticky="w", pady=(0, 8))
+
+        action_specs = [
+            ("Revisar base", self.show_audit),
+            ("Verificar lacunas", self.base_verify_gaps),
+            ("Sincronizar 2026 inteiro", self.start_sync),
+            ("Fazer backup", self.base_backup),
+            ("Importar / mesclar banco", self.base_import_database),
+        ]
+        for idx, (text, command) in enumerate(action_specs):
+            row, col = divmod(idx, 3)
+            row += 1
+            btn = ttk.Button(actions, text=text, command=command)
+            btn.grid(
+                row=row, column=col, sticky="ew",
+                padx=(0 if col == 0 else 4, 4 if col < 2 else 0),
+                pady=(0 if row == 0 else 5, 0),
+            )
+            if text == "Sincronizar 2026 inteiro":
+                self.sync_btn = btn
+        for col in range(3):
+            actions.grid_columnconfigure(col, weight=1, uniform="baseact")
+
+        # Mantem apenas a secao escolhida visivel. Os controles continuam
+        # sendo construidos uma vez nesta abertura para preservar callbacks e
+        # o comportamento existente, mas deixam de formar uma pagina gigante.
+        fixed_sections = {
+            "account": [account_box],
+            "appearance": [visual_box],
+            "updates": [update_box],
+        }
+
+        ttk.Label(
+            base_body,
+            text=(
+                "“Possível lacuna” é um horário esperado pelo calendário "
+                "operacional que não apareceu na base. Feriados ou mudanças "
+                "excepcionais podem explicar alguns casos; por isso a Central "
+                "não transforma isso automaticamente em erro."
+            ),
+            wraplength=930,
+            padding=(0, 6, 0, 0),
+        ).pack(anchor="w")
+
+        top_level = list(base_body.winfo_children())
+        data_widgets = [
+            widget for widget in top_level
+            if widget not in {account_box, visual_box, update_box}
+        ]
+        visible = set(fixed_sections.get(section, data_widgets))
+        for widget in top_level:
+            if widget not in visible:
+                try:
+                    widget.pack_forget()
+                except tk.TclError:
+                    pass
+
+    def _auto_decision_cycle(self):
+        try:
+            if self.db.count() == 0:
+                return
+            self.db.audit_decision_snapshots()
+            target = self.db.next_operational_target()
+            if target and not self.db.get_draw(target["data"], target["sorteio"], target["hora"]):
+                snapshot, _created = self.db.freeze_decision_snapshot(force=False)
+                snapshot, _ctx = self.db.freeze_decision_contextual(snapshot, force=False)
+                self.db.freeze_meta_snapshot(snapshot, force=False)
+        except Exception:
+            # Falta de amostra não deve interromper a abertura da Central.
+            return
+
+    @staticmethod
+    def _decision_target_text(snapshot):
+        if not snapshot:
+            return "—"
+        try:
+            d = datetime.strptime(snapshot["target_data"], "%Y-%m-%d").strftime("%d/%m/%Y")
+        except Exception:
+            d = snapshot.get("target_data") or "—"
+        return f"{snapshot.get('target_sorteio','—')} {snapshot.get('target_hora','—')} • {d}"
+
+    @staticmethod
+    def _shadow_lab_target_label(target):
+        if not target:
+            return "—"
+        try:
+            d = datetime.strptime(str(target.get("data") or ""), "%Y-%m-%d").strftime("%d/%m/%Y")
+        except Exception:
+            d = str(target.get("data") or "—")
+        return f"{d} • {target.get('sorteio','—')} {target.get('hora','—')}"
+
+    def _build_shadow_lab_section(self, body):
+        """Laboratório Sombra incorporado à Central de Decisão."""
+        try:
+            self.db.audit_shadow_snapshots()
+            self.db.ensure_shadow_snapshot(trigger="ABRIR_DECISAO")
+        except Exception:
+            pass
+
+        lab_intro = ttk.Frame(body, style="Card.TFrame", padding=11)
+        lab_intro.pack(fill="x", pady=(4, 8))
+        ttk.Label(lab_intro, text="LABORATÓRIO SOMBRA", style="CardTitle.TLabel").pack(anchor="w")
+        ttk.Label(
+            lab_intro,
+            text=(
+                "Área experimental da própria Decisão: leituras congeladas antes do resultado, "
+                "comparação prospectiva de Centenas/Puxadas e Seca exclusiva do 1º prêmio. "
+                "Nada aqui promove método automaticamente."
+            ),
+            style="CardMuted.TLabel", wraplength=1080, justify="left",
+        ).pack(anchor="w", pady=(3, 0))
+
+
+        controls = ttk.Frame(body, style="Card.TFrame", padding=10)
+        controls.pack(fill="x", pady=(0, 8))
+        ttk.Label(controls, text="RODADA ANALISADA", style="CardMuted.TLabel").grid(row=0, column=0, sticky="w")
+        ttk.Label(controls, text="ESCOPO", style="CardMuted.TLabel").grid(row=0, column=1, sticky="w", padx=(10,0))
+        ttk.Label(controls, text="JANELA", style="CardMuted.TLabel").grid(row=0, column=2, sticky="w", padx=(10,0))
+
+        self.shadow_lab_target_var = tk.StringVar()
+        self.shadow_lab_scope_var = tk.StringVar(value="1º")
+        self.shadow_lab_window_var = tk.StringVar(value="120")
+        self.shadow_lab_target_map = {}
+        targets = self.db.future_operational_targets(14)
+        target_values = []
+        for target in targets:
+            label = self._shadow_lab_target_label(target)
+            self.shadow_lab_target_map[label] = dict(target)
+            target_values.append(label)
+        cb_target = ttk.Combobox(
+            controls, textvariable=self.shadow_lab_target_var,
+            values=target_values, state="readonly", width=34,
+        )
+        cb_target.grid(row=1, column=0, sticky="ew", pady=(3,0))
+        cb_scope = ttk.Combobox(
+            controls, textvariable=self.shadow_lab_scope_var,
+            values=["1º", "1º–5º"], state="readonly", width=10,
+        )
+        cb_scope.grid(row=1, column=1, sticky="w", padx=(10,0), pady=(3,0))
+        cb_window = ttk.Combobox(
+            controls, textvariable=self.shadow_lab_window_var,
+            values=["30", "60", "120"], state="readonly", width=8,
+        )
+        cb_window.grid(row=1, column=2, sticky="w", padx=(10,0), pady=(3,0))
+        ttk.Button(
+            controls, text="ATUALIZAR", style="Accent.TButton",
+            command=self._shadow_lab_refresh,
+        ).grid(row=1, column=3, sticky="e", padx=(12,0), pady=(3,0))
+        controls.columnconfigure(0, weight=1)
+
+        next_target = self.db.next_operational_target() or {}
+        next_label = self._shadow_lab_target_label(next_target)
+        if next_label in self.shadow_lab_target_map:
+            self.shadow_lab_target_var.set(next_label)
+        elif target_values:
+            self.shadow_lab_target_var.set(target_values[0])
+
+        for cb in (cb_target, cb_scope, cb_window):
+            cb.bind("<<ComboboxSelected>>", lambda _e: self._shadow_lab_refresh())
+
+        info = ttk.Frame(body, style="Card.TFrame", padding=10)
+        info.pack(fill="x", pady=(0,8))
+        ttk.Label(info, text="Como esta camada é tratada", style="CardTitle.TLabel").pack(anchor="w")
+        ttk.Label(
+            info,
+            text=(
+                "Puxadas de Bicho e Seca do Dia entram como leituras experimentais. "
+                "A Puxada é comparada prospectivamente com Reset e Similaridade; a Seca é medida somente no 1º prêmio. "
+                "Nada aqui altera automaticamente o método oficial nem cria mensagens retrospectivas de arrependimento."
+            ),
+            style="CardMuted.TLabel", wraplength=1080, justify="left",
+        ).pack(anchor="w", pady=(4,0))
+
+        self.shadow_lab_results = ttk.Frame(body)
+        self.shadow_lab_results.pack(fill="both", expand=True)
+        self._shadow_lab_refresh()
+
+    def show_shadow_lab_page(self):
+        """Compatibilidade: o antigo Laboratório agora abre a tela única de Decisão."""
+        self.show_decision_page(open_lab=True)
+
+    def _shadow_lab_selected_target(self):
+        return dict(self.shadow_lab_target_map.get(self.shadow_lab_target_var.get()) or {})
+
+    def _shadow_lab_refresh(self):
+        host = getattr(self, "shadow_lab_results", None)
+        if host is None or not host.winfo_exists():
+            return
+        for child in host.winfo_children():
+            child.destroy()
+
+        target = self._shadow_lab_selected_target()
+        if not target:
+            ttk.Label(host, text="Não há rodada operacional disponível para análise.", style="Sub.TLabel").pack(anchor="w")
+            return
+        try:
+            self.db.audit_shadow_snapshots()
+            # Só a próxima rodada pode ser congelada; chamadas para alvos posteriores são ignoradas pelo banco.
+            self.db.ensure_shadow_snapshot(target=target, trigger="LABORATORIO")
+            window = int(self.shadow_lab_window_var.get() or 120)
+            scope = self.shadow_lab_scope_var.get() or "1º"
+            rec = self.db.shadow_recommendation(target, window=window, scope=scope)
+            status = self.db.shadow_lab_status(target)
+        except Exception as exc:
+            ttk.Label(host, text=f"Não foi possível montar o laboratório: {exc}", style="Sub.TLabel", wraplength=1000).pack(anchor="w")
+            return
+
+        current = status.get("current") or {}
+        state = current.get("status") or "AINDA NÃO CONGELADA"
+        summary = ttk.Frame(host, style="Card.TFrame", padding=11)
+        summary.pack(fill="x", pady=(0,8))
+        summary.columnconfigure(0, weight=1)
+        ttk.Label(summary, text="LEITURA PROSPECTIVA", style="CardMuted.TLabel").grid(row=0,column=0,sticky="w")
+        ttk.Label(
+            summary, text=self._shadow_lab_target_label(target), style="Card.TLabel",
+            font=("Segoe UI Semibold", 15),
+        ).grid(row=1,column=0,sticky="w",pady=(2,2))
+        ttk.Label(
+            summary,
+            text=f"Estado da rodada: {state} • {int(status.get('audited') or 0)} leitura(s) auditada(s) deste horário • {int(status.get('pending') or 0)} pendente(s)",
+            style="CardMuted.TLabel", wraplength=860,
+        ).grid(row=2,column=0,sticky="w")
+        ttk.Label(summary, text=f"Escopo {scope} • janela até {window} rodadas", style="CardMuted.TLabel").grid(row=0,column=1,sticky="e",padx=(15,0))
+
+        # v0.35.2 — leitura atual congelada para a próxima rodada.
+        # Apenas apresenta os sinais já gravados prospectivamente; não altera métodos.
+        payload_now = current.get("payload") or {}
+        current_box = ttk.Frame(host, style="Card.TFrame", padding=10)
+        current_box.pack(fill="x", pady=(0,8))
+        ttk.Label(current_box, text="LEITURA ATUAL CONGELADA", style="CardTitle.TLabel").pack(anchor="w")
+        ttk.Label(
+            current_box,
+            text="Sinais que já estavam congelados para esta rodada antes do resultado. A convergência abaixo é somente contagem transparente entre métodos disponíveis.",
+            style="CardMuted.TLabel", wraplength=1050,
+        ).pack(anchor="w", pady=(2,6))
+
+        def _shadow_fmt_groups(values):
+            out=[]
+            for raw in values or []:
+                try:
+                    g=int(raw)
+                except Exception:
+                    continue
+                if 1 <= g <= 25:
+                    out.append(f"{g:02d} {BICHOS.get(g, str(g)).title()}")
+            return " • ".join(out) if out else "Sem leitura disponível"
+
+        bichos_now = payload_now.get("bichos") or {}
+        method_sets = []
+        for method_name in ("Reset Cobertura", "Puxada Combinada", "Similaridade"):
+            method_payload = bichos_now.get(method_name) or {}
+            groups_now = []
+            for raw in method_payload.get("groups") or []:
+                try:
+                    g=int(raw)
+                except Exception:
+                    continue
+                if 1 <= g <= 25 and g not in groups_now:
+                    groups_now.append(g)
+            groups_now = groups_now[:5]
+            if groups_now:
+                method_sets.append((method_name, set(groups_now)))
+                ttk.Label(
+                    current_box,
+                    text=f"{method_name}: {_shadow_fmt_groups(groups_now)}",
+                    style="Card.TLabel", wraplength=1050, justify="left",
+                ).pack(anchor="w", pady=(1,0))
+            else:
+                ttk.Label(
+                    current_box,
+                    text=f"{method_name}: Sem leitura disponível",
+                    style="CardMuted.TLabel", wraplength=1050, justify="left",
+                ).pack(anchor="w", pady=(1,0))
+
+        convergence = Counter()
+        for _method_name, group_set in method_sets:
+            convergence.update(group_set)
+        shared = sorted(
+            ((g,c) for g,c in convergence.items() if c >= 2),
+            key=lambda item: (-item[1], item[0]),
+        )
+        available_methods = len(method_sets)
+        if shared:
+            conv_text = " • ".join(
+                f"{g:02d} {BICHOS.get(g, str(g)).title()} ({count}/{available_methods})"
+                for g,count in shared
+            )
+        elif available_methods >= 2:
+            conv_text = "Nenhum bicho apareceu em pelo menos 2 métodos nesta leitura."
+        else:
+            conv_text = "Ainda não há métodos suficientes disponíveis para medir convergência."
+        ttk.Label(
+            current_box,
+            text=f"Convergência: {conv_text}",
+            style="CardMuted.TLabel", wraplength=1050, justify="left",
+        ).pack(anchor="w", pady=(5,0))
+
+        dry_now = ((payload_now.get("seca_1p") or {}).get("Seca do Dia 1º") or {})
+        dry_groups_now = []
+        for raw in dry_now.get("groups") or []:
+            try:
+                g=int(raw)
+            except Exception:
+                continue
+            if 1 <= g <= 25 and g not in dry_groups_now:
+                dry_groups_now.append(g)
+        ttk.Label(
+            current_box,
+            text=f"Seca do Dia • 1º prêmio: {_shadow_fmt_groups(dry_groups_now[:5])}",
+            style="Card.TLabel" if dry_groups_now else "CardMuted.TLabel",
+            wraplength=1050, justify="left",
+        ).pack(anchor="w", pady=(5,0))
+
+        # Três blocos principais: Centenas, Puxadas/Bichos e Seca 1º.
+        cards = ttk.Frame(host)
+        cards.pack(fill="x", pady=(0,8))
+        for i in range(3):
+            cards.columnconfigure(i, weight=1, uniform="shadowcards")
+
+        cent = rec.get("centena") or {}
+        cent_best = cent.get("best") or {}
+        c1 = ttk.Frame(cards, style="Card.TFrame", padding=10)
+        c1.grid(row=0,column=0,sticky="nsew",padx=(0,4))
+        ttk.Label(c1,text="CENTENAS",style="CardMuted.TLabel").pack(anchor="w")
+        ttk.Label(c1,text=cent_best.get("name") or "Sem evidência suficiente",style="Card.TLabel",font=("Segoe UI Semibold",11),wraplength=310).pack(anchor="w",pady=(3,1))
+        ttk.Label(c1,text=f"Evidência: {cent.get('status','SEM DADOS')}",style="CardMuted.TLabel").pack(anchor="w")
+        if cent_best:
+            ttk.Label(c1,text=f"{int(cent_best.get('rounds') or 0)} rodadas • {float(cent_best.get('win_rate') or 0):.1f}% com acerto",style="CardMuted.TLabel",wraplength=310).pack(anchor="w",pady=(2,0))
+
+        bichos = rec.get("bichos") or {}
+        bbest = bichos.get("best") or {}
+        c2 = ttk.Frame(cards, style="Card.TFrame", padding=10)
+        c2.grid(row=0,column=1,sticky="nsew",padx=4)
+        ttk.Label(c2,text="PUXADAS / BICHOS",style="CardMuted.TLabel").pack(anchor="w")
+        ttk.Label(c2,text=bbest.get("name") or "Sem evidência suficiente",style="Card.TLabel",font=("Segoe UI Semibold",11),wraplength=310).pack(anchor="w",pady=(3,1))
+        ttk.Label(c2,text=f"Evidência: {bichos.get('status','SEM DADOS')}",style="CardMuted.TLabel").pack(anchor="w")
+        if bbest:
+            if scope == "1º":
+                metric = f"{float(bbest.get('avg_coverage') or 0)*100:.1f}% de acerto do 1º"
+            else:
+                metric = f"cobertura média {float(bbest.get('avg_coverage') or 0):.2f}/5"
+            ttk.Label(c2,text=f"{int(bbest.get('rounds') or 0)} rodadas • {metric}",style="CardMuted.TLabel",wraplength=310).pack(anchor="w",pady=(2,0))
+
+        dry = rec.get("seca_1p") or {}
+        c3 = ttk.Frame(cards, style="Card.TFrame", padding=10)
+        c3.grid(row=0,column=2,sticky="nsew",padx=(4,0))
+        ttk.Label(c3,text="SECA DO DIA • 1º",style="CardMuted.TLabel").pack(anchor="w")
+        ttk.Label(c3,text="Seca do Dia 1º",style="Card.TLabel",font=("Segoe UI Semibold",11)).pack(anchor="w",pady=(3,1))
+        ttk.Label(c3,text=f"Evidência: {dry.get('status','SEM DADOS')}",style="CardMuted.TLabel").pack(anchor="w")
+        if int(dry.get("rounds") or 0):
+            ttk.Label(c3,text=f"{int(dry.get('rounds') or 0)} rodadas • {float(dry.get('hit_rate') or 0):.1f}% de acerto do 1º",style="CardMuted.TLabel",wraplength=310).pack(anchor="w",pady=(2,0))
+        else:
+            ttk.Label(c3,text="Amostra ainda em formação.",style="CardMuted.TLabel").pack(anchor="w",pady=(2,0))
+
+        # Ranking transparente dos seletores de bicho.
+        rank = ttk.Frame(host, style="Card.TFrame", padding=10)
+        rank.pack(fill="x", pady=(0,8))
+        ttk.Label(rank,text="Ranking prospectivo dos seletores de bicho",style="CardTitle.TLabel").pack(anchor="w")
+        ttk.Label(rank,text="Reset, Puxada Combinada e Similaridade são comparados nas mesmas leituras sombra disponíveis para este horário.",style="CardMuted.TLabel",wraplength=1050).pack(anchor="w",pady=(2,5))
+        cols=("method","rounds","main","recent")
+        tv=ttk.Treeview(rank,columns=cols,show="headings",height=max(3,min(5,len(bichos.get('rows') or []))))
+        heads={"method":"Método","rounds":"Rodadas","main":"Métrica geral","recent":"Recente"}
+        widths={"method":250,"rounds":80,"main":160,"recent":160}
+        for cc in cols:
+            tv.heading(cc,text=heads[cc]); tv.column(cc,width=widths[cc],anchor="w" if cc=="method" else "center")
+        for row in bichos.get("rows") or []:
+            if scope == "1º":
+                main=f"{float(row.get('avg_coverage') or 0)*100:.1f}% 1º"
+                recent=f"{float(row.get('recent_avg') or 0)*100:.1f}% 1º"
+            else:
+                main=f"{float(row.get('avg_coverage') or 0):.2f}/5"
+                recent=f"{float(row.get('recent_avg') or 0):.2f}/5"
+            tv.insert("","end",values=(row.get("name"),int(row.get("rounds") or 0),main,recent))
+        tv.pack(fill="x")
+
+        cent_rank = ttk.Frame(host, style="Card.TFrame", padding=10)
+        cent_rank.pack(fill="x", pady=(0,8))
+        ttk.Label(cent_rank,text="Ranking prospectivo das Centenas",style="CardTitle.TLabel").pack(anchor="w")
+        ccols=("method","rounds","rate","recent","avg")
+        ctv=ttk.Treeview(cent_rank,columns=ccols,show="headings",height=max(4,min(6,len(cent.get('rows') or []))))
+        cheads={"method":"Construção","rounds":"Rodadas","rate":"Acerto","recent":"Recente","avg":"Média de acertos"}
+        cwidths={"method":260,"rounds":80,"rate":120,"recent":120,"avg":130}
+        for cc in ccols:
+            ctv.heading(cc,text=cheads[cc]); ctv.column(cc,width=cwidths[cc],anchor="w" if cc=="method" else "center")
+        for row in cent.get("rows") or []:
+            ctv.insert("","end",values=(
+                row.get("name"), int(row.get("rounds") or 0),
+                f"{float(row.get('win_rate') or 0):.1f}%", f"{float(row.get('recent_rate') or 0):.1f}%",
+                f"{float(row.get('avg_hits') or 0):.2f}",
+            ))
+        ctv.pack(fill="x")
+
+        ttk.Label(
+            host,
+            text="O laboratório mede evidência prospectiva e estabilidade. Ele não transforma desempenho histórico em garantia de prêmio e não promove método automaticamente.",
+            style="Sub.TLabel", wraplength=1080,
+        ).pack(anchor="w", pady=(0,10))
+
+    def show_decision_page(self, open_lab=False, view=None):
+        self._set_active_nav("Decisão")
+        self._clear_content()
+        self._page = "decision"
+        view = view or ("lab" if open_lab else "summary")
+        if view not in {"summary", "analysis", "audit", "lab"}:
+            view = "summary"
+        self.decision_view = view
+        try:
+            self.db.audit_decision_snapshots()
+            snapshot, _created = self.db.freeze_decision_snapshot(force=False)
+            snapshot, _context_created = self.db.freeze_decision_contextual(snapshot, force=False)
+            snapshot, _meta_created = self.db.freeze_meta_snapshot(snapshot, force=False)
+        except Exception as exc:
+            snapshot = self.db.latest_decision_snapshot()
+            error = str(exc)
+        else:
+            error = ""
+
+        self._page_title(
+            "Decisão da rodada",
+            "Primeiro a resposta prática; detalhes técnicos ficam separados para não poluir a leitura.",
+        )
+
+        decision_nav = ttk.Frame(self.content)
+        decision_nav.pack(fill="x", pady=(0, 9))
+        for key, label in (
+            ("summary", "Resumo"),
+            ("analysis", "Análise"),
+            ("audit", "Auditoria"),
+            ("lab", "Laboratório"),
+        ):
+            ttk.Button(
+                decision_nav,
+                text=label,
+                style="SubnavActive.TButton" if view == key else "Subnav.TButton",
+                command=lambda selected=key: self.show_decision_page(view=selected),
+            ).pack(side="left", padx=(0 if key == "summary" else 5, 0))
+
+        body = self._make_scrollable_page_body(self.content, "decision")
+
+        hero = ttk.Frame(body, style="Card.TFrame", padding=12)
+        hero.pack(fill="x", pady=(0, 8))
+        hero.columnconfigure(0, weight=1)
+        ttk.Label(hero, text="PRÓXIMA RODADA", style="CardMuted.TLabel").grid(row=0,column=0,sticky="w")
+        ttk.Label(
+            hero, text=self._decision_target_text(snapshot), style="Card.TLabel",
+            font=("Segoe UI Semibold", 16),
+        ).grid(row=1,column=0,sticky="w",pady=(2,4))
+
+        if snapshot:
+            score = float(snapshot.get("confidence_score") or 0)
+            conf = f"{score:.0f}/100 • {snapshot.get('confidence_label') or '—'}"
+            rec = snapshot.get("recommendation") or "—"
+        else:
+            conf, rec = "—", "Sem leitura congelada"
+        ttk.Label(hero, text="ÍNDICE DE CONSISTÊNCIA", style="CardMuted.TLabel").grid(row=0,column=1,sticky="e",padx=(16,0))
+        ttk.Label(hero, text=conf, style="Card.TLabel", font=("Segoe UI Semibold", 18)).grid(row=1,column=1,sticky="e",padx=(16,0))
+        ttk.Label(hero, text=rec, style="CardMuted.TLabel").grid(row=2,column=1,sticky="e",padx=(16,0))
+        if error:
+            ttk.Label(hero, text=f"Observação: {error}", style="CardMuted.TLabel", wraplength=900).grid(row=3,column=0,columnspan=2,sticky="w",pady=(7,0))
+
+        if not snapshot:
+            return
+
+        # A resposta pratica fica curta. As camadas profundas continuam
+        # disponiveis, mas em visoes separadas da mesma tela.
+        if view == "summary":
+            self._decision_build_operational(body, snapshot)
+            self._decision_build_contextual(body, snapshot)
+            return
+
+        if view == "audit":
+            self._decision_build_self_audit(body)
+            self._decision_build_confidence_calibration(body)
+            self._decision_build_meta(body, snapshot)
+            return
+
+        if view == "lab":
+            self._build_shadow_lab_section(body)
+            return
+
+        # ANALISE: leitura contextual + adaptacao + recomendacao e
+        # comparacoes detalhadas que ja existiam.
+        self._decision_build_contextual(body, snapshot)
+        self._decision_build_adaptive(body, snapshot)
+        self._decision_build_operational(body, snapshot)
+
+        # Componentes transparentes do índice.
+        components = snapshot.get("components") or {}
+        comp_card = ttk.Frame(body, style="Card.TFrame", padding=10)
+        comp_card.pack(fill="x", pady=(0,8))
+        ttk.Label(comp_card, text="Componentes do índice", style="CardTitle.TLabel").pack(anchor="w")
+        comp_row = ttk.Frame(comp_card, style="Card.TFrame")
+        comp_row.pack(fill="x", pady=(7,0))
+        comp_defs = [
+            ("Convergência", components.get("convergence", 0), "acordo entre fontes diferentes"),
+            ("Força do Reset", components.get("reset_strength", 0), "força + separação do ranking oficial"),
+            ("Suporte", components.get("context_support", 0), "janela e contexto histórico"),
+            ("Evidência", components.get("prospective_evidence", 0), f"{int(components.get('prospective_rounds') or 0)} rodada(s) congelada(s)"),
+        ]
+        for i,(title,value,sub) in enumerate(comp_defs):
+            card = ttk.Frame(comp_row, style="Card2.TFrame", padding=8)
+            card.pack(side="left", fill="x", expand=True, padx=(0,6 if i<3 else 0))
+            ttk.Label(card,text=title,style="CardMuted.TLabel").pack(anchor="w")
+            ttk.Label(card,text=f"{float(value):.0f}/100",style="Card.TLabel",font=("Segoe UI Semibold",13)).pack(anchor="w")
+            ttk.Label(card,text=sub,style="CardMuted.TLabel",wraplength=210).pack(anchor="w")
+
+        # Sinais lado a lado.
+        signals = snapshot.get("signals") or {}
+        sig_card = ttk.Frame(body, style="Card.TFrame", padding=10)
+        sig_card.pack(fill="x", pady=(0,8))
+        ttk.Label(sig_card,text="Leituras da rodada",style="CardTitle.TLabel").pack(anchor="w")
+        sig_row = ttk.Frame(sig_card, style="Card.TFrame")
+        sig_row.pack(fill="x",pady=(7,0))
+        for i,name in enumerate(("Reset Cobertura","Puxada Combinada","Similaridade")):
+            sig = signals.get(name) or {}
+            card = ttk.Frame(sig_row,style="Card2.TFrame",padding=8)
+            card.pack(side="left",fill="both",expand=True,padx=(0,6 if i<2 else 0))
+            ttk.Label(card,text=name,style="Card.TLabel",font=("Segoe UI Semibold",10)).pack(anchor="w")
+            if sig.get("available"):
+                groups = sig.get("groups") or []
+                animals = sig.get("animals") or []
+                lines = [f"{rank}. {animal} ({int(group):02d})" for rank,(group,animal) in enumerate(zip(groups,animals),start=1)]
+                ttk.Label(card,text="\n".join(lines),style="Card.TLabel",justify="left").pack(anchor="w",pady=(5,0))
+            else:
+                ttk.Label(card,text="Sem sinal suficiente nesta base.",style="CardMuted.TLabel",wraplength=280).pack(anchor="w",pady=(5,0))
+
+        reset_sig = signals.get("Reset Cobertura") or {}
+        why = ttk.Frame(body,style="Card.TFrame",padding=10)
+        why.pack(fill="x",pady=(0,8))
+        topbar = ttk.Frame(why,style="Card.TFrame")
+        topbar.pack(fill="x")
+        ttk.Label(topbar,text="Convergência dos 5 bichos",style="CardTitle.TLabel").pack(side="left")
+        ttk.Label(topbar,text="Clique num bicho para ver onde ele aparece nos métodos.",style="CardMuted.TLabel").pack(side="left",padx=(10,0))
+        chips = ttk.Frame(why,style="Card.TFrame")
+        chips.pack(fill="x",pady=(7,0))
+        for g,a in zip(reset_sig.get("groups") or [], reset_sig.get("animals") or []):
+            ttk.Button(
+                chips,text=f"{a} ({int(g):02d})",
+                command=lambda gg=int(g), aa=a, ss=snapshot: self._decision_explain_dialog(ss,gg,aa),
+            ).pack(side="left",padx=(0,6))
+
+        perf_card = ttk.Frame(body,style="Card.TFrame",padding=10)
+        perf_card.pack(fill="both",expand=True,pady=(0,8))
+        perf_head = ttk.Frame(perf_card,style="Card.TFrame")
+        perf_head.pack(fill="x")
+        ttk.Label(perf_head,text="Desempenho prospectivo",style="CardTitle.TLabel").pack(side="left")
+        self.decision_window = tk.StringVar(value="30")
+        ttk.Label(perf_head,text="Janela",style="CardMuted.TLabel").pack(side="right",padx=(8,4))
+        cb=ttk.Combobox(perf_head,textvariable=self.decision_window,values=["30","60","120","Todos"],width=7,state="readonly")
+        cb.pack(side="right")
+        cb.bind("<<ComboboxSelected>>",lambda _e:self._decision_refresh_perf())
+        cols=("method","rounds","avg","p2","p3","pos")
+        self.decision_perf_tree=ttk.Treeview(perf_card,columns=cols,show="headings",height=5)
+        heads={"method":"Método","rounds":"Rodadas","avg":"Cobertura média","p2":"2+ bichos","p3":"3+ bichos","pos":"Acerto posicional"}
+        widths={"method":220,"rounds":80,"avg":120,"p2":100,"p3":100,"pos":120}
+        for c in cols:
+            self.decision_perf_tree.heading(c,text=heads[c])
+            self.decision_perf_tree.column(c,width=widths[c],anchor="center" if c!="method" else "w")
+        self.decision_perf_tree.pack(fill="x",pady=(8,3))
+        self.decision_perf_note=ttk.Label(perf_card,text="",style="CardMuted.TLabel",wraplength=980)
+        self.decision_perf_note.pack(anchor="w")
+        self._decision_refresh_perf()
+
+        # v0.28.0 — Etapa 2: campeão × desafiante, contexto, tendência e concentração.
+        self._decision_build_stage2(body, snapshot)
+
+        # v0.29.0 — Etapa 3: simulador histórico walk-forward sem look-ahead.
+        self._decision_build_stage3(body)
+
+        hist = ttk.Frame(body,style="Card.TFrame",padding=10)
+        hist.pack(fill="x",pady=(0,8))
+        ttk.Label(hist,text="Congelamento da rodada",style="CardTitle.TLabel").pack(anchor="w")
+        created = str(snapshot.get("created_at") or "—").replace("T"," ")
+        status = snapshot.get("status") or "PENDENTE"
+        ttk.Label(
+            hist,
+            text=f"Leitura salva em {created} • Status: {status}. Depois de congelada, a previsão não é reescrita com o resultado.",
+            style="CardMuted.TLabel",wraplength=1000,
+        ).pack(anchor="w",pady=(4,0))
+
+    def _decision_build_contextual(self, body, snapshot):
+        """Painel auditável: exibe a primeira leitura contextual congelada da rodada."""
+        result = snapshot.get("contextual") or {}
+
+        card = ttk.Frame(body, style="Card.TFrame", padding=11)
+        card.pack(fill="x", pady=(0, 8))
+        head = ttk.Frame(card, style="Card.TFrame")
+        head.pack(fill="x")
+        ttk.Label(
+            head, text="DECISÃO CONTEXTUAL DA PRÓXIMA RODADA",
+            style="CardTitle.TLabel",
+        ).pack(side="left")
+        ttk.Label(
+            head,
+            text=f"{result.get('hour') or '—'} • {result.get('weekday') or '—'}",
+            style="CardMuted.TLabel",
+        ).pack(side="right")
+
+        best = result.get("best") or {}
+        if best:
+            main = (
+                f"Melhor evidência atual: {best.get('method')} • "
+                f"{result.get('status')} • índice {float(best.get('index') or 0):.0f}/100"
+            )
+        else:
+            main = "Ainda não há evidência contextual suficiente para ranquear os métodos."
+        ttk.Label(
+            card, text=main, style="Card.TLabel",
+            font=("Segoe UI Semibold", 13), wraplength=1080,
+        ).pack(anchor="w", pady=(6, 2))
+        ttk.Label(
+            card,
+            text=(
+                f"Oficial: Reset + 3+1 • nenhuma troca automática. "
+                f"{result.get('recommendation') or ''}"
+            ),
+            style="CardMuted.TLabel", wraplength=1080, justify="left",
+        ).pack(anchor="w", pady=(0, 7))
+
+        cols = ("method", "index", "hour", "recent", "stability", "weekday", "wf", "conv", "n")
+        tree = ttk.Treeview(card, columns=cols, show="headings", height=3)
+        heads = {
+            "method": "Método", "index": "Índice", "hour": "Horário",
+            "recent": "Recente", "stability": "Estabilidade", "weekday": "Dia",
+            "wf": "Walk-Fwd", "conv": "Converg.", "n": "N hora",
+        }
+        widths = {
+            "method": 195, "index": 65, "hour": 82, "recent": 82,
+            "stability": 92, "weekday": 72, "wf": 78, "conv": 78, "n": 58,
+        }
+        for col in cols:
+            tree.heading(col, text=heads[col])
+            tree.column(col, width=widths[col], anchor="w" if col == "method" else "center")
+
+        def fmt(value):
+            return "—" if value is None else f"{float(value):.0f}"
+
+        for row in result.get("rows") or []:
+            factors = row.get("factors") or {}
+            tree.insert("", "end", values=(
+                row.get("method"),
+                f"{float(row.get('index') or 0):.0f}",
+                fmt(factors.get("hour")),
+                fmt(factors.get("recent")),
+                fmt(factors.get("stability")),
+                fmt(factors.get("weekday")),
+                fmt(factors.get("walk_forward")),
+                fmt(factors.get("convergence")),
+                int(row.get("hour_rounds") or 0),
+            ))
+        tree.pack(fill="x", pady=(0, 5))
+
+        frozen_at = str(snapshot.get("contextual_frozen_at") or result.get("frozen_at") or "—").replace("T", " ")
+        wf_note = (
+            f"Leitura auditável congelada em {frozen_at}. "
+            "O congelamento automático não usa Walk-Forward de sessão; simulações posteriores "
+            "continuam como diagnóstico e não reescrevem esta escolha."
+        )
+        ttk.Label(
+            card,
+            text=(
+                "Pesos-base: horário 35% • recente 20% • estabilidade 15% • "
+                "Walk-Forward 10% • dia da semana 8% • convergência atual 7% • geral 5%. "
+                + wf_note
+            ),
+            style="CardMuted.TLabel", wraplength=1080, justify="left",
+        ).pack(anchor="w", pady=(2, 1))
+        ttk.Label(
+            card,
+            text=(
+                "O índice serve para comparar evidência relativa entre métodos. "
+                "Não é porcentagem de chance de prêmio e não altera o método oficial."
+            ),
+            style="CardMuted.TLabel", wraplength=1080,
+        ).pack(anchor="w")
+
+    def _decision_build_meta(self, body, snapshot):
+        meta=(snapshot or {}).get("meta") or {}
+        summary=self.db.meta_shadow_summary(limit=120)
+        card=ttk.Frame(body,style="Card.TFrame",padding=11)
+        card.pack(fill="x",pady=(0,8))
+        head=ttk.Frame(card,style="Card.TFrame"); head.pack(fill="x")
+        ttk.Label(head,text="GP-H META v0.2 — SOMBRA",style="CardTitle.TLabel").pack(side="left")
+        ttk.Label(head,text=meta.get("status") or "AGUARDANDO",style="CardMuted.TLabel").pack(side="right")
+
+        if not meta:
+            ttk.Label(card,text="A leitura Meta ainda não foi congelada para esta rodada.",style="CardMuted.TLabel").pack(anchor="w",pady=(6,0))
+        elif not meta.get("available"):
+            n=int(meta.get("training_snapshots") or 0); minimum=int(meta.get("minimum_snapshots") or 20)
+            ttk.Label(card,text=f"Aprendizado em formação: {n}/{minimum} snapshots auditados.",style="Card.TLabel",font=("Segoe UI Semibold",12)).pack(anchor="w",pady=(6,2))
+            ttk.Label(card,text=meta.get("reason") or "Aguardando amostra suficiente.",style="CardMuted.TLabel",wraplength=1060).pack(anchor="w")
+        else:
+            groups=meta.get("groups") or []; animals=meta.get("animals") or []; scores=meta.get("scores") or []
+            ttk.Label(
+                card,
+                text=f"Ranking aprendido para a rodada • {int(meta.get('training_snapshots') or 0)} snapshots de treino • {int(meta.get('same_hour_snapshots') or 0)} no mesmo horário",
+                style="Card.TLabel",font=("Segoe UI Semibold",12),wraplength=1060,
+            ).pack(anchor="w",pady=(6,6))
+            row=ttk.Frame(card,style="Card.TFrame"); row.pack(fill="x")
+            for i,(g,a,s) in enumerate(zip(groups,animals,scores),start=1):
+                box=ttk.Frame(row,style="Card2.TFrame",padding=8)
+                box.pack(side="left",fill="x",expand=True,padx=(0,5 if i<5 else 0))
+                ttk.Label(box,text=f"{i}º • {a}",style="Card.TLabel",font=("Segoe UI Semibold",9)).pack(anchor="w")
+                ttk.Label(box,text=f"Grupo {int(g):02d} • score {float(s):.1f}",style="CardMuted.TLabel").pack(anchor="w")
+
+            hold=meta.get("holdout") or {}
+            if hold.get("available"):
+                htxt=(
+                    f"Holdout temporal preliminar ({int(hold.get('rounds') or 0)} rodadas): "
+                    f"Meta {float(hold.get('avg_coverage') or 0):.2f}/5 • acaso esperado {float(hold.get('random_expected') or 0):.2f}/5 • "
+                    f"diferença {float(hold.get('uplift_vs_random') or 0):+.2f}."
+                )
+            else:
+                htxt=hold.get("note") or "Holdout temporal ainda indisponível."
+            ttk.Label(card,text=htxt,style="CardMuted.TLabel",wraplength=1060).pack(anchor="w",pady=(7,2))
+
+            rounds=int(summary.get("rounds") or 0)
+            if rounds:
+                atxt=(
+                    f"Auditoria prospectiva do Meta: {rounds} rodada(s) • cobertura média {float(summary.get('avg_coverage') or 0):.2f}/5 • "
+                    f"2+ bichos {float(summary.get('pct_2plus') or 0):.1f}% • 3+ bichos {float(summary.get('pct_3plus') or 0):.1f}% • "
+                    f"diferença vs acaso {float(summary.get('uplift_vs_random') or 0):+.2f}."
+                )
+            else:
+                atxt="Auditoria prospectiva: começa a acumular somente com previsões Meta congeladas a partir da v0.41.0."
+            ttk.Label(card,text=atxt,style="CardMuted.TLabel",wraplength=1060).pack(anchor="w",pady=(1,2))
+
+        ttk.Label(
+            card,
+            text="O score do Meta é apenas um ranking interno ainda não calibrado; não é porcentagem de chance. O Meta permanece 100% em sombra e não altera o Reset + 3+1 oficial.",
+            style="CardMuted.TLabel",wraplength=1060,
+        ).pack(anchor="w",pady=(4,0))
+
+        ttk.Separator(card,orient="horizontal").pack(fill="x",pady=(10,8))
+        wf_head=ttk.Frame(card,style="Card.TFrame"); wf_head.pack(fill="x")
+        ttk.Label(wf_head,text="WALK-FORWARD RIGOROSO DO META",style="CardTitle.TLabel").pack(side="left")
+        ttk.Label(wf_head,text="v0.45 • cérebro v0.1 congelado",style="CardMuted.TLabel").pack(side="right")
+        ttk.Label(
+            card,
+            text="Treina somente nas rodadas anteriores, prevê a próxima sem ver o resultado e avança no tempo. Compara Meta, Reset, Puxada, Similaridade, Histórico Concentrado e o acaso esperado.",
+            style="CardMuted.TLabel",wraplength=1060,
+        ).pack(anchor="w",pady=(3,6))
+
+        controls=ttk.Frame(card,style="Card.TFrame"); controls.pack(fill="x")
+        ttk.Label(controls,text="Rodadas avaliadas",style="CardMuted.TLabel").pack(side="left")
+        if not hasattr(self,"meta_wf_window"):
+            self.meta_wf_window=tk.StringVar(value="30")
+        ttk.Combobox(controls,textvariable=self.meta_wf_window,values=["20","30","60"],width=6,state="readonly").pack(side="left",padx=(5,8))
+        self.meta_wf_run_btn=ttk.Button(controls,text="SIMULAR META",command=self._meta_walk_forward_start)
+        self.meta_wf_run_btn.pack(side="left")
+        self.meta_wf_cancel_btn=ttk.Button(controls,text="Cancelar",command=self._meta_walk_forward_cancel)
+        self.meta_wf_cancel_btn.pack(side="left",padx=(6,0))
+        self.meta_wf_export_btn=ttk.Button(controls,text="Exportar CSV",command=self._meta_walk_forward_export)
+        self.meta_wf_export_btn.pack(side="right")
+
+        self.meta_wf_progress=ttk.Progressbar(card,mode="determinate",maximum=100)
+        self.meta_wf_progress.pack(fill="x",pady=(8,3))
+        self.meta_wf_status=ttk.Label(card,text="Escolha 20, 30 ou 60 rodadas e clique em SIMULAR META.",style="CardMuted.TLabel",wraplength=1060)
+        self.meta_wf_status.pack(anchor="w")
+
+        cols=("method","rounds","avg","p2","p3","uplift")
+        self.meta_wf_tree=ttk.Treeview(card,columns=cols,show="headings",height=6)
+        heads={"method":"Método","rounds":"N","avg":"Cobertura","p2":"2+","p3":"3+","uplift":"vs. acaso"}
+        widths={"method":230,"rounds":55,"avg":100,"p2":85,"p3":85,"uplift":95}
+        for c in cols:
+            self.meta_wf_tree.heading(c,text=heads[c]); self.meta_wf_tree.column(c,width=widths[c],anchor="w" if c=="method" else "center")
+        self.meta_wf_tree.pack(fill="x",pady=(7,3))
+
+        ttk.Label(card,text="Meta × cada método nas mesmas rodadas",style="Card.TLabel",font=("Segoe UI Semibold",9)).pack(anchor="w",pady=(6,2))
+        hcols=("method","rounds","wins","ties","losses","diff")
+        self.meta_wf_h2h_tree=ttk.Treeview(card,columns=hcols,show="headings",height=4)
+        hheads={"method":"Comparado com","rounds":"N","wins":"Meta melhor","ties":"Empate","losses":"Meta pior","diff":"Δ média"}
+        hwidths={"method":230,"rounds":55,"wins":90,"ties":75,"losses":85,"diff":85}
+        for c in hcols:
+            self.meta_wf_h2h_tree.heading(c,text=hheads[c]); self.meta_wf_h2h_tree.column(c,width=hwidths[c],anchor="w" if c=="method" else "center")
+        self.meta_wf_h2h_tree.pack(fill="x",pady=(0,3))
+        self.meta_wf_note=ttk.Label(card,text="",style="CardMuted.TLabel",wraplength=1060)
+        self.meta_wf_note.pack(anchor="w")
+
+        running=bool(getattr(self,"_meta_wf_running",False))
+        if running:
+            self.meta_wf_run_btn.configure(state="disabled"); self.meta_wf_cancel_btn.configure(state="normal")
+            st=getattr(self,"_meta_wf_progress_state",None) or (0,1,"Preparando…")
+            done,total,label=st
+            self.meta_wf_progress.configure(value=(done/max(1,total))*100.0); self.meta_wf_status.configure(text=label)
+        else:
+            self.meta_wf_cancel_btn.configure(state="disabled")
+        result=getattr(self,"meta_walk_forward_last_result",None)
+        if result:
+            self._meta_walk_forward_render(result)
+        else:
+            self.meta_wf_export_btn.configure(state="disabled")
+
+    def _meta_walk_forward_ui_alive(self):
+        try:
+            return self._page=="decision" and self.meta_wf_tree.winfo_exists()
+        except Exception:
+            return False
+
+    def _meta_walk_forward_start(self):
+        if getattr(self,"_meta_wf_running",False):
+            return
+        try:
+            window=int(self.meta_wf_window.get())
+        except Exception:
+            window=30
+
+        self._meta_wf_running=True
+        self._meta_wf_progress_state=(0,1,"Preparando o histórico do Meta…")
+        self._meta_wf_dead_polls=0
+        if self._meta_walk_forward_ui_alive():
+            self.meta_wf_run_btn.configure(state="disabled")
+            self.meta_wf_cancel_btn.configure(state="normal")
+            self.meta_wf_export_btn.configure(state="disabled")
+            self.meta_wf_progress.configure(value=0)
+            self.meta_wf_status.configure(text="Iniciando processo isolado do Walk-Forward…")
+
+        try:
+            # v0.42.1: CPU-bound Meta sai do processo do Tk. Em thread, o treino
+            # Python puro disputava o GIL com a interface e causava microtravadas.
+            ctx=mp.get_context("spawn")
+            self._meta_wf_queue=ctx.Queue()
+            self._meta_wf_cancel_event=ctx.Event()
+            proc=ctx.Process(
+                target=_meta_walk_forward_process_worker,
+                args=(str(self.db.path),window,self._meta_wf_queue,self._meta_wf_cancel_event),
+                daemon=True,
+                name="GPH-MetaWalkForward",
+            )
+            self._meta_wf_process=proc
+            proc.start()
+        except Exception as exc:
+            self._meta_wf_running=False
+            self._meta_wf_process=None
+            if self._meta_walk_forward_ui_alive():
+                self.meta_wf_status.configure(text="Falha ao iniciar o processo do Walk-Forward: "+str(exc))
+                self.meta_wf_run_btn.configure(state="normal")
+                self.meta_wf_cancel_btn.configure(state="disabled")
+            return
+        self.after(120,self._meta_walk_forward_poll)
+
+    def _meta_walk_forward_cancel(self):
+        event=getattr(self,"_meta_wf_cancel_event",None)
+        if event is not None:
+            try:
+                event.set()
+            except Exception:
+                pass
+        if self._meta_walk_forward_ui_alive():
+            self.meta_wf_status.configure(text="Cancelamento solicitado…")
+
+    def _meta_walk_forward_process_cleanup(self):
+        proc=getattr(self,"_meta_wf_process",None)
+        if proc is not None:
+            try:
+                proc.join(timeout=0.15)
+            except Exception:
+                pass
+        self._meta_wf_process=None
+        q=getattr(self,"_meta_wf_queue",None)
+        if q is not None:
+            try:
+                q.close()
+            except Exception:
+                pass

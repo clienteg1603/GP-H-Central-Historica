@@ -1,0 +1,621 @@
+            con.execute(
+                "CREATE INDEX IF NOT EXISTS idx_shadow_status "
+                "ON shadow_snapshots(status)"
+            )
+
+    # ========================================================
+    # CENTRAL DE DECISÃO v0.27.0
+    # Congelamento prospectivo + índice de consistência dos sinais.
+    # O índice NÃO é probabilidade de acerto.
+    # ========================================================
+    @staticmethod
+    def _decision_clip(value, low=0.0, high=100.0):
+        return max(float(low), min(float(high), float(value)))
+
+    @staticmethod
+    def _decision_signal_payload(result, kind):
+        if not result:
+            return {"available": False, "groups": [], "animals": [], "kind": kind}
+        selected = result.get("selected") or []
+        groups = [int(r["grupo"]) for r in selected if r.get("grupo")]
+        payload = {
+            "available": bool(groups),
+            "groups": groups,
+            "animals": [BICHOS.get(g, str(g)) for g in groups],
+            "kind": kind,
+        }
+        if kind == "reset":
+            payload["scores"] = [round(float(r.get("score_pct") or 0), 6) for r in selected]
+            payload["training_transitions"] = int(result.get("training_transitions") or 0)
+            payload["pair3_matches"] = int(result.get("pair3_matches") or 0)
+            payload["context_mode"] = result.get("context_mode")
+        elif kind == "pull":
+            payload["source_counts"] = [int(r.get("source_count") or 0) for r in selected]
+            payload["sum_prob"] = [round(float(r.get("sum_prob") or 0), 6) for r in selected]
+        elif kind == "similarity":
+            payload["weighted_shares"] = [round(float(r.get("weighted_share") or 0), 6) for r in selected]
+            payload["candidate_count"] = int(result.get("candidate_count") or 0)
+            payload["top_days"] = [
+                {"date": d.get("date"), "score": round(float(d.get("score") or 0), 6)}
+                for d in (result.get("top_days") or [])[:5]
+            ]
+            payload["positional"] = True
+        return payload
+
+    @staticmethod
+    def _decision_weekday_label(day_iso):
+        names = ("Segunda", "Terça", "Quarta", "Quinta", "Sexta", "Sábado", "Domingo")
+        try:
+            return names[datetime.strptime(str(day_iso), "%Y-%m-%d").weekday()]
+        except Exception:
+            return "—"
+
+    def _decision_audited_rows(self, window=None, target_hour=None, weekday=None):
+        """Retorna snapshots auditados, aplicando filtros antes da janela."""
+        with self.connect() as con:
+            rows = con.execute(
+                "SELECT * FROM decision_snapshots WHERE status='AUDITADO' "
+                "ORDER BY target_data DESC, target_hora DESC, id DESC"
+            ).fetchall()
+        out = []
+        for row in rows:
+            d = dict(row)
+            if target_hour and str(d.get("target_hora") or "") != str(target_hour):
+                continue
+            if weekday and self._decision_weekday_label(d.get("target_data")) != str(weekday):
+                continue
+            out.append(d)
+        if window not in (None, "all", "Todos"):
+            try:
+                out = out[:max(1, int(window))]
+            except Exception:
+                pass
+        return out
+
+    @staticmethod
+    def _decision_performance_from_rows(rows):
+        accum = {}
+        for row in rows:
+            try:
+                signals = json.loads(row.get("signals_json") or "{}")
+            except Exception:
+                signals = {}
+            for name, sig in signals.items():
+                if not sig.get("available"):
+                    continue
+                a = accum.setdefault(name, {
+                    "method": name, "rounds": 0, "coverage_hits": 0,
+                    "rounds_2plus": 0, "rounds_3plus": 0,
+                    "position_hits": 0, "position_rounds": 0,
+                })
+                hits = int(sig.get("coverage_hits") or 0)
+                a["rounds"] += 1
+                a["coverage_hits"] += hits
+                a["rounds_2plus"] += int(hits >= 2)
+                a["rounds_3plus"] += int(hits >= 3)
+                if sig.get("position_hits") is not None:
+                    a["position_hits"] += int(sig.get("position_hits") or 0)
+                    a["position_rounds"] += 1
+        out = []
+        for a in accum.values():
+            rounds = max(1, a["rounds"])
+            a["avg_coverage"] = a["coverage_hits"] / rounds
+            a["pct_2plus"] = a["rounds_2plus"] / rounds * 100.0
+            a["pct_3plus"] = a["rounds_3plus"] / rounds * 100.0
+            a["avg_position"] = (
+                a["position_hits"] / a["position_rounds"]
+                if a["position_rounds"] else None
+            )
+            out.append(a)
+        out.sort(key=lambda r: (-r["avg_coverage"], -r["pct_2plus"], r["method"]))
+        return out
+
+    def decision_method_performance(self, window=30, target_hour=None, weekday=None):
+        """Compara apenas previsões realmente congeladas antes do resultado."""
+        rows = self._decision_audited_rows(window=window, target_hour=target_hour, weekday=weekday)
+        return {
+            "window": window,
+            "target_hour": target_hour,
+            "weekday": weekday,
+            "audited_snapshots": len(rows),
+            "rows": self._decision_performance_from_rows(rows),
+        }
+
+    def decision_performance_by_hour(self, window=120):
+        rows = self._decision_audited_rows(window=window)
+        buckets = {}
+        for row in rows:
+            buckets.setdefault(str(row.get("target_hora") or "—"), []).append(row)
+        out=[]
+        for hour, bucket in sorted(buckets.items()):
+            perf={r["method"]:r for r in self._decision_performance_from_rows(bucket)}
+            out.append({"label":hour, "rounds":len(bucket), "methods":perf})
+        return {"window":window, "rows":out}
+
+    def decision_performance_by_weekday(self, window=120):
+        rows = self._decision_audited_rows(window=window)
+        order=("Segunda","Terça","Quarta","Quinta","Sexta","Sábado","Domingo")
+        buckets={name:[] for name in order}
+        for row in rows:
+            buckets.setdefault(self._decision_weekday_label(row.get("target_data")), []).append(row)
+        out=[]
+        for label in order:
+            bucket=buckets.get(label) or []
+            if not bucket:
+                continue
+            perf={r["method"]:r for r in self._decision_performance_from_rows(bucket)}
+            out.append({"label":label, "rounds":len(bucket), "methods":perf})
+        return {"window":window, "rows":out}
+
+    @staticmethod
+    def _decision_metrics_for_signal_list(values):
+        n=len(values)
+        if not n:
+            return {"rounds":0,"avg_coverage":0.0,"pct_2plus":0.0,"pct_3plus":0.0}
+        return {
+            "rounds":n,
+            "avg_coverage":sum(values)/n,
+            "pct_2plus":sum(v>=2 for v in values)/n*100.0,
+            "pct_3plus":sum(v>=3 for v in values)/n*100.0,
+        }
+
+    def decision_champion_challenger(self, window=60, min_rounds=12):
+        """Compara desafiante e Reset nas MESMAS rodadas. Nunca promove automaticamente."""
+        rows=self._decision_audited_rows(window=window)
+        champion="Reset Cobertura"
+        candidates=("Puxada Combinada","Similaridade")
+        comparisons=[]
+        for challenger in candidates:
+            champ_hits=[]
+            chal_hits=[]
+            for row in rows:
+                try:
+                    signals=json.loads(row.get("signals_json") or "{}")
+                except Exception:
+                    continue
+                cs=signals.get(champion) or {}
+                ds=signals.get(challenger) or {}
+                if not cs.get("available") or not ds.get("available"):
+                    continue
+                if cs.get("coverage_hits") is None or ds.get("coverage_hits") is None:
+                    continue
+                champ_hits.append(int(cs.get("coverage_hits") or 0))
+                chal_hits.append(int(ds.get("coverage_hits") or 0))
+            cm=self._decision_metrics_for_signal_list(champ_hits)
+            dm=self._decision_metrics_for_signal_list(chal_hits)
+            comparisons.append({
+                "challenger":challenger, "paired_rounds":len(champ_hits),
+                "champion":cm, "challenger_metrics":dm,
+                "avg_diff":dm["avg_coverage"]-cm["avg_coverage"],
+                "p2_diff":dm["pct_2plus"]-cm["pct_2plus"],
+                "p3_diff":dm["pct_3plus"]-cm["pct_3plus"],
+            })
+        comparisons.sort(key=lambda x:(x["avg_diff"],x["p2_diff"],x["p3_diff"],x["paired_rounds"]), reverse=True)
+        best=comparisons[0] if comparisons else None
+        if not best or best["paired_rounds"] < int(min_rounds):
+            status="AMOSTRA INSUFICIENTE"
+            recommendation=f"Manter {champion} oficial; acumular pelo menos {int(min_rounds)} confrontos pareados."
+        elif best["avg_diff"] >= 0.20 and best["p2_diff"] >= 0 and best["p3_diff"] >= -5:
+            status="CANDIDATO FORTE"
+            recommendation="Desafiante mostrou vantagem consistente. Manter em sombra e exigir confirmação antes de qualquer promoção manual."
+        elif best["avg_diff"] >= 0.05 or best["p2_diff"] >= 5:
+            status="DESAFIANTE EM OBSERVAÇÃO"
+            recommendation="Há sinal de vantagem, mas ainda não é suficiente para trocar o método oficial."
+        else:
+            status="CAMPEÃO ESTÁVEL"
+            recommendation=f"{champion} segue sem evidência suficiente para ser substituído."
+        return {
+            "window":window, "official_champion":champion, "best":best,
+            "comparisons":comparisons, "status":status, "recommendation":recommendation,
+            "min_rounds":int(min_rounds),
+        }
+
+    def decision_change_detection(self, recent_window=12, baseline_window=30):
+        """Detector simples de mudança: compara bloco recente com bloco anterior."""
+        rows=self._decision_audited_rows(window="Todos")
+        methods=("Reset Cobertura","Puxada Combinada","Similaridade")
+        out=[]
+        for method in methods:
+            values=[]
+            for row in rows:
+                try:
+                    sig=(json.loads(row.get("signals_json") or "{}").get(method) or {})
+                except Exception:
+                    continue
+                if sig.get("available") and sig.get("coverage_hits") is not None:
+                    values.append(int(sig.get("coverage_hits") or 0))
+            recent=values[:int(recent_window)]
+            baseline=values[int(recent_window):int(recent_window)+int(baseline_window)]
+            rm=self._decision_metrics_for_signal_list(recent)
+            bm=self._decision_metrics_for_signal_list(baseline)
+            avg_delta=rm["avg_coverage"]-bm["avg_coverage"] if baseline else 0.0
+            p2_delta=rm["pct_2plus"]-bm["pct_2plus"] if baseline else 0.0
+            if len(recent)<6 or len(baseline)<12:
+                status="AMOSTRA INSUFICIENTE"
+            elif avg_delta <= -0.50 or (avg_delta <= -0.30 and p2_delta <= -15):
+                status="QUEDA FORTE"
+            elif avg_delta <= -0.25 or p2_delta <= -12:
+                status="ATENÇÃO"
+            elif avg_delta >= 0.25 and p2_delta >= 10:
+                status="MELHORA"
+            else:
+                status="ESTÁVEL"
+            out.append({
+                "method":method, "status":status,
+                "recent_rounds":len(recent), "baseline_rounds":len(baseline),
+                "recent_avg":rm["avg_coverage"], "baseline_avg":bm["avg_coverage"],
+                "avg_delta":avg_delta, "recent_p2":rm["pct_2plus"],
+                "baseline_p2":bm["pct_2plus"], "p2_delta":p2_delta,
+            })
+        priority={"QUEDA FORTE":0,"ATENÇÃO":1,"AMOSTRA INSUFICIENTE":2,"ESTÁVEL":3,"MELHORA":4}
+        out.sort(key=lambda r:(priority.get(r["status"],9),r["method"]))
+        return {"recent_window":recent_window,"baseline_window":baseline_window,"rows":out}
+
+    @staticmethod
+    def _decision_groups_from_item(game, item):
+        if item.get("grupo") not in (None, ""):
+            try:
+                return [int(item["grupo"])]
+            except Exception:
+                pass
+        kind=str(game.get("tipo") or "")
+        tokens=[int(x) for x in re.findall(r"\d+", str(item.get("numero") or ""))]
+        groups=[]
+        if "Grupo" in kind or kind.startswith("Passe"):
+            groups=[x for x in tokens if 1 <= x <= 25]
+        else:
+            for token in tokens:
+                try:
+                    groups.append(int(grupo_da_dezena(token % 100)))
+                except Exception:
+                    pass
+        return groups
+
+    def decision_contextual_evidence(
+        self, target=None, snapshot=None, window=120, recent_window=12,
+        walk_forward=None,
+    ):
+        """
+        Compara Reset, Puxada e Similaridade para a PRÓXIMA rodada usando
+        somente evidência prospectiva já auditada + sinais atuais congelados.
+
+        O índice é relativo (0–100) e NÃO representa probabilidade de acerto.
+        Componentes indisponíveis são retirados e os pesos restantes são
+        renormalizados. O método oficial nunca é trocado automaticamente.
+        """
+        methods = ("Reset Cobertura", "Puxada Combinada", "Similaridade")
+        snapshot = snapshot or self.latest_decision_snapshot() or {}
+        if target is None:
+            if snapshot:
+                target = {
+                    "data": snapshot.get("target_data"),
+                    "sorteio": snapshot.get("target_sorteio"),
+                    "hora": snapshot.get("target_hora"),
+                }
+            else:
+                target = self.next_operational_target() or {}
+        target = dict(target or {})
+        hour = str(target.get("hora") or "")
+        weekday = self._decision_weekday_label(target.get("data"))
+
+        try:
+            window = max(1, int(window))
+        except Exception:
+            window = 120
+        try:
+            recent_window = max(1, int(recent_window))
+        except Exception:
+            recent_window = 12
+
+        all_rows = self._decision_audited_rows(window="Todos")
+        overall_rows = all_rows[:window]
+        recent_rows = all_rows[:recent_window]
+        hour_rows = [
+            r for r in all_rows
+            if str(r.get("target_hora") or "") == hour
+        ][:window] if hour else []
+        weekday_rows = [
+            r for r in all_rows
+            if self._decision_weekday_label(r.get("target_data")) == weekday
+        ][:window] if weekday and weekday != "—" else []
+
+        def perf_map(rows):
+            return {
+                r["method"]: r
+                for r in self._decision_performance_from_rows(rows)
+            }
+
+        overall = perf_map(overall_rows)
+        recent = perf_map(recent_rows)
+        by_hour = perf_map(hour_rows)
+        by_weekday = perf_map(weekday_rows)
+        trend = {
+            r["method"]: r
+            for r in (self.decision_change_detection(
+                recent_window=recent_window, baseline_window=30
+            ).get("rows") or [])
+        }
+
+        def performance_score(metrics, reliable_at):
+            if not metrics or int(metrics.get("rounds") or 0) <= 0:
+                return None
+            rounds = int(metrics.get("rounds") or 0)
+            avg = float(metrics.get("avg_coverage") or 0.0)
+            p2 = float(metrics.get("pct_2plus") or 0.0)
+            coverage = self._decision_clip((avg - 0.50) / 2.50 * 100.0)
+            raw = 0.65 * coverage + 0.35 * self._decision_clip(p2)
+            reliability = min(1.0, rounds / max(1.0, float(reliable_at)))
+            # Encolhe amostras pequenas em direção ao neutro (50).
+            return round(self._decision_clip(50.0 + reliability * (raw - 50.0)), 2)
+
+        stability_map = {
+            "MELHORA": 85.0,
+            "ESTÁVEL": 70.0,
+            "AMOSTRA INSUFICIENTE": 50.0,
+            "ATENÇÃO": 35.0,
+            "QUEDA FORTE": 15.0,
+        }
+
+        # Convergência atual: quanto dos 5 bichos de cada método recebe apoio
+        # de pelo menos uma das outras leituras atuais congeladas.
+        signals = (snapshot or {}).get("signals") or {}
+        current_sets = {}
+        for method_name in methods:
+            values = []
+            for raw in (signals.get(method_name) or {}).get("groups") or []:
+                try:
+                    group = int(raw)
+                except Exception:
+                    continue
+                if 1 <= group <= 25 and group not in values:
+                    values.append(group)
+            current_sets[method_name] = set(values[:5])
+
+        convergence = {}
+        for method_name in methods:
+            own = current_sets.get(method_name) or set()
+            if not own:
+                convergence[method_name] = None
+                continue
+            others = [
+                current_sets.get(other) or set()
+                for other in methods if other != method_name
+            ]
+            reinforced = sum(
+                1 for g in own if any(g in other_set for other_set in others)
+            )
+            convergence[method_name] = round(reinforced / len(own) * 100.0, 2)
+
+        # Walk-Forward só entra se já foi executado nesta sessão. Abrir a tela
+        # Decisão nunca dispara uma simulação pesada automaticamente.
+        wf_rows = {}
+        if isinstance(walk_forward, dict):
+            source = walk_forward.get("paired_summary") or walk_forward.get("summary") or []
+            wf_rows = {r.get("method"): r for r in source if r.get("method")}
+
+        base_weights = {
+            "hour": 0.35,
+            "recent": 0.20,
+            "stability": 0.15,
+            "walk_forward": 0.10,
+            "weekday": 0.08,
+            "convergence": 0.07,
+            "overall": 0.05,
+        }
+
+        rows = []
+        for method_name in methods:
+            h = by_hour.get(method_name)
+            r = recent.get(method_name)
+            o = overall.get(method_name)
+            w = by_weekday.get(method_name)
+            t = trend.get(method_name) or {}
+            wf = wf_rows.get(method_name)
+
+            factors = {
+                "hour": performance_score(h, 20),
+                "recent": performance_score(r, 12),
+                "stability": stability_map.get(t.get("status"), 50.0) if t else None,
+                "walk_forward": performance_score(wf, 30) if wf else None,
+                "weekday": performance_score(w, 12),
+                "convergence": convergence.get(method_name),
+                "overall": performance_score(o, 20),
+            }
+            active = [key for key, value in factors.items() if value is not None]
+            weight_total = sum(base_weights[key] for key in active)
+            if weight_total <= 0:
+                continue
+            score = sum(
+                float(factors[key]) * base_weights[key]
+                for key in active
+            ) / weight_total
+
+            hour_rounds = int((h or {}).get("rounds") or 0)
+            # Mesmo um placar excelente não vira confiança alta com poucas
+            # observações do horário que está sendo previsto.
+            if hour_rounds < 4:
+                score = min(score, 58.0)
+            elif hour_rounds < 8:
+                score = min(score, 64.0)
+            elif hour_rounds < 12:
+                score = min(score, 72.0)
+            elif hour_rounds < 20:
+                score = min(score, 85.0)
+
+            rows.append({
+                "method": method_name,
+                "index": round(self._decision_clip(score), 1),
+                "hour_rounds": hour_rounds,
+                "weekday_rounds": int((w or {}).get("rounds") or 0),
+                "recent_rounds": int((r or {}).get("rounds") or 0),
+                "overall_rounds": int((o or {}).get("rounds") or 0),
+                "hour_avg": float((h or {}).get("avg_coverage") or 0.0),
+                "overall_avg": float((o or {}).get("avg_coverage") or 0.0),
+                "trend_status": t.get("status") or "—",
+                "factors": factors,
+                "active_weights": {
+                    key: round(base_weights[key] / weight_total * 100.0, 1)
+                    for key in active
+                },
+            })
+
+        rows.sort(key=lambda item: (
+            -item["index"], -item["hour_avg"], -item["overall_avg"], item["method"]
+        ))
+        best = rows[0] if rows else None
+        second = rows[1] if len(rows) > 1 else None
+        lead = (best["index"] - second["index"]) if best and second else 0.0
+
+        if not best:
+            status = "SEM DADOS"
+            recommendation = "Ainda não há evidência prospectiva auditada suficiente para comparar os métodos."
+        else:
+            hour_rounds = int(best.get("hour_rounds") or 0)
+            unstable = best.get("trend_status") in ("ATENÇÃO", "QUEDA FORTE")
+            if hour_rounds < 8:
+                status = "AMOSTRA INSUFICIENTE"
+            elif hour_rounds >= 20 and lead >= 8.0 and not unstable:
+                status = "FORTE"
+            elif hour_rounds >= 12 and lead >= 4.0 and not unstable:
+                status = "MODERADA"
+            else:
+                status = "BAIXA"
+
+            if status == "AMOSTRA INSUFICIENTE":
+                recommendation = (
+                    f"O melhor sinal provisório é {best['method']}, mas há apenas "
+                    f"{hour_rounds} leitura(s) auditada(s) neste horário. "
+                    "Manter Reset + 3+1 oficial e acumular evidência."
+                )
+            elif best["method"] == "Reset Cobertura":
+                recommendation = (
+                    "Reset Cobertura segue com a melhor evidência contextual. "
+                    "Reset + 3+1 permanece oficial."
+                )
+            else:
+                recommendation = (
+                    f"{best['method']} tem a melhor evidência contextual desta rodada, "
+                    "mas Reset + 3+1 permanece oficial; o desafiante continua em observação/sombra."
+                )
+
+        return {
+            "target": target,
+            "hour": hour,
+            "weekday": weekday,
+            "window": window,
+            "recent_window": recent_window,
+            "official_method": "Reset Cobertura",
+            "official_game": "Reset + 3+1",
+            "rows": rows,
+            "best": best,
+            "lead": round(lead, 1),
+            "status": status,
+            "recommendation": recommendation,
+            "walk_forward_used": bool(wf_rows),
+            "base_weights": dict(base_weights),
+            "note": "Índice de Evidência Contextual; não é probabilidade de acerto.",
+        }
+
+    def decision_concentration_from_generation(self, generation):
+        generation=generation or {}
+        rows=generation.get("rows") or []
+        game={"tipo":generation.get("kind") or "Centena"}
+        counter=Counter()
+        for row in rows:
+            for group in self._decision_groups_from_item(game,row):
+                if 1 <= int(group) <= 25:
+                    counter[int(group)] += 1
+        total=sum(counter.values())
+        if not total:
+            return {"games":0,"items":len(rows),"group_mentions":0,"score":0.0,"label":"SEM LEITURA","top":[],"effective_groups":0.0,"top2_share":0.0}
+        shares={g:c/total for g,c in counter.items()}
+        hhi=sum(v*v for v in shares.values())
+        effective=1.0/hhi if hhi else 0.0
+        ordered=sorted(counter.items(), key=lambda kv:(-kv[1],kv[0]))
+        top=[{"grupo":g,"bicho":BICHOS.get(g,str(g)),"count":c,"share":shares[g]*100.0} for g,c in ordered[:5]]
+        top1=top[0]["share"] if top else 0.0
+        top2=sum(r["share"] for r in top[:2])
+        hhi_scaled=self._decision_clip((hhi-0.04)/(1.0-0.04)*100.0)
+        score=round(self._decision_clip(0.70*top2 + 0.30*hhi_scaled),1)
+        if top1 >= 45 or top2 >= 70 or score >= 65:
+            label="ALTA"
+        elif top1 >= 35 or top2 >= 55 or score >= 50:
+            label="MODERADA"
+        else:
+            label="BAIXA"
+        return {"games":1,"items":len(rows),"group_mentions":total,"score":score,"label":label,"top":top,"top1_share":top1,"top2_share":top2,"effective_groups":effective}
+
+    def decision_bet_concentration(self, target_data=None, target_sorteio=None, target_hora=None):
+        """Mede concentração dos jogos congelados para uma rodada-alvo."""
+        if not target_data:
+            snap=self.latest_decision_snapshot()
+            if snap:
+                target_data,target_sorteio,target_hora=(snap.get("target_data"),snap.get("target_sorteio"),snap.get("target_hora"))
+        if not target_data:
+            return {"games":0,"items":0,"group_mentions":0,"score":0.0,"label":"SEM JOGOS","top":[],"effective_groups":0.0}
+        with self.connect() as con:
+            games=con.execute(
+                "SELECT * FROM jogos_congelados WHERE alvo_data=? AND COALESCE(alvo_sorteio,'')=COALESCE(?, '') AND COALESCE(alvo_hora,'')=COALESCE(?, '') ORDER BY id",
+                (target_data,target_sorteio,target_hora),
+            ).fetchall()
+            counter=Counter()
+            items_count=0
+            for grow in games:
+                game=dict(grow)
+                items=con.execute("SELECT * FROM jogos_itens WHERE jogo_id=? ORDER BY ordem",(int(game["id"]),)).fetchall()
+                for irow in items:
+                    items_count += 1
+                    for group in self._decision_groups_from_item(game,dict(irow)):
+                        if 1 <= int(group) <= 25:
+                            counter[int(group)] += 1
+        total=sum(counter.values())
+        if not total:
+            return {"games":len(games),"items":items_count,"group_mentions":0,"score":0.0,"label":"SEM LEITURA","top":[],"effective_groups":0.0}
+        shares={g:c/total for g,c in counter.items()}
+        hhi=sum(v*v for v in shares.values())
+        effective=1.0/hhi if hhi else 0.0
+        ordered=sorted(counter.items(), key=lambda kv:(-kv[1],kv[0]))
+        top=[]
+        for g,c in ordered[:5]:
+            top.append({"grupo":g,"bicho":BICHOS.get(g,str(g)),"count":c,"share":shares[g]*100.0})
+        top1=top[0]["share"] if top else 0.0
+        top2=sum(r["share"] for r in top[:2])
+        # score combina dependência dos dois líderes com a concentração global (HHI).
+        hhi_scaled=self._decision_clip((hhi-0.04)/(1.0-0.04)*100.0)
+        score=round(self._decision_clip(0.70*top2 + 0.30*hhi_scaled),1)
+        if top1 >= 45 or top2 >= 70 or score >= 65:
+            label="ALTA"
+        elif top1 >= 35 or top2 >= 55 or score >= 50:
+            label="MODERADA"
+        else:
+            label="BAIXA"
+        return {
+            "games":len(games),"items":items_count,"group_mentions":total,
+            "score":score,"label":label,"top":top,"top1_share":top1,
+            "top2_share":top2,"effective_groups":effective,
+            "target":{"data":target_data,"sorteio":target_sorteio,"hora":target_hora},
+        }
+
+    @staticmethod
+    def _walk_forward_metric_summary(records):
+        """Resume registros de um método sem misturar rodadas indisponíveis."""
+        valid=[r for r in records if r.get("available")]
+        n=len(valid)
+        if not n:
+            return {
+                "rounds":0,"avg_coverage":0.0,"pct_1plus":0.0,"pct_2plus":0.0,
+                "pct_3plus":0.0,"pct_4plus":0.0,"pct_5":0.0,"avg_position":None,
+                "avg_random_expected":0.0,"uplift_vs_random":0.0,"errors":len(records),
+            }
+        hits=[int(r.get("coverage_hits") or 0) for r in valid]
+        pos=[int(r.get("position_hits") or 0) for r in valid if r.get("position_hits") is not None]
+        random_expected=[float(r.get("random_expected") or 0.0) for r in valid]
+        avg=sum(hits)/n
+        baseline=(sum(random_expected)/len(random_expected)) if random_expected else 0.0
+        return {
+            "rounds":n,
+            "avg_coverage":avg,
+            "pct_1plus":sum(v>=1 for v in hits)/n*100.0,
+            "pct_2plus":sum(v>=2 for v in hits)/n*100.0,
+            "pct_3plus":sum(v>=3 for v in hits)/n*100.0,
+            "pct_4plus":sum(v>=4 for v in hits)/n*100.0,
