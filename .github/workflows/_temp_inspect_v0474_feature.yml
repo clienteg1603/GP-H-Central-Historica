@@ -11,44 +11,18 @@ jobs:
       - uses: actions/checkout@v4
         with:
           ref: feature-lei-geracao-meta-tabela1-v0474
-      - name: Extrair geradores e base
+      - name: Extrair similaridade e rankings
         run: |
           python - <<'PY'
-          import ast,base64,json,zlib
+          import ast
           from pathlib import Path
           s=Path('source/gph_central.py').read_text(encoding='utf-8'); t=ast.parse(s)
-          wanted={
-            'distribute_game_counts','number_rankings_for_group','generate_historical_numbers',
-            'generate_centenas_3plus1','generate_centenas_meta_21','generate_group_combinations',
-            'generate_historical_concentrated_bundle','play_controls_changed','play_generate'
-          }
+          wanted={'method_similarity_day','centena_rankings_for_dezena','centena_31_freeze_state'}
           for node in ast.walk(t):
-            if isinstance(node,ast.FunctionDef) and node.name in wanted:
-              print(f'\n===== {node.name} L{node.lineno}-{node.end_lineno} =====')
-              seg=ast.get_source_segment(s,node) or ''
-              if node.name=='play_generate':
-                # só o trecho final onde escolhe o gerador
-                lines=seg.splitlines()
-                for i,line in enumerate(lines):
-                  if 'if kind == "Grupo"' in line:
-                    print('\n'.join(lines[i:i+170])); break
-              else:
-                print(seg)
-          p=Path('_temp_history_groups_v0474.b64')
-          raw=base64.b64decode(p.read_text().strip())
-          for codec in ('plain','zlib','gzip'):
-            try:
-              if codec=='plain': data=raw
-              elif codec=='zlib': data=zlib.decompress(raw)
-              else:
-                import gzip; data=gzip.decompress(raw)
-              obj=json.loads(data.decode('utf-8'))
-              print('\n===== HISTORY SUMMARY =====')
-              print('codec',codec,'type',type(obj).__name__,'len',len(obj) if hasattr(obj,'__len__') else '?')
-              print('sample',repr(obj[:2] if isinstance(obj,list) else list(obj.items())[:2]))
-              break
-            except Exception:
-              pass
-          else:
-            print('history decode failed; raw head=',repr(raw[:120]))
+            if isinstance(node,ast.FunctionDef):
+              n=node.name.lower()
+              if node.name in wanted or ('milhar' in n and 'rank' in n) or ('dezena' in n and 'rank' in n):
+                print(f'\n===== {node.name} L{node.lineno}-{node.end_lineno} =====')
+                seg=ast.get_source_segment(s,node) or ''
+                print(seg if len(seg)<20000 else seg[:20000])
           PY
