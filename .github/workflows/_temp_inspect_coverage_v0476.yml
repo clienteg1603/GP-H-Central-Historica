@@ -1,0 +1,44 @@
+name: TEMP inspeciona cobertura v0.47.6
+on:
+  push:
+    branches: [feature-evolucao-cobertura-v0476]
+permissions:
+  contents: read
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feature-evolucao-cobertura-v0476
+      - name: Mapear Decisão, auditoria e dados disponíveis
+        run: |
+          python - <<'PY'
+          import ast,re
+          from pathlib import Path
+          p=Path('source/gph_central.py')
+          s=p.read_text(encoding='utf-8')
+          tree=ast.parse(s)
+          keys=('decision','decisao','audit','auditoria','meta_shadow','snapshot','concentration','coverage','cobertura','jogos_congelados','register_ticket','games_for_ticket','historical_concentrated')
+          wanted=[]
+          for node in ast.walk(tree):
+              if isinstance(node,(ast.FunctionDef,ast.AsyncFunctionDef)):
+                  seg=ast.get_source_segment(s,node) or ''
+                  low=(node.name+' '+seg[:40000]).lower()
+                  if any(k in low for k in keys):
+                      # prioriza UI Decisão + queries/auditorias/Meta
+                      if any(k in low for k in ('decision','decisao','meta_shadow','jogos_congelados','cobertura','coverage','audit_frozen','register_ticket')):
+                          wanted.append((node.lineno,node.name,seg))
+          for ln,name,seg in sorted(wanted):
+              print(f'\n===== {name} L{ln} =====')
+              print(seg[:50000])
+          print('\n=== TABELAS / CREATE TABLE relevantes ===')
+          for i,line in enumerate(s.splitlines(),1):
+              low=line.lower()
+              if ('create table' in low or 'alter table' in low) and any(k in low for k in ('meta','decision','jogos','snapshot','shadow')):
+                  print(i,line[:500])
+          print('\n=== NOMES DAS SUBABAS DECISAO ===')
+          for i,line in enumerate(s.splitlines(),1):
+              if any(x in line for x in ('"Resumo"','"Análise"','"Auditoria"','"Laboratório"')):
+                  print(i,line[:500])
+          PY
