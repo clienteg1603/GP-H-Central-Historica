@@ -18,19 +18,16 @@ jobs:
           from pathlib import Path
           p=Path('source/gph_central.py')
           s=p.read_text(encoding='utf-8')
-          lines=s.splitlines()
-          print('=== LINHAS COM JOGO MANUAL / NOVA APOSTA ===')
-          for i,line in enumerate(lines,1):
-              low=line.lower()
-              if 'jogo manual' in low or 'nova aposta' in low or 'manual' in low and ('play_' in low or 'palpit' in low or 'gerar' in low or 'entry' in low or 'button' in low):
-                  print(f'{i}: {line[:500]}')
-          print('\n=== FUNÇÕES RELEVANTES ===')
           tree=ast.parse(s)
+          wanted={
+            'play_show_new','play_manual_input','play_render_generation','play_add_to_ticket',
+            'play_method_changed','play_kind_changed','play_family_changed','play_variant_changed',
+            'play_scope_changed','play_target_changed','play_refresh_method_ui','play_clear_generation',
+            '_set_play_subnav_active','_draft_description','show_play_page'
+          }
           for node in ast.walk(tree):
-              if isinstance(node,(ast.FunctionDef,ast.AsyncFunctionDef)):
+              if isinstance(node,(ast.FunctionDef,ast.AsyncFunctionDef)) and (node.name in wanted or ('play_' in node.name and any(x in node.name for x in ('kind','method','family','variant','ticket','generation')))):
                   seg=ast.get_source_segment(s,node) or ''
-                  low=(node.name+' '+seg[:30000]).lower()
-                  if any(k in low for k in ('jogo manual','nova aposta','manual_number','manual_game','manual_palpit','play_manual')):
-                      print(f'\n===== {node.name} L{node.lineno} =====')
-                      print(seg[:30000])
+                  print(f'\n===== {node.name} L{node.lineno} =====')
+                  print(seg[:40000])
           PY
