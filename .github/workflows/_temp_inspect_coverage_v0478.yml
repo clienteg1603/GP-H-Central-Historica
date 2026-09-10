@@ -1,0 +1,37 @@
+name: TEMP inspect coverage v0.47.8
+on:
+  push:
+    branches: [fix-coverage-history-v0478]
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Extract relevant methods and SQL
+        run: |
+          python - <<'PY'
+          import ast
+          from pathlib import Path
+          p=Path('source/gph_central.py')
+          text=p.read_text(encoding='utf-8')
+          tree=ast.parse(text)
+          lines=text.splitlines()
+          wanted={
+            '_decision_audited_rows','_decision_row_to_dict','decision_coverage_evolution',
+            'audit_decision_snapshots','get_results','find_result','latest_result',
+            '_decision_result_groups_for_snapshot','_target_result_groups'
+          }
+          for node in ast.walk(tree):
+              if isinstance(node,(ast.FunctionDef,ast.AsyncFunctionDef)) and node.name in wanted:
+                  print('\n'+'='*20+' '+node.name+' '+'='*20)
+                  print('\n'.join(lines[node.lineno-1:node.end_lineno]))
+          print('\n=== RESULT TABLE SQL ===')
+          for i,line in enumerate(lines,1):
+              low=line.lower()
+              if ('create table' in low and ('resultado' in low or 'extrac' in low)) or ('from resultados' in low) or ('from extracoes' in low):
+                  print(i, line[:260])
+          print('\n=== decision_snapshots SQL ===')
+          for i,line in enumerate(lines,1):
+              if 'decision_snapshots' in line and any(k in line for k in ('CREATE TABLE','SELECT ','UPDATE ','INSERT ')):
+                  print(i, line[:300])
+          PY
