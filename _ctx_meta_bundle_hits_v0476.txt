@@ -1,0 +1,61 @@
+18404-        before = getattr(self, "play_generation_card", None)
+18405-        if card is None or rows_host is None or note is None or before is None:
+18406-            return
+18407-        for child in rows_host.winfo_children():
+18408-            child.destroy()
+18409-        ranking = list(generation.get("ranking") or [])
+18410-        requests = generation.get("requests") or {}
+18411-        requested_text = " • ".join(
+18412-            f"{int(qty)} {label}"
+18413-            for kind, label in (("Dupla de Grupo","Duplas"),("Terno de Grupo","Ternos"),("Quadra de Grupo","Quadras"),("Quina de Grupo","Quinas"))
+18414-            if (qty := int(requests.get(kind, 0))) > 0
+18415-        )
+18416:        if generation.get("meta_bundle"):
+18417-            note.configure(text=(
+18418-                f"{len(ranking)} bichos-base • {requested_text} • ranking GP-H Meta congelado antes do resultado"
+18419-            ))
+18420-        else:
+18421-            note.configure(text=(
+18422-                f"{len(ranking)} bichos-base • {requested_text} • repetição na extração-base conta novamente, como no Histórico v0.1"
+18423-            ))
+18424-        for idx, row in enumerate(ranking, start=1):
+18425-            letter = chr(64 + idx) if idx <= 26 else str(idx)
+18426:            if generation.get("meta_bundle"):
+18427-                detail_text = f"• score Meta {float(row.get('score') or 0.0):.3f}"
+18428-            else:
+18429-                detail_text = (
+18430-                    f"• {int(row.get('indication_count') or 0)} indicação(ões)  "
+18431-                    f"• soma {float(row.get('sum_prob') or 0.0)*100:.2f}%"
+18432-                )
+18433-            label = ttk.Label(
+18434-                rows_host,
+18435-                text=(
+18436-                    f"{letter}  {BICHOS[int(row['grupo'])]} · G{int(row['grupo']):02d}  "
+18437-                    f"{detail_text}"
+18438-                ),
+--
+19675-                minimum = self.play_hc_minimum_needed()
+19676-                if minimum is None or top_animals < minimum:
+19677-                    raise ValueError(
+19678-                        f"O fechamento pedido exige pelo menos {minimum or 'mais'} bichos; "
+19679-                        f"o Meta está usando {top_animals}."
+19680-                    )
+19681-                meta_rank = [dict(r) for r in (meta_payload.get("ranking") or [])[:top_animals]]
+19682-                generation = self.db.generate_historical_concentrated_bundle(
+19683-                    meta_rank, top_animals=top_animals, requests=requests, scope="1º–5º"
+19684-                )
+19685-                generation["strategy"] = "Meta • Fechamento"
+19686-                generation["selector"] = selector
+19687:                generation["meta_bundle"] = True
+19688-                generation["meta_ranking"] = meta_rank
+19689-                generation["intended_target"] = target
+19690-                generation["target_mode"] = "ALVO_ESPECIFICO"
+19691-                for sub in generation.get("bundle_generations") or []:
+19692-                    sub["strategy"] = "Meta • " + str(sub.get("kind") or "Fechamento")
+19693-                    sub["selector"] = selector
+19694-                    sub["intended_target"] = dict(target)
+19695-                    sub["target_mode"] = "ALVO_ESPECIFICO"
+19696-                    sub["meta_ranking"] = copy.deepcopy(meta_rank)
+19697-                self.play_generation = generation
+19698-                self.play_generation_groups = list(generation.get("groups") or groups)
+19699-                self._shadow_freeze_async(target, latest)

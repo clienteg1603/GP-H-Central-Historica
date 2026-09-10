@@ -1,0 +1,261 @@
+                            for r in target_rows
+                        ):
+                            proximity = f"Mesmo Grupo {group:02d}"
+
+                elif kind == "Centena":
+                    dezena = number[-2:]
+                    if any(
+                        str(r["dezena"]).zfill(2) == dezena
+                        for r in target_rows
+                    ):
+                        proximity = f"Mesma Dezena {dezena}"
+                    elif group and any(
+                        int(r["grupo"]) == group
+                        for r in target_rows
+                    ):
+                        proximity = f"Mesmo Grupo {group:02d}"
+
+                elif kind == "Dezena":
+                    if group and any(
+                        int(r["grupo"]) == group
+                        for r in target_rows
+                    ):
+                        proximity = f"Mesmo Grupo {group:02d}"
+
+            analyzed.append({
+                **item,
+                "hit": hit,
+                "events": events,
+                "where": " | ".join(where_parts),
+                "proximity": proximity,
+                "item_return": item_return,
+            })
+
+        return {
+            "game": game,
+            "items": analyzed,
+            "target": self.game_planned_target(game),
+            "result_rows": target_rows,
+        }
+
+
+    def _unique_permutation_count(self, number):
+        text = str(number)
+        return len(set(permutations(text)))
+
+    def method_historico_concentrado_v01(self, draw_date, sorteio, hora, top_n=5):
+        """
+        Recupera a leitura do GP-H Histórico v0.1 usada nos Ternos.
+
+        Diferença essencial para a Puxada Combinada atual: percorre as CINCO
+        posições da extração-base. Portanto, uma fonte repetida contribui de
+        novo para suas três indicações históricas. Usa sempre a tabela Geral,
+        sem estados ×1/×2/×3+, e nunca olha transições posteriores à base.
+        """
+        top_n = max(1, min(15, int(top_n)))
+        base = self.get_draw(draw_date, sorteio, hora)
+        if not base:
+            raise ValueError("Extração-base não encontrada.")
+
+        cutoff = (draw_date, sorteio, hora)
+        signals = {g: {
+            "grupo": g,
+            "bicho": BICHOS[g],
+            "indication_count": 0,
+            "sum_prob": 0.0,
+            "avg_lift": 0.0,
+            "sources": [],
+        } for g in range(1, 26)}
+
+        source_details = []
+        for prize_index, prize in enumerate(base.get("prizes") or [], start=1):
+            source_group = int(prize["grupo"])
+            pull = self.historical_pulls(
+                source_group,
+                state="Geral",
+                before_draw_key=cutoff,
+            )
+            top3 = list(pull.get("ranking") or [])[:3]
+            source_details.append({
+                "premio": prize_index,
+                "grupo": source_group,
+                "bicho": BICHOS[source_group],
+                "support": int(pull.get("support") or 0),
+                "top3": [dict(r) for r in top3],
+            })
+            for row in top3:
+                target = signals[int(row["grupo"])]
+                target["indication_count"] += 1
+                target["sum_prob"] += float(row.get("prob") or 0.0)
+                target["sources"].append({
+                    "premio": prize_index,
+                    "grupo": source_group,
+                    "bicho": BICHOS[source_group],
+                    "prob": float(row.get("prob") or 0.0),
+                    "lift": float(row.get("lift") or 0.0),
+                    "support": int(pull.get("support") or 0),
+                })
+
+        ranking = []
+        for rec in signals.values():
+            if not rec["indication_count"]:
+                continue
+            rec["avg_lift"] = (
+                sum(float(s.get("lift") or 0.0) for s in rec["sources"])
+                / rec["indication_count"]
+            )
+            ranking.append(rec)
+
+        ranking.sort(key=lambda r: (
+            -r["indication_count"],
+            -r["sum_prob"],
+            -r["avg_lift"],
+            r["grupo"],
+        ))
+        for idx, rec in enumerate(ranking, start=1):
+            rec["rank"] = idx
+
+        return {
+            "method": "GP-H Histórico Concentrado v0.1",
+            "base": base,
+            "ranking": ranking,
+            "selected": ranking[:top_n],
+            "source_details": source_details,
+            "top_n": top_n,
+            "lookahead_safe": True,
+            "repeated_sources_count_again": True,
+        }
+
+    @staticmethod
+    def minimum_animals_for_combinations(size, quantity, max_animals=15):
+        size = int(size)
+        quantity = max(0, int(quantity))
+        max_animals = max(size, int(max_animals))
+        if quantity == 0:
+            return 0
+        for animals in range(size, max_animals + 1):
+            if comb(animals, size) >= quantity:
+                return animals
+        return None
+
+    @staticmethod
+    def generate_historical_concentrated_bundle(ranking, top_animals, requests, scope="1º–5º"):
+        """Monta Duplas/Ternos/Quadras/Quinas com concentração progressiva nos líderes."""
+        top_animals = max(2, min(15, int(top_animals)))
+        selected = [dict(r) for r in list(ranking or [])[:top_animals]]
+        if len(selected) < top_animals:
+            raise ValueError(
+                f"O Histórico v0.1 produziu somente {len(selected)} bichos com sinal; "
+                f"foram solicitados {top_animals}."
+            )
+
+        definitions = (
+            ("Dupla de Grupo", 2, "Dupla"),
+            ("Terno de Grupo", 3, "Terno"),
+            ("Quadra de Grupo", 4, "Quadra"),
+            ("Quina de Grupo", 5, "Quina"),
+        )
+        bundle = []
+        preview_rows = []
+
+        for kind, size, short_name in definitions:
+            qty = max(0, int((requests or {}).get(kind, 0)))
+            if qty == 0:
+                continue
+            if top_animals < size:
+                raise ValueError(f"{short_name} precisa de pelo menos {size} bichos.")
+            available = comb(top_animals, size)
+            if qty > available:
+                minimum = Database.minimum_animals_for_combinations(size, qty, max_animals=15)
+                extra = (
+                    f" Use pelo menos {minimum} bichos."
+                    if minimum is not None else
+                    " O pedido excede o limite do método."
+                )
+                raise ValueError(
+                    f"{qty} {short_name.lower()}(s) distintos não cabem em {top_animals} bichos: "
+                    f"existem somente {available}.{extra}"
+                )
+
+            # Cada combinação trabalha com índices do ranking. A primeira chave
+            # (maior índice usado) faz o método esgotar o menor núcleo de líderes
+            # antes de abrir para o próximo bicho. A segunda concentra ainda mais
+            # nos primeiros colocados. Isso reproduz ABC, ABD, ACD, BCD, ABE.
+            candidates = []
+            for idx_combo in combinations(range(top_animals), size):
+                rows = [selected[i] for i in idx_combo]
+                candidates.append((
+                    max(idx_combo),
+                    sum(idx_combo),
+                    -sum(int(r.get("indication_count") or 0) for r in rows),
+                    -sum(float(r.get("sum_prob") or 0.0) for r in rows),
+                    tuple(int(r["grupo"]) for r in rows),
+                    idx_combo,
+                ))
+            candidates.sort()
+
+            game_rows = []
+            for order, candidate in enumerate(candidates[:qty], start=1):
+                idx_combo = candidate[-1]
+                combo = [selected[i] for i in idx_combo]
+                groups = [int(r["grupo"]) for r in combo]
+                row = {
+                    "grupo": None,
+                    "bicho": " + ".join(BICHOS[g] for g in groups),
+                    "numero": "-".join(f"{g:02d}" for g in groups),
+                    "dezena_base": "—",
+                    "regra": "GP-H Histórico Concentrado v0.1",
+                    "modalidade": short_name,
+                    "combo_groups": groups,
+                    "combo_ranks": [int(selected[i].get("rank") or (i + 1)) for i in idx_combo],
+                    "ordem_forca": order,
+                }
+                game_rows.append(row)
+                preview_rows.append(dict(row))
+
+            bundle.append({
+                "kind": kind,
+                "strategy": "Histórico • Concentrado",
+                "scope": scope,
+                "selector": "GP-H Histórico Concentrado v0.1",
+                "groups": [int(r["grupo"]) for r in selected],
+                "rows": game_rows,
+                "historical_concentrated": True,
+            })
+
+        if not bundle:
+            raise ValueError("Escolha pelo menos uma Dupla, Terno, Quadra ou Quina.")
+
+        return {
+            "kind": "Fechamento de Grupo",
+            "strategy": "Histórico • Concentrado",
+            "scope": scope,
+            "selector": "GP-H Histórico Concentrado v0.1",
+            "groups": [int(r["grupo"]) for r in selected],
+            "rows": preview_rows,
+            "bundle_generations": bundle,
+            "ranking": selected,
+            "requests": {k: int(v) for k, v in (requests or {}).items()},
+            "top_animals": top_animals,
+            "historical_concentrated": True,
+        }
+
+    def generate_group_combinations(
+        self,
+        groups,
+        kind,
+        total=5,
+    ):
+        size = GROUP_COMBO_SIZES.get(kind)
+        if not size:
+            raise ValueError("Modalidade de grupo combinada inválida.")
+
+        unique = []
+        for g in groups:
+            g = int(g)
+            if g not in unique:
+                unique.append(g)
+
+        if len(unique) < size:
+            raise ValueError(
+                f"{kind} precisa de pelo menos {size} grupos distintos."

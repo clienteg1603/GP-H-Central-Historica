@@ -1,0 +1,700 @@
+1104-        raw = content.decode(charset, errors="replace")
+1105-    return url, parse_daily_html(raw, day, url)
+1106-
+1107-
+1108:META_TABLE1_PULLS = {
+1109-    1: (25, 2, 13, 19, 20),
+1110-    2: (10, 1, 13, 19, 20),
+1111-    3: (11, 12, 21, 24, 10, 9),
+1112-    4: (6, 12, 14, 16, 5, 13),
+1113-    5: (13, 14, 8, 17, 18, 19),
+1114-    6: (7, 17, 12, 21, 22, 23),
+1115-    7: (6, 10, 25),
+1116-    8: (5, 12, 23),
+1117-    9: (15, 18, 3, 14),
+1118-    10: (7, 2, 3),
+1119-    11: (3, 6, 21),
+1120-    12: (6, 23, 22, 16, 3),
+--
+2570-                d[key] = copy.deepcopy(default)
+2571-        return d
+2572-
+2573-    def latest_decision_snapshot(self):
+2574-        with self.connect() as con:
+2575-            row = con.execute(
+2576-                "SELECT * FROM decision_snapshots ORDER BY target_data DESC,target_hora DESC,id DESC LIMIT 1"
+2577-            ).fetchone()
+2578-        return self._decision_row_to_dict(row)
+2579-
+2580-
+2581-    # ========================================================
+2582:    # GP-H META v0.2 — v0.47.4 (Tabela 1 admitida como 21ª característica)
+2583-    # Meta-aprendizado SOMBRA, sem alterar qualquer método oficial.
+2584-    # Modelo: regressão logística L2 nativa, determinística e sem dependências.
+2585-    # ========================================================
+2586-    @staticmethod
+2587-    def _meta_feature_names():
+2588-        return (
+2589-            "reset_sel", "reset_rank", "reset_strength",
+2590-            "pull_sel", "pull_rank", "pull_sources", "pull_strength",
+2591-            "sim_sel", "sim_rank", "sim_strength",
+2592-            "hist_sel", "hist_rank", "hist_indications", "hist_strength",
+2593-            "agreement", "agreement_2plus", "agreement_3plus", "agreement_4",
+2594-            "base_present", "base_repeat",
+--
+2672-        agreement=int(rsel+psel+ssel+hsel)
+2673-        features += [agreement/4.0, float(agreement>=2), float(agreement>=3), float(agreement>=4)]
+2674-
+2675-        base_groups=[]
+2676-        for p in (base_draw or {}).get("prizes") or []:
+2677-            try: base_groups.append(int(p.get("grupo")))
+2678-            except Exception: pass
+2679-        count=base_groups.count(group)
+2680-        features += [float(count>0), min(1.0,max(0,count-1)/2.0)]
+2681-
+2682-        table1_votes = sum(
+2683-            1 for source_group in base_groups
+2684:            if group in META_TABLE1_PULLS.get(int(source_group), ())
+2685-        )
+2686-        table1_strength = float(table1_votes) / float(max(1, len(base_groups)))
+2687-        features += [table1_strength]
+2688-        return [float(v) for v in features]
+2689-
+2690-    @classmethod
+2691-    def _meta_fit_logit(cls, examples, epochs=240, l2=0.025):
+2692-        examples=list(examples or [])
+2693-        if not examples:
+2694-            return None
+2695-        n_features=len(examples[0][0])
+2696-        if any(len(x)!=n_features for x,_,_ in examples):
+--
+2951-                    "target_data":target["data"],"target_hora":target["hora"],
+2952-                    "signals":signals,"historical":hist or {"selected":[]},
+2953-                    "base_draw":base,"result_groups":target_groups,
+2954-                    "benchmarks":benchmarks,"errors":errors,
+2955-                })
+2956-            notify(pos,total_rebuild,"RECONSTRUINDO",base)
+2957-
+2958-        if cancelled:
+2959-            return {
+2960-                "window":window,"requested_rounds":window,"reconstructed_rounds":len(reconstructed),
+2961-                "simulated_rounds":0,"cancelled":True,"summary":[],"details":[],
+2962-                "meta_head_to_head":[],"random_baseline":{},"lookahead_safe":True,
+2963:                "model_version":"META_LOGIT_NATIVE_V2_TABLE1","brain_frozen":True,
+2964-            }
+2965-
+2966-        if len(reconstructed) <= min_train:
+2967-            return {
+2968-                "window":window,"requested_rounds":window,"reconstructed_rounds":len(reconstructed),
+2969-                "simulated_rounds":0,"cancelled":False,"summary":[],"details":[],
+2970-                "meta_head_to_head":[],"random_baseline":{},"lookahead_safe":True,
+2971:                "model_version":"META_LOGIT_NATIVE_V2_TABLE1","brain_frozen":True,
+2972-                "note":f"A reconstrução produziu {len(reconstructed)} rodada(s) válidas; o Meta exige pelo menos {min_train} anteriores para começar.",
+2973-            }
+2974-
+2975-        eval_start=max(min_train,len(reconstructed)-window)
+2976-        details=[]
+2977-        eval_total=len(reconstructed)-eval_start
+2978-        for offset,idx in enumerate(range(eval_start,len(reconstructed)),start=1):
+2979-            if cancel_event is not None and cancel_event.is_set():
+2980-                cancelled=True; break
+2981-            current=reconstructed[idx]
+2982-            target=current["target"]
+2983-            prior=reconstructed[max(0,idx-training_limit):idx]
+2984-            base=current["base_draw"]
+2985:            notify(offset-1,eval_total,"TREINANDO META",base)
+2986-
+2987-            examples=self._meta_examples(prior,focus_target=target)
+2988-            model=self._meta_fit_logit(examples)
+2989-            methods={name:copy.deepcopy(current["benchmarks"].get(name,{"available":False})) for name in benchmark_names}
+2990-            if model:
+2991-                ranking=[]
+2992-                for group in range(1,26):
+2993-                    x=self._meta_feature_vector(group,current["signals"],current["historical"],current["base_draw"])
+2994-                    ranking.append((self._meta_model_score(model,x),group))
+2995-                ranking.sort(key=lambda item:(-item[0],item[1]))
+2996-                groups=[int(g) for _score,g in ranking[:5]]
+2997-                target_unique=set(int(g) for g in current["result_groups"])
+2998-                methods["GP-H Meta v0.2"]={
+2999-                    "available":True,"groups":groups,
+3000-                    "animals":[BICHOS.get(g,str(g)) for g in groups],
+3001-                    "scores":[round(float(score),3) for score,_g in ranking[:5]],
+3002-                    "coverage_hits":len(set(groups)&target_unique),"position_hits":None,
+3003-                    "random_expected":5.0*len(target_unique)/25.0,
+3004-                    "training_rounds":len(prior),"training_examples":len(examples),
+3005:                    "model_version":"META_LOGIT_NATIVE_V2_TABLE1","lookahead_safe":True,
+3006-                }
+3007-            else:
+3008-                methods["GP-H Meta v0.2"]={
+3009-                    "available":False,"groups":[],"animals":[],"coverage_hits":None,
+3010-                    "position_hits":None,"random_expected":0.0,"training_rounds":len(prior),
+3011-                    "error":"Modelo não pôde ser ajustado.","lookahead_safe":True,
+3012-                }
+3013-            details.append({
+3014-                "base":copy.deepcopy(current["base"]),"target":copy.deepcopy(current["target"]),
+3015-                "target_groups":list(current["result_groups"]),
+3016-                "target_animals":[BICHOS.get(int(g),str(g)) for g in current["result_groups"]],
+3017-                "methods":methods,
+3018-            })
+3019:            notify(offset,eval_total,"TREINANDO META",base)
+3020-
+3021-        summary=[]
+3022-        for method in method_order:
+3023-            records=[row["methods"].get(method,{"available":False}) for row in details]
+3024-            met=self._walk_forward_metric_summary(records); met["method"]=method
+3025-            summary.append(met)
+3026-        summary.sort(key=lambda r:(-r["avg_coverage"],-r["pct_2plus"],-r["pct_3plus"],r["method"]))
+3027-
+3028-        # Baseline analítico: Top 5 aleatório entre 25 grupos. As probabilidades
+3029-        # 2+/3+ são hipergeométricas e respeitam repetições no resultado real.
+3030-        random_rows=[]
+3031-        denom=float(comb(25,5))
+--
+3095-            })
+3096-
+3097-        date_from=details[0]["target"]["data"] if details else None
+3098-        date_to=details[-1]["target"]["data"] if details else None
+3099-        return {
+3100-            "window":window,"requested_rounds":window,"reconstructed_rounds":len(reconstructed),
+3101-            "simulated_rounds":len(details),"cancelled":cancelled,
+3102-            "min_training_rounds":min_train,"training_limit":training_limit,
+3103-            "methods":list(method_order),"summary":summary,"paired_rounds":len(paired),
+3104-            "paired_summary":paired_summary,"best_paired":paired_summary[0] if paired_summary else None,
+3105-            "meta_head_to_head":meta_head_to_head,"random_baseline":random_baseline,
+3106-            "robustness":robustness,"details":details,"date_from":date_from,"date_to":date_to,
+3107:            "model_version":"META_LOGIT_NATIVE_V2_TABLE1","brain_frozen":True,
+3108-            "lookahead_safe":all(
+3109-                bool(sig.get("lookahead_safe",True))
+3110-                for row in details for sig in row.get("methods",{}).values() if sig.get("available")
+3111-            ),
+3112-            "note":"Walk-Forward diagnóstico. O cérebro Meta v0.1 permanece congelado e o resultado de cada rodada entra somente depois da previsão.",
+3113-        }
+3114-
+3115-
+3116-    def meta_shadow_prediction(self, target, base_draw, signals, training_limit=160):
+3117-        target=dict(target or {}); base_draw=dict(base_draw or {}); signals=signals or {}
+3118-        if not target or not base_draw:
+3119-            return {"available":False,"status":"SEM DADOS","reason":"Alvo/base indisponível."}
+3120-        if self.get_draw(target.get("data"),target.get("sorteio"),target.get("hora")):
+3121-            return {"available":False,"status":"BLOQUEADO","reason":"Resultado-alvo já existe; Meta não é reconstruído retroativamente."}
+3122-        records=self._meta_training_records(before_target=target,limit=training_limit)
+3123-        n=len(records)
+3124-        same_hour=sum(1 for r in records if str(r.get("target_hora") or "") == str(target.get("hora") or ""))
+3125-        if n < 20:
+3126-            return {
+3127-                "available":False,"status":"AMOSTRA INSUFICIENTE","training_snapshots":n,
+3128-                "same_hour_snapshots":same_hour,"minimum_snapshots":20,
+3129-                "reason":"O GP-H Meta começa somente com 20 snapshots auditados anteriores.",
+3130:                "model_version":"META_LOGIT_NATIVE_V2_TABLE1","lookahead_safe":True,
+3131-            }
+3132-        try:
+3133-            historical=self.method_historico_concentrado_v01(
+3134-                base_draw.get("data"),base_draw.get("sorteio"),base_draw.get("hora"),top_n=5
+3135-            )
+3136-        except Exception:
+3137-            historical={"selected":[]}
+3138-        examples=self._meta_examples(records,focus_target=target)
+3139-        model=self._meta_fit_logit(examples)
+3140-        if not model:
+3141-            return {"available":False,"status":"SEM MODELO","training_snapshots":n,"reason":"Ajuste logístico indisponível."}
+3142-        ranking=[]
+--
+3144-            x=self._meta_feature_vector(group,signals,historical,base_draw)
+3145-            ranking.append({
+3146-                "grupo":group,"bicho":BICHOS[group],
+3147-                "score":round(self._meta_model_score(model,x),3),
+3148-                "features":[round(v,6) for v in x],
+3149-            })
+3150-        ranking.sort(key=lambda r:(-r["score"],r["grupo"]))
+3151-        for idx,row in enumerate(ranking,start=1): row["rank"]=idx
+3152-        holdout=self._meta_temporal_holdout(records)
+3153-        status="SOMBRA ATIVA" if n>=30 and same_hour>=6 else "EXPERIMENTAL"
+3154-        return {
+3155-            "available":True,"status":status,"objective":"1º–5º",
+3156:            "model_version":"META_LOGIT_NATIVE_V2_TABLE1","training_snapshots":n,
+3157-            "training_examples":len(examples),"same_hour_snapshots":same_hour,
+3158-            "groups":[r["grupo"] for r in ranking[:5]],
+3159-            "animals":[r["bicho"] for r in ranking[:5]],
+3160-            "scores":[r["score"] for r in ranking[:5]],
+3161-            "ranking":ranking,"holdout":holdout,
+3162-            "input_groups":{
+3163-                "Reset Cobertura":list((signals.get("Reset Cobertura") or {}).get("groups") or [])[:5],
+3164-                "Puxada Combinada":list((signals.get("Puxada Combinada") or {}).get("groups") or [])[:5],
+3165-                "Similaridade":list((signals.get("Similaridade") or {}).get("groups") or [])[:5],
+3166-                "Histórico Concentrado":[int(r.get("grupo")) for r in (historical.get("selected") or [])[:5]],
+3167-            },
+3168-            "model":{**model,"feature_names":list(self._meta_feature_names())},
+--
+3198-            1 for r in records
+3199-            if str(r.get("target_hora") or "") == str(target.get("hora") or "")
+3200-        )
+3201-        if n < 1:
+3202-            return {
+3203-                "available": False,
+3204-                "status": "SEM AMOSTRA AUDITADA",
+3205-                "training_snapshots": 0,
+3206-                "same_hour_snapshots": 0,
+3207-                "minimum_play_snapshots": 1,
+3208-                "minimum_maturity_snapshots": 20,
+3209-                "reason": "O GP-H Meta precisa de pelo menos 1 snapshot auditado anterior para iniciar o modo jogável em formação.",
+3210:                "model_version": "META_LOGIT_NATIVE_V2_TABLE1",
+3211-                "lookahead_safe": True,
+3212-                "play_only": True,
+3213-            }
+3214-
+3215-        try:
+3216-            historical = self.method_historico_concentrado_v01(
+3217-                base_draw.get("data"), base_draw.get("sorteio"), base_draw.get("hora"), top_n=5
+3218-            )
+3219-        except Exception:
+3220-            historical = {"selected": []}
+3221-
+3222-        examples = self._meta_examples(records, focus_target=target)
+--
+3239-                "bicho": BICHOS[group],
+3240-                "score": round(self._meta_model_score(model, x), 3),
+3241-                "features": [round(v, 6) for v in x],
+3242-            })
+3243-        ranking.sort(key=lambda r: (-r["score"], r["grupo"]))
+3244-        for idx, row in enumerate(ranking, start=1):
+3245-            row["rank"] = idx
+3246-
+3247-        return {
+3248-            "available": True,
+3249-            "status": "EM FORMAÇÃO",
+3250-            "objective": "1º–5º",
+3251:            "model_version": "META_LOGIT_NATIVE_V2_TABLE1",
+3252-            "training_snapshots": n,
+3253-            "training_examples": len(examples),
+3254-            "same_hour_snapshots": same_hour,
+3255-            "minimum_play_snapshots": 1,
+3256-            "minimum_maturity_snapshots": 20,
+3257-            "formation_progress_pct": round(min(100.0, (n / 20.0) * 100.0), 1),
+3258-            "groups": [r["grupo"] for r in ranking[:5]],
+3259-            "animals": [r["bicho"] for r in ranking[:5]],
+3260-            "scores": [r["score"] for r in ranking[:5]],
+3261-            "ranking": ranking,
+3262-            "input_groups": {
+3263-                "Reset Cobertura": list((signals.get("Reset Cobertura") or {}).get("groups") or [])[:5],
+--
+3281-        if not all(target.values()):
+3282-            raise ValueError("Snapshot sem rodada-alvo completa.")
+3283-        if self.get_draw(target["data"],target["sorteio"],target["hora"]):
+3284-            return snapshot,False
+3285-        if (snapshot.get("meta") or {}) and not force:
+3286-            return snapshot,False
+3287-        base=self.get_draw(snapshot.get("base_data"),snapshot.get("base_sorteio"),snapshot.get("base_hora"))
+3288-        if not base:
+3289-            raise ValueError("Extração-base do GP-H Meta não encontrada.")
+3290-        payload=self.meta_shadow_prediction(target,base,snapshot.get("signals") or {})
+3291-        frozen_at=datetime.now().isoformat(timespec="seconds")
+3292-        payload=copy.deepcopy(payload or {})
+3293:        payload.update({"schema":1,"frozen_at":frozen_at,"frozen_app_version":APP_VERSION,"frozen_mode":"META_SOMBRA_AUTO"})
+3294-        with self.connect() as con:
+3295-            row=con.execute("SELECT * FROM decision_snapshots WHERE id=?",(int(snapshot["id"]),)).fetchone()
+3296-            if row is None: raise ValueError("Snapshot de Decisão não encontrado.")
+3297-            current=self._decision_row_to_dict(row)
+3298-            if (current.get("meta") or {}) and not force:
+3299-                return current,False
+3300-            if self.get_draw(target["data"],target["sorteio"],target["hora"]):
+3301-                return current,False
+3302-            con.execute(
+3303-                "UPDATE decision_snapshots SET meta_json=?,meta_frozen_at=? WHERE id=?",
+3304-                (json.dumps(payload,ensure_ascii=False),frozen_at,int(snapshot["id"])),
+3305-            )
+--
+17358-
+17359-        self.play_method_badge = tk.Label(
+17360-            game_card,
+17361-            text="OFICIAL",
+17362-            bg="#124A7A",
+17363-            fg="#DCEEFF",
+17364-            font=("Segoe UI Semibold", 8),
+17365-            padx=8,
+17366-            pady=3,
+17367-        )
+17368-        self.play_method_badge.grid(row=2, column=5, sticky="w", pady=(2, 0))
+17369-
+17370:        # GP-H META v0.2 — seletor jogável, visualmente separado dos demais.
+17371-        self.play_meta_card = tk.Frame(
+17372-            self.play_body,
+17373-            bg=self.colors["card2"],
+17374-            highlightbackground="#19A7B8",
+17375-            highlightthickness=2,
+17376-            bd=0,
+17377-            padx=12,
+17378-            pady=9,
+17379-        )
+17380-        meta_head = tk.Frame(self.play_meta_card, bg=self.colors["card2"])
+17381-        meta_head.pack(fill="x")
+17382-        tk.Label(
+17383:            meta_head, text="GP-H META v0.2", bg=self.colors["card2"],
+17384-            fg=self.colors["text"], font=("Segoe UI Semibold", 12),
+17385-        ).pack(side="left")
+17386-        tk.Label(
+17387:            meta_head, text="META • ADAPTATIVO", bg="#0B6273", fg="#E7FDFF",
+17388-            font=("Segoe UI Semibold", 8), padx=8, pady=3,
+17389-        ).pack(side="left", padx=(10, 0))
+17390-        tk.Label(
+17391-            self.play_meta_card,
+17392-            text="O método escolhe e ordena os bichos; a Lei GP-H transforma esse ranking em jogo. Em Centena/Milhar usa 2/3 + 1/3 nas dezenas ativas e o mesmo congelamento persistente do 3+1.",
+17393-            bg=self.colors["card2"], fg=self.colors["muted"],
+17394-            font=("Segoe UI", 8), anchor="w", justify="left",
+17395-        ).pack(fill="x", pady=(5, 7))
+17396-        meta_controls = tk.Frame(self.play_meta_card, bg=self.colors["card2"])
+17397-        meta_controls.pack(fill="x")
+17398-        self.play_meta_animals_label = tk.Label(
+17399-            meta_controls, text="Bichos do ranking", bg=self.colors["card2"],
+--
+17492-        self.play_method_help = ttk.Label(stake_card, text="", style="CardMuted.TLabel", wraplength=650)
+17493-        self.play_method_help.grid(row=1, column=4, rowspan=2, sticky="w", padx=(16, 0))
+17494-        stake_card.grid_columnconfigure(4, weight=1)
+17495-
+17496-        # 4) ESTADO DO RESET + 3+1 (oculto até gerar o método oficial)
+17497-        self.play_31_state_card = ttk.Frame(
+17498-            self.play_body, style="Card.TFrame", padding=(10, 8)
+17499-        )
+17500-        state_head = ttk.Frame(self.play_31_state_card, style="Card.TFrame")
+17501-        state_head.pack(fill="x", pady=(0, 4))
+17502-        ttk.Label(
+17503-            state_head,
+17504:            text="DISTRIBUIÇÃO DE DEZENAS • 3+1 / META 2:1",
+17505-            style="Section.TLabel",
+17506-            font=("Segoe UI Semibold", 10),
+17507-        ).pack(side="left")
+17508-        self.play_31_state_note = ttk.Label(
+17509-            state_head,
+17510-            text="",
+17511-            style="CardMuted.TLabel",
+17512-            wraplength=820,
+17513-            justify="left",
+17514-        )
+17515-        self.play_31_state_note.pack(
+17516-            side="left", fill="x", expand=True, padx=(12, 0)
+--
+19126-
+19127-    def play_controls_changed(self, _event=None):
+19128-        self.play_hide_31_state()
+19129-        self.play_hide_hc_state()
+19130-        kind = self.play_kind.get()
+19131-        method = self.play_method.get()
+19132-
+19133-        fixed = kind in FIXED_PLACEMENT_MODALITIES or kind == "Fechamento de Grupo"
+19134-
+19135-        if kind == "Fechamento de Grupo":
+19136-            methods = [
+19137-                "Histórico • Concentrado",
+19138:                "★ META • GP-H Meta v0.2",
+19139-            ]
+19140-        elif kind == "Centena":
+19141-            methods = [
+19142-                "Oficial • Reset + Lei GP-H",
+19143:                "★ META • GP-H Meta v0.2",
+19144-                "Especial • Seca do Dia 1º",
+19145-                "Experimental • Puxada Combinada",
+19146-                "Experimental • Similaridade do Dia",
+19147-                "Manual",
+19148-            ]
+19149-        elif kind == "Milhar":
+19150-            methods = [
+19151-                "Oficial • Reset + Lei GP-H",
+19152:                "★ META • GP-H Meta v0.2",
+19153-                "Especial • Seca do Dia 1º",
+19154-                "Experimental • Puxada Combinada",
+19155-                "Experimental • Similaridade do Dia",
+19156-                "Manual",
+19157-            ]
+19158-        elif kind == "Grupo":
+19159-            methods = [
+19160-                "Oficial • Reset",
+19161:                "★ META • GP-H Meta v0.2",
+19162-                "Experimental • Puxada Combinada",
+19163-                "Experimental • Similaridade do Dia",
+19164-                "Manual",
+19165-            ]
+19166-        elif kind in GROUP_COMBO_SIZES or kind in PASSE_MODALITIES:
+19167-            methods = [
+19168-                "Oficial • Reset combinações",
+19169:                "★ META • GP-H Meta v0.2",
+19170-                "Experimental • Puxada Combinada",
+19171-                "Experimental • Similaridade combinações",
+19172-                "Manual",
+19173-            ]
+19174-        elif kind in DEZENA_COMBO_SIZES or kind in INVERTED_MODALITIES or kind == "Dezena":
+19175-            methods = [
+19176-                "Oficial • Reset + Histórica",
+19177:                "★ META • GP-H Meta v0.2",
+19178-                "Experimental • Puxada Combinada",
+19179-                "Experimental • Similaridade do Dia",
+19180-                "Manual",
+19181-            ]
+19182-        else:
+19183-            methods = ["Manual"]
+19184-
+19185-        if method not in methods:
+19186-            self.play_method.set(methods[0])
+19187-            method = methods[0]
+19188-        self.play_method_cb.configure(values=methods, state="readonly")
+19189-
+--
+19236-            self.play_total.set("5")
+19237-        if kind in GROUP_COMBO_SIZES:
+19238-            default_qty = {
+19239-                "Dupla de Grupo":"5", "Terno de Grupo":"3", "Quadra de Grupo":"2", "Quina de Grupo":"1"
+19240-            }[kind]
+19241-            if self.play_total.get() == "20":
+19242-                self.play_total.set(default_qty)
+19243-
+19244-        target = self.play_get_selected_target()
+19245-        is_next = self.db.is_next_operational_target(target)
+19246-
+19247-        # Etiqueta visual de origem do método.
+19248:        if method.startswith("★ META"):
+19249:            badge = ("META • ADAPTATIVO", "#0B6273", "#E7FDFF")
+19250-            help_text = (
+19251-                "GP-H Meta v0.2 usa 21 características; a Tabela 1 entrou como sinal adicional após passar no walk-forward de admissão. "
+19252-                "A estrutura do cérebro permanece congelada e a previsão usada no jogo é congelada antes do resultado."
+19253-            )
+19254-        elif method.startswith("Oficial"):
+19255-            badge = ("OFICIAL", "#124A7A", "#DCEEFF")
+19256-            help_text = "Reset é o seletor oficial; a Lei de Geração GP-H é a camada comum que transforma o ranking em jogo."
+19257-        elif method.startswith("Histórico"):
+19258-            badge = ("HISTÓRICO", "#155E63", "#D9FAF5")
+19259-            help_text = (
+19260-                "Recupera o GP-H Histórico v0.1 que teve o melhor resultado nos Ternos. "
+19261-                "Terno preserva o fechamento concentrado; Dupla, Quadra e Quina são extensões prospectivas da mesma regra."
+--
+19268-                help_text = "Similaridade do Dia permanece separada do desempenho oficial e só gera para a próxima rodada."
+19269-        elif method.startswith("Especial"):
+19270-            badge = ("ESPECIAL", "#7A4D10", "#FFE7B0")
+19271-            help_text = "Seca do Dia usa o dia anterior ao alvo e joga somente no 1º prêmio da rodada escolhida."
+19272-        else:
+19273-            badge = ("MANUAL", "#34465A", "#E3EDF6")
+19274-            help_text = "Você informa os números. O modo Manual permite preparar qualquer rodada futura exibida."
+19275-
+19276-        self.play_method_badge.configure(text=badge[0], bg=badge[1], fg=badge[2])
+19277-        self.play_generate_btn.configure(
+19278-            text=(
+19279-                "INSERIR NÚMEROS" if method == "Manual" else
+19280:                "GERAR COM META" if method.startswith("★ META") else
+19281-                "GERAR FECHAMENTO" if method == "Histórico • Concentrado" else
+19282-                "GERAR JOGO"
+19283-            )
+19284-        )
+19285-
+19286-        if target and not is_next and method != "Manual" and method != "Especial • Seca do Dia 1º":
+19287-            help_text += " O alvo escolhido não é o próximo; selecione Manual ou volte para a próxima rodada."
+19288-        self.play_method_help.configure(text=help_text)
+19289-
+19290-        if hasattr(self, "play_target_hint"):
+19291-            if target:
+19292-                prefix = "PRÓXIMA • " if is_next else "FUTURA • "
+--
+19549-                    )
+19550-
+19551-                self.play_generation = generation
+19552-                self.play_generation_groups = list(
+19553-                    generation.get("groups", [])
+19554-                )
+19555-                self._shadow_freeze_async(target, latest)
+19556-                self.play_render_generation()
+19557-                self.play_financial_refresh()
+19558-                return
+19559-
+19560-            meta_payload = None
+19561:            if method.startswith("★ META"):
+19562-                if kind == "Fechamento de Grupo":
+19563-                    try:
+19564-                        top_animals = max(2, min(15, int(self.play_hc_base_animals.get())))
+19565-                    except Exception:
+19566-                        raise ValueError("Informe uma quantidade válida de bichos no Fechamento.")
+19567-                else:
+19568-                    top_animals = requested_animals
+19569-
+19570-                snapshot, _created = self.db.freeze_decision_snapshot()
+19571-                snap_target = {
+19572-                    "data": snapshot.get("target_data"),
+19573-                    "sorteio": snapshot.get("target_sorteio"),
+--
+19607-                if len(ranking) < top_animals:
+19608-                    raise ValueError(
+19609-                        f"O Meta disponibilizou {len(ranking)} bichos no ranking; foram pedidos {top_animals}."
+19610-                    )
+19611-                groups = [int(r["grupo"]) for r in ranking[:top_animals]]
+19612-                selector = "GP-H Meta v0.2"
+19613-                if hasattr(self, "play_meta_status"):
+19614-                    names = ", ".join(BICHOS[g].title() for g in groups[:8])
+19615-                    suffix = "..." if len(groups) > 8 else ""
+19616-                    n_train = int(meta_payload.get("training_snapshots") or 0)
+19617-                    if meta_payload.get("status") == "EM FORMAÇÃO":
+19618-                        status_text = (
+19619:                            f"META EM FORMAÇÃO • Top {len(groups)} • treino: {n_train}/20 snapshots • "
+19620-                            f"{names}{suffix}"
+19621-                        )
+19622-                    else:
+19623-                        status_text = (
+19624:                            f"{meta_payload.get('status') or 'META'} • Top {len(groups)} congelado para esta rodada • "
+19625-                            f"treino: {n_train} snapshots • {names}{suffix}"
+19626-                        )
+19627-                    self.play_meta_status.configure(text=status_text)
+19628-
+19629-            elif method.startswith("Experimental"):
+19630-                if "Puxada" in method:
+19631-                    pull = self.db.method_convergencia_g5(
+19632-                        latest["data"], latest["sorteio"], latest["hora"], top_n=requested_animals
+19633-                    )
+19634-                    groups = [int(r["grupo"]) for r in pull.get("selected", [])]
+19635-                    selector = "Puxada Combinada"
+19636-                else:
+--
+19658-                )
+19659-                groups = [
+19660-                    int(r["grupo"])
+19661-                    for r in reset["selected"]
+19662-                ]
+19663-                selector = "GP-H Reset Cobertura v1"
+19664-
+19665-            if not groups:
+19666-                raise ValueError(
+19667-                    "O método não produziu bichos suficientes."
+19668-                )
+19669-
+19670:            if kind == "Fechamento de Grupo" and method.startswith("★ META"):
+19671-                requests = self.play_hc_requested_counts()
+19672-                if sum(requests.values()) <= 0:
+19673-                    raise ValueError("Escolha pelo menos uma Dupla, Terno, Quadra ou Quina.")
+19674-                top_animals = len(groups)
+19675-                minimum = self.play_hc_minimum_needed()
+19676-                if minimum is None or top_animals < minimum:
+19677-                    raise ValueError(
+19678-                        f"O fechamento pedido exige pelo menos {minimum or 'mais'} bichos; "
+19679-                        f"o Meta está usando {top_animals}."
+19680-                    )
+19681-                meta_rank = [dict(r) for r in (meta_payload.get("ranking") or [])[:top_animals]]
+19682-                generation = self.db.generate_historical_concentrated_bundle(
+--
+19770-                generation["strategy"] = f"{selector} • Lei GP-H"
+19771-
+19772-            else:
+19773-                generation = self.db.generate_historical_numbers(
+19774-                    groups=groups,
+19775-                    kind=kind,
+19776-                    total=total,
+19777-                    scope=self.play_scope.get(),
+19778-                )
+19779-                generation["selector"] = selector
+19780-                generation["strategy"] = method
+19781-
+19782:            if method.startswith("★ META") and meta_payload is not None:
+19783-                generation["meta_ranking"] = copy.deepcopy(meta_payload.get("ranking") or [])
+19784-                generation["meta_training_snapshots"] = int(meta_payload.get("training_snapshots") or 0)
+19785-                generation["meta_model_version"] = meta_payload.get("model_version")
+19786-
+19787-            # A fórmula interna pode ter um escopo estatístico próprio
+19788-            # (ex.: 3+1 usa histórico 1º–5º; Seca usa histórico de 1º),
+19789-            # mas a colocação efetiva do BILHETE é a escolhida pelo usuário.
+19790-            if not fixed:
+19791-                generation["scope"] = self.play_scope.get()
+19792-
+19793-            if kind == "Milhar":
+19794-                generation["submodalidade"] = (
+--
+24086-                "O índice serve para comparar evidência relativa entre métodos. "
+24087-                "Não é porcentagem de chance de prêmio e não altera o método oficial."
+24088-            ),
+24089-            style="CardMuted.TLabel", wraplength=1080,
+24090-        ).pack(anchor="w")
+24091-
+24092-    def _decision_build_meta(self, body, snapshot):
+24093-        meta=(snapshot or {}).get("meta") or {}
+24094-        summary=self.db.meta_shadow_summary(limit=120)
+24095-        card=ttk.Frame(body,style="Card.TFrame",padding=11)
+24096-        card.pack(fill="x",pady=(0,8))
+24097-        head=ttk.Frame(card,style="Card.TFrame"); head.pack(fill="x")
+24098:        ttk.Label(head,text="GP-H META v0.2 — SOMBRA",style="CardTitle.TLabel").pack(side="left")
+24099-        ttk.Label(head,text=meta.get("status") or "AGUARDANDO",style="CardMuted.TLabel").pack(side="right")
+24100-
+24101-        if not meta:
+24102-            ttk.Label(card,text="A leitura Meta ainda não foi congelada para esta rodada.",style="CardMuted.TLabel").pack(anchor="w",pady=(6,0))
+24103-        elif not meta.get("available"):
+24104-            n=int(meta.get("training_snapshots") or 0); minimum=int(meta.get("minimum_snapshots") or 20)
+24105-            ttk.Label(card,text=f"Aprendizado em formação: {n}/{minimum} snapshots auditados.",style="Card.TLabel",font=("Segoe UI Semibold",12)).pack(anchor="w",pady=(6,2))
+24106-            ttk.Label(card,text=meta.get("reason") or "Aguardando amostra suficiente.",style="CardMuted.TLabel",wraplength=1060).pack(anchor="w")
+24107-        else:
+24108-            groups=meta.get("groups") or []; animals=meta.get("animals") or []; scores=meta.get("scores") or []
+24109-            ttk.Label(
+24110-                card,
+--
+24139-            else:
+24140-                atxt="Auditoria prospectiva: começa a acumular somente com previsões Meta congeladas a partir da v0.41.0."
+24141-            ttk.Label(card,text=atxt,style="CardMuted.TLabel",wraplength=1060).pack(anchor="w",pady=(1,2))
+24142-
+24143-        ttk.Label(
+24144-            card,
+24145-            text="O score do Meta é apenas um ranking interno ainda não calibrado; não é porcentagem de chance. O Meta permanece 100% em sombra e não altera o Reset + 3+1 oficial.",
+24146-            style="CardMuted.TLabel",wraplength=1060,
+24147-        ).pack(anchor="w",pady=(4,0))
+24148-
+24149-        ttk.Separator(card,orient="horizontal").pack(fill="x",pady=(10,8))
+24150-        wf_head=ttk.Frame(card,style="Card.TFrame"); wf_head.pack(fill="x")
+24151:        ttk.Label(wf_head,text="WALK-FORWARD RIGOROSO DO META",style="CardTitle.TLabel").pack(side="left")
+24152-        ttk.Label(wf_head,text="v0.45 • cérebro v0.1 congelado",style="CardMuted.TLabel").pack(side="right")
+24153-        ttk.Label(
+24154-            card,
+24155-            text="Treina somente nas rodadas anteriores, prevê a próxima sem ver o resultado e avança no tempo. Compara Meta, Reset, Puxada, Similaridade, Histórico Concentrado e o acaso esperado.",
+24156-            style="CardMuted.TLabel",wraplength=1060,
+24157-        ).pack(anchor="w",pady=(3,6))
+24158-
+24159-        controls=ttk.Frame(card,style="Card.TFrame"); controls.pack(fill="x")
+24160-        ttk.Label(controls,text="Rodadas avaliadas",style="CardMuted.TLabel").pack(side="left")
+24161-        if not hasattr(self,"meta_wf_window"):
+24162-            self.meta_wf_window=tk.StringVar(value="30")
+24163-        ttk.Combobox(controls,textvariable=self.meta_wf_window,values=["20","30","60"],width=6,state="readonly").pack(side="left",padx=(5,8))
+24164:        self.meta_wf_run_btn=ttk.Button(controls,text="SIMULAR META",command=self._meta_walk_forward_start)
+24165-        self.meta_wf_run_btn.pack(side="left")
+24166-        self.meta_wf_cancel_btn=ttk.Button(controls,text="Cancelar",command=self._meta_walk_forward_cancel)
+24167-        self.meta_wf_cancel_btn.pack(side="left",padx=(6,0))
+24168-        self.meta_wf_export_btn=ttk.Button(controls,text="Exportar CSV",command=self._meta_walk_forward_export)
+24169-        self.meta_wf_export_btn.pack(side="right")
+24170-
+24171-        self.meta_wf_progress=ttk.Progressbar(card,mode="determinate",maximum=100)
+24172-        self.meta_wf_progress.pack(fill="x",pady=(8,3))
+24173:        self.meta_wf_status=ttk.Label(card,text="Escolha 20, 30 ou 60 rodadas e clique em SIMULAR META.",style="CardMuted.TLabel",wraplength=1060)
+24174-        self.meta_wf_status.pack(anchor="w")
+24175-
+24176-        cols=("method","rounds","avg","p2","p3","uplift")
+24177-        self.meta_wf_tree=ttk.Treeview(card,columns=cols,show="headings",height=6)
+24178-        heads={"method":"Método","rounds":"N","avg":"Cobertura","p2":"2+","p3":"3+","uplift":"vs. acaso"}
+24179-        widths={"method":230,"rounds":55,"avg":100,"p2":85,"p3":85,"uplift":95}
+24180-        for c in cols:
+24181-            self.meta_wf_tree.heading(c,text=heads[c]); self.meta_wf_tree.column(c,width=widths[c],anchor="w" if c=="method" else "center")
+24182-        self.meta_wf_tree.pack(fill="x",pady=(7,3))
+24183-
+24184-        ttk.Label(card,text="Meta × cada método nas mesmas rodadas",style="Card.TLabel",font=("Segoe UI Semibold",9)).pack(anchor="w",pady=(6,2))
+24185-        hcols=("method","rounds","wins","ties","losses","diff")
+--
+24362-            ))
+24363-        n=int(result.get("simulated_rounds") or 0)
+24364-        if result.get("cancelled"):
+24365-            status=f"Simulação cancelada • {n} rodada(s) concluída(s)."
+24366-        elif n:
+24367-            status=f"Walk-Forward concluído • {n} rodada(s) avaliadas • {result.get('date_from') or '—'} a {result.get('date_to') or '—'}."
+24368-        else:
+24369-            status=result.get("note") or "Nenhuma rodada pôde ser avaliada."
+24370-        self.meta_wf_progress.configure(value=100 if not result.get("cancelled") else self.meta_wf_progress["value"])
+24371-        self.meta_wf_status.configure(text=status)
+24372-        self.meta_wf_note.configure(text=(
+24373-            f"Treino mínimo {int(result.get('min_training_rounds') or 20)} • até {int(result.get('training_limit') or 160)} rodadas anteriores por previsão. "
+24374:            "O cérebro META_LOGIT_NATIVE_V2_TABLE1 é o mesmo da v0.41; este simulador só mede desempenho e não alimenta nem altera o Meta prospectivo."
+24375-        ))
+24376-        self.meta_wf_run_btn.configure(state="normal"); self.meta_wf_cancel_btn.configure(state="disabled")
+24377-        self.meta_wf_export_btn.configure(state="normal" if n else "disabled")
+24378-
+24379-    def _meta_walk_forward_export(self):
+24380-        result=getattr(self,"meta_walk_forward_last_result",None)
+24381-        if not result or not result.get("details"):
+24382-            messagebox.showinfo("Walk-Forward Meta","Execute uma simulação primeiro.",parent=self); return
+24383-        path=filedialog.asksaveasfilename(
+24384-            parent=self,defaultextension=".csv",filetypes=[("CSV","*.csv")],
+24385-            initialdir=str(EXPORT_DIR),initialfile="gph_meta_walk_forward.csv",
+24386-        )
