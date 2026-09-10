@@ -1,0 +1,826 @@
+1215-            con.execute("""
+1216-                CREATE TABLE IF NOT EXISTS meta (
+1217-                    chave TEXT PRIMARY KEY,
+1218-                    valor TEXT
+1219-                )
+1220-            """)
+1221-
+1222-            con.execute("""
+1223:                CREATE TABLE IF NOT EXISTS jogos_congelados (
+1224-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+1225-                    criado_em TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+1226-                    seletor TEXT NOT NULL DEFAULT 'Não registrado',
+1227-                    estrategia TEXT NOT NULL,
+1228-                    tipo TEXT NOT NULL,
+1229-                    escopo TEXT NOT NULL,
+1230-                    base_data TEXT,
+1231-                    base_sorteio TEXT,
+--
+1252-                    dezena_base TEXT,
+1253-                    regra TEXT,
+1254-                    acertou INTEGER NOT NULL DEFAULT 0,
+1255-                    acerto_data TEXT,
+1256-                    acerto_sorteio TEXT,
+1257-                    acerto_hora TEXT,
+1258-                    acerto_premio INTEGER,
+1259-                    acerto_milhar TEXT,
+1260:                    FOREIGN KEY(jogo_id) REFERENCES jogos_congelados(id)
+1261-                        ON DELETE CASCADE
+1262-                )
+1263-            """)
+1264-            con.execute(
+1265-                "CREATE INDEX IF NOT EXISTS idx_jogos_status "
+1266:                "ON jogos_congelados(status)"
+1267-            )
+1268-            con.execute(
+1269-                "CREATE INDEX IF NOT EXISTS idx_jogos_base_data "
+1270:                "ON jogos_congelados(base_data)"
+1271-            )
+1272-            con.execute(
+1273-                "CREATE INDEX IF NOT EXISTS idx_jogos_itens_jogo "
+1274-                "ON jogos_itens(jogo_id)"
+1275-            )
+1276-
+1277-
+1278-            # Migração v0.16.0: preserva bancos criados nas versões anteriores.
+1279-            game_columns = {
+1280-                r["name"]
+1281-                for r in con.execute(
+1282:                    "PRAGMA table_info(jogos_congelados)"
+1283-                ).fetchall()
+1284-            }
+1285-
+1286-            if "seletor" not in game_columns:
+1287-                con.execute(
+1288:                    "ALTER TABLE jogos_congelados "
+1289-                    "ADD COLUMN seletor TEXT "
+1290-                    "NOT NULL DEFAULT 'Não registrado'"
+1291-                )
+1292-
+1293-            financial_columns = {
+1294-                "jogado": "INTEGER NOT NULL DEFAULT 0",
+1295-                "jogado_em": "TEXT",
+1296-                "valor_unitario": "REAL",
+--
+1300-                "retorno_max": "REAL",
+1301-                "retorno_real": "REAL",
+1302-                "resultado_liquido": "REAL",
+1303-            }
+1304-
+1305-            for col, spec in financial_columns.items():
+1306-                if col not in game_columns:
+1307-                    con.execute(
+1308:                        f"ALTER TABLE jogos_congelados "
+1309-                        f"ADD COLUMN {col} {spec}"
+1310-                    )
+1311-
+1312-            v20_columns = {
+1313-                "submodalidade": "TEXT",
+1314-                "divisor_posicoes": "INTEGER",
+1315-                "valor_posicao": "REAL",
+1316-                "cotacao_primaria": "REAL",
+1317-                "cotacao_secundaria": "REAL",
+1318-                "cotacao_combinada": "REAL",
+1319-                "acertos_financeiros": "INTEGER NOT NULL DEFAULT 0",
+1320-            }
+1321-
+1322-            for col, spec in v20_columns.items():
+1323-                if col not in game_columns:
+1324-                    con.execute(
+1325:                        f"ALTER TABLE jogos_congelados "
+1326-                        f"ADD COLUMN {col} {spec}"
+1327-                    )
+1328-
+1329-            v21_columns = {
+1330-                "origem_jogada": "TEXT",
+1331-                "editado_em": "TEXT",
+1332-            }
+1333-
+1334-            for col, spec in v21_columns.items():
+1335-                if col not in game_columns:
+1336-                    con.execute(
+1337:                        f"ALTER TABLE jogos_congelados "
+1338-                        f"ADD COLUMN {col} {spec}"
+1339-                    )
+1340-
+1341-            v22_columns = {
+1342-                "bilhete_id": "INTEGER",
+1343-            }
+1344-
+1345-            for col, spec in v22_columns.items():
+1346-                if col not in game_columns:
+1347-                    con.execute(
+1348:                        f"ALTER TABLE jogos_congelados "
+1349-                        f"ADD COLUMN {col} {spec}"
+1350-                    )
+1351-
+1352-            con.execute("""
+1353-                CREATE TABLE IF NOT EXISTS bilhetes (
+1354-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+1355-                    criado_em TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+1356-                    alvo_data TEXT NOT NULL,
+--
+1365-            """)
+1366-
+1367-            con.execute(
+1368-                "CREATE INDEX IF NOT EXISTS idx_bilhetes_alvo "
+1369-                "ON bilhetes(alvo_data, alvo_sorteio, alvo_hora)"
+1370-            )
+1371-            con.execute(
+1372-                "CREATE INDEX IF NOT EXISTS idx_jogos_bilhete "
+1373:                "ON jogos_congelados(bilhete_id)"
+1374-            )
+1375-
+1376-            # v0.26.1: identidade estável dos registros para sincronização multi-PC.
+1377:            for table in ("bilhetes", "jogos_congelados"):
+1378-                cols = {
+1379-                    r["name"]
+1380-                    for r in con.execute(f"PRAGMA table_info({table})").fetchall()
+1381-                }
+1382-                if "sync_uid" not in cols:
+1383-                    con.execute(f"ALTER TABLE {table} ADD COLUMN sync_uid TEXT")
+1384-                if "sync_updated_at" not in cols:
+1385-                    con.execute(f"ALTER TABLE {table} ADD COLUMN sync_updated_at TEXT")
+--
+1394-                    f"UPDATE {table} SET sync_updated_at=COALESCE(sync_updated_at, {time_col}, CURRENT_TIMESTAMP) "
+1395-                    "WHERE sync_updated_at IS NULL OR TRIM(sync_updated_at)=''"
+1396-                )
+1397-
+1398-            con.execute(
+1399-                "CREATE UNIQUE INDEX IF NOT EXISTS idx_bilhetes_sync_uid ON bilhetes(sync_uid)"
+1400-            )
+1401-            con.execute(
+1402:                "CREATE UNIQUE INDEX IF NOT EXISTS idx_jogos_sync_uid ON jogos_congelados(sync_uid)"
+1403-            )
+1404-
+1405-            # Os triggers marcam qualquer alteração local. Durante importação remota,
+1406-            # sync_updated_at é enviado explicitamente e, portanto, não é sobrescrito.
+1407-            con.executescript("""
+1408-                CREATE TRIGGER IF NOT EXISTS trg_bilhetes_sync_insert
+1409-                AFTER INSERT ON bilhetes
+1410-                WHEN NEW.sync_uid IS NULL OR NEW.sync_updated_at IS NULL
+--
+1420-                WHEN NEW.sync_updated_at IS OLD.sync_updated_at
+1421-                BEGIN
+1422-                    UPDATE bilhetes
+1423-                    SET sync_updated_at=strftime('%Y-%m-%dT%H:%M:%f','now')
+1424-                    WHERE id=NEW.id;
+1425-                END;
+1426-
+1427-                CREATE TRIGGER IF NOT EXISTS trg_jogos_sync_insert
+1428:                AFTER INSERT ON jogos_congelados
+1429-                WHEN NEW.sync_uid IS NULL OR NEW.sync_updated_at IS NULL
+1430-                BEGIN
+1431:                    UPDATE jogos_congelados
+1432-                    SET sync_uid=COALESCE(NEW.sync_uid, lower(hex(randomblob(16)))),
+1433-                        sync_updated_at=COALESCE(NEW.sync_updated_at, strftime('%Y-%m-%dT%H:%M:%f','now'))
+1434-                    WHERE id=NEW.id;
+1435-                END;
+1436-
+1437-                CREATE TRIGGER IF NOT EXISTS trg_jogos_sync_update
+1438:                AFTER UPDATE ON jogos_congelados
+1439-                WHEN NEW.sync_updated_at IS OLD.sync_updated_at
+1440-                BEGIN
+1441:                    UPDATE jogos_congelados
+1442-                    SET sync_updated_at=strftime('%Y-%m-%dT%H:%M:%f','now')
+1443-                    WHERE id=NEW.id;
+1444-                END;
+1445-            """)
+1446-
+1447-            for modality, quote in DEFAULT_QUOTES.items():
+1448-                con.execute(
+1449-                    "INSERT OR IGNORE INTO meta(chave, valor) VALUES(?, ?)",
+--
+1459-                    (
+1460-                        f"quote_milhar_centena_{component}",
+1461-                        str(float(quote)),
+1462-                    ),
+1463-                )
+1464-
+1465-            con.execute(
+1466-                "CREATE INDEX IF NOT EXISTS idx_jogos_jogado "
+1467:                "ON jogos_congelados(jogado)"
+1468-            )
+1469-
+1470-            # A Seca possui seletor interno conhecido e pode ser recuperada
+1471-            # com segurança nos registros antigos.
+1472-            con.execute("""
+1473:                UPDATE jogos_congelados
+1474-                SET seletor='Seca do Dia 1º'
+1475-                WHERE estrategia='Seca do Dia 1º'
+1476-                  AND (
+1477-                    seletor IS NULL
+1478-                    OR TRIM(seletor)=''
+1479-                    OR seletor='Não registrado'
+1480-                  )
+1481-            """)
+1482-
+1483-            con.execute(
+1484-                "CREATE INDEX IF NOT EXISTS idx_jogos_seletor "
+1485:                "ON jogos_congelados(seletor)"
+1486-            )
+1487-
+1488-
+1489-            # v0.27.0 — Central de Decisão / congelamento prospectivo.
+1490-            # Uma leitura é salva ANTES do resultado e nunca recalculada retroativamente.
+1491-            con.execute("""
+1492-                CREATE TABLE IF NOT EXISTS decision_snapshots (
+1493-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+--
+2129-        if not target_data:
+2130-            snap=self.latest_decision_snapshot()
+2131-            if snap:
+2132-                target_data,target_sorteio,target_hora=(snap.get("target_data"),snap.get("target_sorteio"),snap.get("target_hora"))
+2133-        if not target_data:
+2134-            return {"games":0,"items":0,"group_mentions":0,"score":0.0,"label":"SEM JOGOS","top":[],"effective_groups":0.0}
+2135-        with self.connect() as con:
+2136-            games=con.execute(
+2137:                "SELECT * FROM jogos_congelados WHERE alvo_data=? AND COALESCE(alvo_sorteio,'')=COALESCE(?, '') AND COALESCE(alvo_hora,'')=COALESCE(?, '') ORDER BY id",
+2138-                (target_data,target_sorteio,target_hora),
+2139-            ).fetchall()
+2140-            counter=Counter()
+2141-            items_count=0
+2142-            for grow in games:
+2143-                game=dict(grow)
+2144-                items=con.execute("SELECT * FROM jogos_itens WHERE jogo_id=? ORDER BY ordem",(int(game["id"]),)).fetchall()
+2145-                for irow in items:
+--
+4901-            return con.execute(
+4902-                "SELECT 1 FROM resultados WHERE data=? LIMIT 1", (day.isoformat(),)
+4903-            ).fetchone() is not None
+4904-
+4905-
+4906-    def game_count(self) -> int:
+4907-        with self.connect() as con:
+4908-            return con.execute(
+4909:                "SELECT COUNT(*) FROM jogos_congelados"
+4910-            ).fetchone()[0]
+4911-
+4912-    @staticmethod
+4913-    def inspect_external_database(path):
+4914-        path = Path(path)
+4915-        info = {
+4916-            "path": str(path),
+4917-            "exists": path.is_file(),
+--
+4938-            if table_exists("resultados"):
+4939-                row = con.execute(
+4940-                    "SELECT COUNT(*) AS n, MAX(data) AS latest "
+4941-                    "FROM resultados"
+4942-                ).fetchone()
+4943-                info["resultados"] = int(row["n"] or 0)
+4944-                info["latest_date"] = row["latest"]
+4945-
+4946:            if table_exists("jogos_congelados"):
+4947-                info["jogos"] = int(
+4948-                    con.execute(
+4949:                        "SELECT COUNT(*) FROM jogos_congelados"
+4950-                    ).fetchone()[0]
+4951-                )
+4952-
+4953-            con.close()
+4954-        except Exception as exc:
+4955-            info["error"] = str(exc)
+4956-
+4957-        return info
+--
+5187-
+5188-                    ticket_map[int(ticket["id"])] = new_ticket_id
+5189-                    existing_by_fp[fp] = new_ticket_id
+5190-                    added_tickets += 1
+5191-
+5192-            # ------------------------------------------------
+5193-            # Jogos congelados / reais.
+5194-            # ------------------------------------------------
+5195:            if ext_table("jogos_congelados"):
+5196-                game_columns = {
+5197-                    r["name"]
+5198-                    for r in ext.execute(
+5199:                        "PRAGMA table_info(jogos_congelados)"
+5200-                    ).fetchall()
+5201-                }
+5202-
+5203-                item_columns = set()
+5204-                if ext_table("jogos_itens"):
+5205-                    item_columns = {
+5206-                        r["name"]
+5207-                        for r in ext.execute(
+5208-                            "PRAGMA table_info(jogos_itens)"
+5209-                        ).fetchall()
+5210-                    }
+5211-
+5212-                existing = self._existing_game_fingerprints()
+5213-
+5214-                source_games = ext.execute(
+5215:                    "SELECT * FROM jogos_congelados ORDER BY id"
+5216-                ).fetchall()
+5217-
+5218-                for game_row in source_games:
+5219-                    game = dict(game_row)
+5220-
+5221-                    source_items = []
+5222-                    if item_columns:
+5223-                        source_items = [
+--
+5275-                    new_ticket_id = (
+5276-                        ticket_map.get(int(old_ticket_id))
+5277-                        if old_ticket_id
+5278-                        else None
+5279-                    )
+5280-
+5281-                    with self.connect() as con:
+5282-                        cur = con.execute("""
+5283:                            INSERT INTO jogos_congelados
+5284-                            (
+5285-                                criado_em,
+5286-                                seletor,
+5287-                                estrategia,
+5288-                                tipo,
+5289-                                submodalidade,
+5290-                                escopo,
+5291-                                base_data,
+--
+5474-                "SELECT * FROM bilhetes ORDER BY id"
+5475-            ).fetchall()]
+5476-            ticket_uid_by_id = {}
+5477-            for t in tickets:
+5478-                ticket_uid_by_id[int(t["id"])] = t.get("sync_uid")
+5479-                t.pop("id", None)
+5480-
+5481-            games = [dict(r) for r in con.execute(
+5482:                "SELECT * FROM jogos_congelados ORDER BY id"
+5483-            ).fetchall()]
+5484-            exported_games = []
+5485-            for g in games:
+5486-                local_id = int(g["id"])
+5487-                ticket_id = g.get("bilhete_id")
+5488-                g["bilhete_sync_uid"] = (
+5489-                    ticket_uid_by_id.get(int(ticket_id)) if ticket_id else None
+5490-                )
+--
+5632-            if d.get("sync_uid"):
+5633-                by_uid[str(d["sync_uid"])] = d
+5634-            by_fp.setdefault(self._sync_ticket_fingerprint(d), d)
+5635-        return by_uid, by_fp
+5636-
+5637-    def _sync_game_lookup_maps(self, con):
+5638-        by_uid = {}
+5639-        by_fp = {}
+5640:        games = [dict(r) for r in con.execute("SELECT * FROM jogos_congelados").fetchall()]
+5641-        for d in games:
+5642-            items = [dict(r) for r in con.execute(
+5643-                "SELECT * FROM jogos_itens WHERE jogo_id=? ORDER BY ordem, id",
+5644-                (int(d["id"]),),
+5645-            ).fetchall()]
+5646-            if d.get("sync_uid"):
+5647-                by_uid[str(d["sync_uid"])] = d
+5648-            by_fp.setdefault(self._sync_game_fingerprint(d, items), d)
+--
+5706-        items = list(remote.get("items") or [])
+5707-        local = by_uid.get(uid)
+5708-        adopted = False
+5709-        if local is None:
+5710-            fp = self._sync_game_fingerprint(remote, items)
+5711-            local = by_fp.get(fp)
+5712-            if local is not None and local.get("sync_uid") != uid:
+5713-                con.execute(
+5714:                    "UPDATE jogos_congelados SET sync_uid=? WHERE id=?",
+5715-                    (uid, int(local["id"])),
+5716-                )
+5717-                local = dict(local)
+5718-                local["sync_uid"] = uid
+5719-                adopted = True
+5720-
+5721:        cols_available = set(self._sync_table_columns(con, "jogos_congelados"))
+5722-        payload = {
+5723-            k: v for k, v in remote.items()
+5724-            if k in cols_available and k not in ("id", "bilhete_id")
+5725-        }
+5726-        payload["bilhete_id"] = ticket_id
+5727-        remote_ts = _sync_timestamp(remote.get("sync_updated_at"))
+5728-
+5729-        def replace_items(game_id):
+--
+5740-                    con.execute(
+5741-                        f"INSERT INTO jogos_itens ({','.join(cols)}) VALUES ({','.join('?' for _ in cols)})",
+5742-                        [ip[c] for c in cols],
+5743-                    )
+5744-
+5745-        if local is None:
+5746-            cols = list(payload.keys())
+5747-            cur = con.execute(
+5748:                f"INSERT INTO jogos_congelados ({','.join(cols)}) VALUES ({','.join('?' for _ in cols)})",
+5749-                [payload[c] for c in cols],
+5750-            )
+5751-            local_id = int(cur.lastrowid)
+5752-            replace_items(local_id)
+5753:            newrow = dict(con.execute("SELECT * FROM jogos_congelados WHERE id=?", (local_id,)).fetchone())
+5754-            by_uid[uid] = newrow
+5755-            by_fp[self._sync_game_fingerprint(newrow, items)] = newrow
+5756-            return local_id, True, False
+5757-
+5758-        local_ts = _sync_timestamp(local.get("sync_updated_at"))
+5759-        if remote_ts > local_ts:
+5760-            cols = [c for c in payload if c not in ("sync_uid",)]
+5761-            if cols:
+5762-                con.execute(
+5763:                    "UPDATE jogos_congelados SET " + ",".join(f"{c}=?" for c in cols) + " WHERE id=?",
+5764-                    [payload[c] for c in cols] + [int(local["id"])],
+5765-                )
+5766-            replace_items(int(local["id"]))
+5767-            return int(local["id"]), False, True
+5768-        elif ticket_id is not None and local.get("bilhete_id") != ticket_id:
+5769-            con.execute(
+5770:                "UPDATE jogos_congelados SET bilhete_id=? WHERE id=?",
+5771-                (ticket_id, int(local["id"])),
+5772-            )
+5773-            return int(local["id"]), False, True
+5774-        return int(local["id"]), False, adopted
+5775-
+5776-    def _merge_sync_decision_snapshots(self, rows):
+5777-        added = updated = 0
+5778-        if not rows:
+--
+6778-
+6779-        return pending
+6780-
+6781-    def pending_game_count(self):
+6782-        with self.connect() as con:
+6783-            return int(
+6784-                con.execute("""
+6785-                    SELECT COUNT(*)
+6786:                    FROM jogos_congelados
+6787-                    WHERE status='PENDENTE'
+6788-                """).fetchone()[0]
+6789-            )
+6790-
+6791-    def _operational_schedule_for_date(self, iso_date):
+6792-        weekday = datetime.strptime(iso_date, "%Y-%m-%d").weekday()
+6793-
+6794-        if weekday == 6:  # domingo
+--
+8740-
+8741-        intended_target = generation.get("intended_target") or {}
+8742-        intended_data = intended_target.get("data")
+8743-        intended_sort = intended_target.get("sorteio")
+8744-        intended_hour = intended_target.get("hora")
+8745-
+8746-        with self.connect() as con:
+8747-            cur = con.execute("""
+8748:                INSERT INTO jogos_congelados
+8749-                (
+8750-                    seletor, estrategia, tipo, submodalidade, escopo,
+8751-                    base_data, base_sorteio, base_hora,
+8752-                    alvo_modo, alvo_data, alvo_sorteio, alvo_hora,
+8753-                    total_itens, observacao, origem_jogada
+8754-                )
+8755-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+8756-            """, (
+--
+8790-            ])
+8791-
+8792-        return game_id
+8793-
+8794-    def list_frozen_games(self, limit=200):
+8795-        with self.connect() as con:
+8796-            rows = con.execute("""
+8797-                SELECT *
+8798:                FROM jogos_congelados
+8799-                ORDER BY id DESC
+8800-                LIMIT ?
+8801-            """, (int(limit),)).fetchall()
+8802-        return [dict(r) for r in rows]
+8803-
+8804-    def frozen_game_details(self, game_id):
+8805-        with self.connect() as con:
+8806-            game = con.execute(
+8807:                "SELECT * FROM jogos_congelados WHERE id=?",
+8808-                (int(game_id),),
+8809-            ).fetchone()
+8810-            if game is None:
+8811-                raise ValueError("Jogo congelado não encontrado.")
+8812-
+8813-            items = con.execute("""
+8814-                SELECT *
+8815-                FROM jogos_itens
+--
+9023-                    acerto_sorteio=?,
+9024-                    acerto_hora=?,
+9025-                    acerto_premio=?,
+9026-                    acerto_milhar=?
+9027-                WHERE id=?
+9028-            """, item_updates)
+9029-
+9030-            con.execute("""
+9031:                UPDATE jogos_congelados
+9032-                SET
+9033-                    status='AUDITADO',
+9034-                    acertos=?,
+9035-                    alvo_data=?,
+9036-                    alvo_sorteio=?,
+9037-                    alvo_hora=?,
+9038-                    auditado_em=CURRENT_TIMESTAMP
+9039-                WHERE id=?
+--
+9414-            generation.get("scope", "1º–5º"),
+9415-            generation["rows"],
+9416-            value_per_item,
+9417-            submodalidade=submodalidade,
+9418-        )
+9419-
+9420-        with self.connect() as con:
+9421-            con.execute("""
+9422:                UPDATE jogos_congelados
+9423-                SET
+9424-                    jogado=1,
+9425-                    jogado_em=CURRENT_TIMESTAMP,
+9426-                    submodalidade=?,
+9427-                    valor_unitario=?,
+9428-                    valor_total=?,
+9429-                    divisor_posicoes=?,
+9430-                    valor_posicao=?,
+--
+9488-            value_per_item,
+9489-            submodalidade=submodalidade,
+9490-        )
+9491-
+9492-        target = self.game_planned_target(game)
+9493-
+9494-        with self.connect() as con:
+9495-            con.execute("""
+9496:                UPDATE jogos_congelados
+9497-                SET
+9498-                    jogado=1,
+9499-                    jogado_em=CURRENT_TIMESTAMP,
+9500-                    submodalidade=?,
+9501-                    valor_unitario=?,
+9502-                    valor_total=?,
+9503-                    divisor_posicoes=?,
+9504-                    valor_posicao=?,
+--
+9546-            game["escopo"],
+9547-            detail["items"],
+9548-            stake,
+9549-            submodalidade=game.get("submodalidade"),
+9550-        )
+9551-
+9552-        with self.connect() as con:
+9553-            con.execute("""
+9554:                UPDATE jogos_congelados
+9555-                SET
+9556-                    divisor_posicoes=?,
+9557-                    valor_posicao=?,
+9558-                    multiplicador=?,
+9559-                    cotacao_primaria=?,
+9560-                    cotacao_secundaria=?,
+9561-                    cotacao_combinada=?,
+9562-                    retorno_min=?,
+--
+9810-                gross += self._event_payout(game, event)
+9811-                event_count += 1
+9812-
+9813-        total = float(game.get("valor_total") or 0)
+9814-        net = gross - total
+9815-
+9816-        with self.connect() as con:
+9817-            con.execute("""
+9818:                UPDATE jogos_congelados
+9819-                SET
+9820-                    retorno_real=?,
+9821-                    resultado_liquido=?,
+9822-                    acertos_financeiros=?
+9823-                WHERE id=?
+9824-            """, (
+9825-                gross,
+9826-                net,
+--
+10610-                game_id = self.register_play(
+10611-                    generation,
+10612-                    float(entry["stake_per_item"]),
+10613-                    base_draw=base_draw,
+10614-                )
+10615-
+10616-                with self.connect() as con:
+10617-                    con.execute("""
+10618:                        UPDATE jogos_congelados
+10619-                        SET
+10620-                            origem_jogada=?,
+10621-                            bilhete_id=?
+10622-                        WHERE id=?
+10623-                    """, (
+10624-                        entry.get("origem_jogada", "Gerada"),
+10625-                        ticket_id,
+10626-                        int(game_id),
+--
+10629-                created.append(game_id)
+10630-
+10631-            self.refresh_ticket_totals(ticket_id)
+10632-
+10633-        except Exception:
+10634-            with self.connect() as con:
+10635-                if created:
+10636-                    con.executemany(
+10637:                        "DELETE FROM jogos_congelados WHERE id=?",
+10638-                        [(int(gid),) for gid in created],
+10639-                    )
+10640-                con.execute(
+10641-                    "DELETE FROM bilhetes WHERE id=?",
+10642-                    (ticket_id,),
+10643-                )
+10644-            raise
+10645-
+--
+10663-                return {
+10664-                    "deleted": False,
+10665-                    "reason": "ticket_not_found",
+10666-                    "ticket_id": ticket_id,
+10667-                    "game_id": game_id,
+10668-                }
+10669-
+10670-            game = con.execute(
+10671:                "SELECT * FROM jogos_congelados WHERE id=? AND bilhete_id=?",
+10672-                (game_id, ticket_id),
+10673-            ).fetchone()
+10674-            if game is None:
+10675-                return {
+10676-                    "deleted": False,
+10677-                    "reason": "game_not_found",
+10678-                    "ticket_id": ticket_id,
+10679-                    "game_id": game_id,
+--
+10683-                "SELECT COUNT(*) FROM jogos_itens WHERE jogo_id=?",
+10684-                (game_id,),
+10685-            ).fetchone()[0])
+10686-            con.execute(
+10687-                "DELETE FROM jogos_itens WHERE jogo_id=?",
+10688-                (game_id,),
+10689-            )
+10690-            con.execute(
+10691:                "DELETE FROM jogos_congelados WHERE id=? AND bilhete_id=?",
+10692-                (game_id, ticket_id),
+10693-            )
+10694-
+10695-        # refresh_ticket_totals usa uma nova conexão; por isso roda fora da
+10696-        # transação acima. Se era a última modalidade, ele remove o bilhete.
+10697-        ticket_after = self.refresh_ticket_totals(ticket_id)
+10698-        remaining_games = (
+10699-            len(self.games_for_ticket(ticket_id))
+--
+10725-                    "deleted": False,
+10726-                    "ticket_id": ticket_id,
+10727-                    "games_deleted": 0,
+10728-                }
+10729-
+10730-            game_ids = [
+10731-                int(r["id"])
+10732-                for r in con.execute(
+10733:                    "SELECT id FROM jogos_congelados WHERE bilhete_id=? ORDER BY id",
+10734-                    (ticket_id,),
+10735-                ).fetchall()
+10736-            ]
+10737-
+10738-            if game_ids:
+10739-                con.executemany(
+10740-                    "DELETE FROM jogos_itens WHERE jogo_id=?",
+10741-                    [(gid,) for gid in game_ids],
+10742-                )
+10743-                con.execute(
+10744:                    "DELETE FROM jogos_congelados WHERE bilhete_id=?",
+10745-                    (ticket_id,),
+10746-                )
+10747-
+10748-            con.execute(
+10749-                "DELETE FROM bilhetes WHERE id=?",
+10750-                (ticket_id,),
+10751-            )
+10752-
+--
+10859-        return rows[:int(limit)]
+10860-
+10861-    def refresh_ticket_totals(self, ticket_id):
+10862-        with self.connect() as con:
+10863-            games = [
+10864-                dict(r)
+10865-                for r in con.execute("""
+10866-                    SELECT *
+10867:                    FROM jogos_congelados
+10868-                    WHERE bilhete_id=?
+10869-                    ORDER BY id
+10870-                """, (int(ticket_id),)).fetchall()
+10871-            ]
+10872-
+10873-            if not games:
+10874-                con.execute(
+10875-                    "DELETE FROM bilhetes WHERE id=?",
+--
+10930-                (int(ticket_id),),
+10931-            ).fetchone()
+10932-
+10933-            if ticket is None:
+10934-                raise ValueError("Bilhete não encontrado.")
+10935-
+10936-            games = con.execute("""
+10937-                SELECT *
+10938:                FROM jogos_congelados
+10939-                WHERE bilhete_id=?
+10940-                ORDER BY id
+10941-            """, (int(ticket_id),)).fetchall()
+10942-
+10943-        return {
+10944-            "ticket": dict(ticket),
+10945-            "games": [dict(g) for g in games],
+10946-        }
+--
+11728-                    or "Não registrado"
+11729-                )
+11730-                strategy = (
+11731-                    game.get("estrategia")
+11732-                    or "Manual"
+11733-                )
+11734-
+11735-            con.execute("""
+11736:                UPDATE jogos_congelados
+11737-                SET
+11738-                    seletor=?,
+11739-                    estrategia=?,
+11740-                    tipo=?,
+11741-                    submodalidade=?,
+11742-                    escopo=?,
+11743-                    alvo_modo='ALVO_ESPECIFICO',
+11744-                    alvo_data=?,
+--
+11819-
+11820-        return self.frozen_game_details(game_id)
+11821-
+11822-    def frozen_performance_filter_options(self):
+11823-        with self.connect() as con:
+11824-            selectors = [
+11825-                r[0] for r in con.execute("""
+11826-                    SELECT DISTINCT seletor
+11827:                    FROM jogos_congelados
+11828-                    WHERE seletor IS NOT NULL AND TRIM(seletor) <> ''
+11829-                    ORDER BY seletor
+11830-                """).fetchall()
+11831-            ]
+11832-            strategies = [
+11833-                r[0] for r in con.execute("""
+11834-                    SELECT DISTINCT estrategia
+11835:                    FROM jogos_congelados
+11836-                    ORDER BY estrategia
+11837-                """).fetchall()
+11838-            ]
+11839-            kinds = [
+11840-                r[0] for r in con.execute("""
+11841-                    SELECT DISTINCT tipo
+11842:                    FROM jogos_congelados
+11843-                    ORDER BY tipo
+11844-                """).fetchall()
+11845-            ]
+11846-            scopes = [
+11847-                r[0] for r in con.execute("""
+11848-                    SELECT DISTINCT escopo
+11849:                    FROM jogos_congelados
+11850-                    ORDER BY escopo
+11851-                """).fetchall()
+11852-            ]
+11853-
+11854-        return {
+11855-            "selectors": selectors,
+11856-            "strategies": strategies,
+11857-            "kinds": kinds,
+--
+11915-                        END
+11916-                    ) AS jogos_vencedores,
+11917-                    SUM(
+11918-                        CASE WHEN status='AUDITADO' THEN total_itens ELSE 0 END
+11919-                    ) AS itens_auditados,
+11920-                    SUM(
+11921-                        CASE WHEN status='AUDITADO' THEN acertos ELSE 0 END
+11922-                    ) AS acertos
+11923:                FROM jogos_congelados
+11924-                {where_sql}
+11925-                GROUP BY seletor, estrategia, tipo, escopo
+11926-            """, args).fetchall()
+11927-
+11928-        result_rows = []
+11929-
+11930-        for r in rows:
+11931-            audited = int(r["jogos_auditados"] or 0)
+--
+12003-
+12004-
+12005-    def audit_frozen_games(self):
+12006-        with self.connect() as con:
+12007-            ids = [
+12008-                r["id"]
+12009-                for r in con.execute("""
+12010-                    SELECT id
+12011:                    FROM jogos_congelados
+12012-                    WHERE status='PENDENTE'
+12013-                    ORDER BY id
+12014-                """).fetchall()
+12015-            ]
+12016-
+12017-        audited = []
+12018-        pending = []
+12019-

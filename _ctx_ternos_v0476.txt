@@ -1,0 +1,289 @@
+803-    "CORUJINHA": "CORUJA",
+804-}
+805-
+806-
+807-# Cotações por R$ 1,00 informadas pelo usuário.
+808-# A cotação não muda entre 1º e 1º–5º; no 1º–5º o valor do palpite
+809-# é dividido pelas cinco posições, exceto modalidades de colocação fixa.
+810-DEFAULT_QUOTES = {
+811-    "Grupo": 18.0,
+812-    "Dupla de Grupo": 16.0,
+813:    "Terno de Grupo": 150.0,
+814-    "Quadra de Grupo": 1000.0,
+815-    "Quina de Grupo": 5000.0,
+816-    "Duque de Dezena": 300.0,
+817-    "Terno de Dezena": 5000.0,
+818-    "Passe vai": 90.0,
+819-    "Milhar": 6000.0,
+820-    "Centena": 600.0,
+821-    "Dezena": 60.0,
+822-    "Milhar Invertida": 6000.0,
+823-    "Centena Invertida": 600.0,
+--
+826-}
+827-
+828-DEFAULT_MILHAR_CENTENA_QUOTES = {
+829-    "centena": 300.0,
+830-    "milhar": 3000.0,
+831-    "ambos": 3300.0,
+832-}
+833-
+834-FIXED_PLACEMENT_MODALITIES = {
+835-    "Dupla de Grupo",
+836:    "Terno de Grupo",
+837-    "Quadra de Grupo",
+838-    "Quina de Grupo",
+839-    "Duque de Dezena",
+840-    "Terno de Dezena",
+841-    "Passe vai",
+842-    "Passe vai e vem",
+843-}
+844-
+845-GROUP_COMBO_SIZES = {
+846-    "Dupla de Grupo": 2,
+847:    "Terno de Grupo": 3,
+848-    "Quadra de Grupo": 4,
+849-    "Quina de Grupo": 5,
+850-}
+851-
+852-DEZENA_COMBO_SIZES = {
+853-    "Duque de Dezena": 2,
+854-    "Terno de Dezena": 3,
+855-}
+856-
+857-PASSE_MODALITIES = {
+--
+10043-        top_animals = max(2, min(15, int(top_animals)))
+10044-        selected = [dict(r) for r in list(ranking or [])[:top_animals]]
+10045-        if len(selected) < top_animals:
+10046-            raise ValueError(
+10047-                f"O Histórico v0.1 produziu somente {len(selected)} bichos com sinal; "
+10048-                f"foram solicitados {top_animals}."
+10049-            )
+10050-
+10051-        definitions = (
+10052-            ("Dupla de Grupo", 2, "Dupla"),
+10053:            ("Terno de Grupo", 3, "Terno"),
+10054-            ("Quadra de Grupo", 4, "Quadra"),
+10055-            ("Quina de Grupo", 5, "Quina"),
+10056-        )
+10057-        bundle = []
+10058-        preview_rows = []
+10059-
+10060-        for kind, size, short_name in definitions:
+10061-            qty = max(0, int((requests or {}).get(kind, 0)))
+10062-            if qty == 0:
+10063-                continue
+--
+12927-            value=target.get("hora") or "14:00"
+12928-        )
+12929-
+12930-        fields = [
+12931-            (
+12932-                "Tipo",
+12933-                self.kind,
+12934-                [
+12935-                    "Grupo",
+12936-                    "Dupla de Grupo",
+12937:                    "Terno de Grupo",
+12938-                    "Quadra de Grupo",
+12939-                    "Quina de Grupo",
+12940-                    "Passe vai",
+12941-                    "Passe vai e vem",
+12942-                    "Dezena",
+12943-                    "Duque de Dezena",
+12944-                    "Terno de Dezena",
+12945-                    "Dezena Invertida",
+12946-                    "Centena",
+12947-                    "Centena Invertida",
+--
+13131-            outer,
+13132-            text="Cotações da banca",
+13133-            font=("Segoe UI Semibold", 16),
+13134-        ).pack(anchor="w")
+13135-
+13136-        ttk.Label(
+13137-            outer,
+13138-            text=(
+13139-                "Valores por R$ 1,00. Em 1º–5º a cotação é a mesma, "
+13140-                "mas o valor do palpite é dividido por 5 posições. "
+13141:                "Terno de Grupo é colocação fixa e não divide por 5."
+13142-            ),
+13143-            wraplength=810,
+13144-        ).pack(anchor="w", pady=(4,10))
+13145-
+13146-        current = db.quote_catalog()
+13147-        self.vars = {}
+13148-
+13149-        simple = ttk.Frame(
+13150-            outer,
+13151-            style="Card.TFrame",
+--
+18078-        }.get(self.manual_family.get(), ["Normal"])
+18079-        self.manual_variant_cb.configure(values=variants)
+18080-        if self.manual_variant.get() not in variants:
+18081-            self.manual_variant.set(variants[0])
+18082-        self.manual_builder_variant_changed(clear_rows=clear_rows)
+18083-
+18084-    def manual_builder_variant_changed(self, _event=None, clear_rows=True):
+18085-        mapping = {
+18086-            ("Grupo", "Simples"): "Grupo",
+18087-            ("Grupo", "Dupla"): "Dupla de Grupo",
+18088:            ("Grupo", "Terno"): "Terno de Grupo",
+18089-            ("Grupo", "Quadra"): "Quadra de Grupo",
+18090-            ("Grupo", "Quina"): "Quina de Grupo",
+18091-            ("Grupo", "Passe vai"): "Passe vai",
+18092-            ("Grupo", "Passe vai e vem"): "Passe vai e vem",
+18093-            ("Dezena", "Normal"): "Dezena",
+18094-            ("Dezena", "Duque"): "Duque de Dezena",
+18095-            ("Dezena", "Terno"): "Terno de Dezena",
+18096-            ("Dezena", "Invertida"): "Dezena Invertida",
+18097-            ("Centena", "Normal"): "Centena",
+18098-            ("Centena", "Invertida"): "Centena Invertida",
+--
+18119-
+18120-        if kind in FIXED_PLACEMENT_MODALITIES:
+18121-            self.manual_scope.set("1º–5º")
+18122-            self.manual_scope_cb.configure(state="disabled")
+18123-        else:
+18124-            self.manual_scope_cb.configure(state="readonly")
+18125-
+18126-        hints = {
+18127-            "Grupo": "Digite um grupo por vez. Ex.: 01",
+18128-            "Dupla de Grupo": "Digite os dois grupos. Ex.: 01-10",
+18129:            "Terno de Grupo": "Ex.: 01-10-23",
+18130-            "Quadra de Grupo": "Ex.: 01-05-10-23",
+18131-            "Quina de Grupo": "Ex.: 01-05-10-19-23",
+18132-            "Passe vai": "Ordem importa. Ex.: 05-22",
+18133-            "Passe vai e vem": "Ex.: 05-22",
+18134-            "Dezena": "Digite uma dezena por vez. Ex.: 38",
+18135-            "Duque de Dezena": "Ex.: 23-71",
+18136-            "Terno de Dezena": "Ex.: 23-71-05",
+18137-            "Dezena Invertida": "Ex.: 38",
+18138-            "Centena": "Digite uma centena por vez. Ex.: 904",
+18139-            "Centena Invertida": "Ex.: 538",
+--
+18306-        messagebox.showinfo(
+18307-            "Bilhete salvo",
+18308-            f"Bilhete #{ticket_id} registrado.\nTotal apostado: {self._money(total)}.",
+18309-            parent=self,
+18310-        )
+18311-        self.play_show_games(select_ticket_id=ticket_id)
+18312-
+18313-    def play_hc_requested_counts(self):
+18314-        values = (
+18315-            ("Dupla de Grupo", self.play_hc_duplas),
+18316:            ("Terno de Grupo", self.play_hc_ternos),
+18317-            ("Quadra de Grupo", self.play_hc_quadras),
+18318-            ("Quina de Grupo", self.play_hc_quinas),
+18319-        )
+18320-        out = {}
+18321-        for kind, variable in values:
+18322-            try:
+18323-                out[kind] = max(0, int(str(variable.get()).strip() or "0"))
+18324-            except Exception:
+18325-                out[kind] = 0
+18326-        return out
+18327-
+18328-    def play_hc_minimum_needed(self):
+18329-        requests = self.play_hc_requested_counts()
+18330-        sizes = {
+18331:            "Dupla de Grupo": 2, "Terno de Grupo": 3,
+18332-            "Quadra de Grupo": 4, "Quina de Grupo": 5,
+18333-        }
+18334-        needed = 2
+18335-        for kind, qty in requests.items():
+18336-            if qty <= 0:
+18337-                continue
+18338-            value = self.db.minimum_animals_for_combinations(sizes[kind], qty, max_animals=15)
+18339-            if value is None:
+18340-                return None
+18341-            needed = max(needed, value)
+--
+18403-        note = getattr(self, "play_hc_state_note", None)
+18404-        before = getattr(self, "play_generation_card", None)
+18405-        if card is None or rows_host is None or note is None or before is None:
+18406-            return
+18407-        for child in rows_host.winfo_children():
+18408-            child.destroy()
+18409-        ranking = list(generation.get("ranking") or [])
+18410-        requests = generation.get("requests") or {}
+18411-        requested_text = " • ".join(
+18412-            f"{int(qty)} {label}"
+18413:            for kind, label in (("Dupla de Grupo","Duplas"),("Terno de Grupo","Ternos"),("Quadra de Grupo","Quadras"),("Quina de Grupo","Quinas"))
+18414-            if (qty := int(requests.get(kind, 0))) > 0
+18415-        )
+18416-        if generation.get("meta_bundle"):
+18417-            note.configure(text=(
+18418-                f"{len(ranking)} bichos-base • {requested_text} • ranking GP-H Meta congelado antes do resultado"
+18419-            ))
+18420-        else:
+18421-            note.configure(text=(
+18422-                f"{len(ranking)} bichos-base • {requested_text} • repetição na extração-base conta novamente, como no Histórico v0.1"
+18423-            ))
+--
+18452-        if self.play_variant.get() not in variants:
+18453-            self.play_variant.set(variants[0])
+18454-        self.play_variant_changed()
+18455-
+18456-    def play_variant_changed(self, _event=None):
+18457-        family = self.play_family.get()
+18458-        variant = self.play_variant.get()
+18459-        mapping = {
+18460-            ("Grupo", "Simples"): "Grupo",
+18461-            ("Grupo", "Dupla"): "Dupla de Grupo",
+18462:            ("Grupo", "Terno"): "Terno de Grupo",
+18463-            ("Grupo", "Quadra"): "Quadra de Grupo",
+18464-            ("Grupo", "Quina"): "Quina de Grupo",
+18465-            ("Grupo", "Fechamento"): "Fechamento de Grupo",
+18466-            ("Grupo", "Passe vai"): "Passe vai",
+18467-            ("Grupo", "Passe vai e vem"): "Passe vai e vem",
+18468-            ("Dezena", "Normal"): "Dezena",
+18469-            ("Dezena", "Duque"): "Duque de Dezena",
+18470-            ("Dezena", "Terno"): "Terno de Dezena",
+18471-            ("Dezena", "Invertida"): "Dezena Invertida",
+18472-            ("Centena", "Normal"): "Centena",
+--
+18581-            messagebox.showerror(
+18582-                "Entrada manual",
+18583-                "Selecione a rodada-alvo.",
+18584-                parent=self,
+18585-            )
+18586-            return
+18587-
+18588-        hints = {
+18589-            "Grupo":"Ex.: 01, 10, 23",
+18590-            "Dupla de Grupo":"Ex.: 01-10, 05-23",
+18591:            "Terno de Grupo":"Ex.: 01-02-03, 05-10-22",
+18592-            "Quadra de Grupo":"Ex.: 01-02-03-04",
+18593-            "Quina de Grupo":"Ex.: 01-02-03-04-05",
+18594-            "Passe vai":"Ex.: 05-22 (primeiro grupo → segundo)",
+18595-            "Passe vai e vem":"Ex.: 05-22",
+18596-            "Dezena":"Ex.: 05, 38, 90",
+18597-            "Duque de Dezena":"Ex.: 23-71, 05-38",
+18598-            "Terno de Dezena":"Ex.: 23-71-05",
+18599-            "Dezena Invertida":"Ex.: 38, 25",
+18600-            "Centena":"Ex.: 238, 904, 167",
+18601-            "Centena Invertida":"Ex.: 538, 774",
+--
+19229-            else:
+19230-                law_status = "Escolha quantos bichos do topo do método entrarão no jogo. Sobras favorecem os primeiros do ranking."
+19231-            self.play_meta_status.configure(text=law_status)
+19232-        else:
+19233-            self.play_meta_card.pack_forget()
+19234-
+19235-        if kind == "Grupo" and self.play_total.get() == "20":
+19236-            self.play_total.set("5")
+19237-        if kind in GROUP_COMBO_SIZES:
+19238-            default_qty = {
+19239:                "Dupla de Grupo":"5", "Terno de Grupo":"3", "Quadra de Grupo":"2", "Quina de Grupo":"1"
+19240-            }[kind]
+19241-            if self.play_total.get() == "20":
+19242-                self.play_total.set(default_qty)
+19243-
+19244-        target = self.play_get_selected_target()
+19245-        is_next = self.db.is_next_operational_target(target)
+19246-
+19247-        # Etiqueta visual de origem do método.
+19248-        if method.startswith("★ META"):
+19249-            badge = ("META • ADAPTATIVO", "#0B6273", "#E7FDFF")

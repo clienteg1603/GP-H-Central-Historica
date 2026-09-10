@@ -1,0 +1,760 @@
+873-        "base": "Usa as cinco posições da extração-base. Se um bicho aparece duas vezes, ele contribui duas vezes, como no Histórico v0.1 original.",
+874-        "history": "Para cada posição da base consulta a puxada Geral daquele bicho, somente com transições anteriores à base, e usa os 3 alvos históricos mais fortes.",
+875-        "does": "Soma indicações e percentuais para rankear os bichos. Depois monta combinações concentradas: primeiro esgota o menor núcleo de líderes capaz de produzir jogos distintos e só então abre para o próximo bicho.",
+876-        "output": "Um ranking A > B > C... e quantidades escolhidas de Duplas, Ternos, Quadras e Quinas, sem repetir combinações.",
+877-        "note": "Com 5 bichos e 5 Ternos, a ordem preservada é ABC, ABD, ACD, BCD, ABE. O método continua prospectivo: a base usada é anterior à rodada-alvo.",
+878-    },
+879-    {
+880-        "name": "GP-H Reset Cobertura v1",
+881:        "status": "OFICIAL — seletor principal dos 5 bichos",
+882-        "base": "Usa a extração operacional mais recente como base e prevê a próxima rodada operacional.",
+883-        "history": "Últimas 240 transições anteriores à base (mínimo 35). Passagens iguais de horário recebem peso 3; no salto sábado Coruja → domingo Federal esse peso de contexto é desligado.",
+884-        "does": "Para cada bicho presente na base, mede historicamente quais bichos apareceram na extração seguinte. Respeita repetição/multiplicidade do bicho-base, combina as probabilidades das fontes e ordena os 25 grupos por cobertura esperada.",
+885-        "output": "Entrega o ranking e, no uso oficial, os 5 bichos mais fortes. Não olha resultados posteriores à extração-base.",
+886-        "note": "Configuração congelada: last240 | pull | pair3 | probability.",
+887-    },
+888-    {
+889-        "name": "Puxada Combinada",
+--
+912-        "output": "4 Centenas por bicho × 5 bichos = 20 Centenas.",
+913-        "note": "Estado oficial: principal saiu → congela; congelada + mesmo bicho saiu novamente → descongela. A colocação do bilhete continua livre e não altera a fórmula interna.",
+914-    },
+915-    {
+916-        "name": "Oficial • Reset combinações",
+917-        "status": "OFICIAL — modalidades combinadas",
+918-        "base": "O Reset fornece o núcleo de grupos da próxima rodada.",
+919-        "history": "A força preditiva vem do Reset. Para Duque/Terno de Dezena, as dezenas dentro dos grupos ainda são ordenadas por frequência histórica.",
+920:        "does": "Monta Dupla/Terno/Quadra/Quina de Grupo, Passe e combinações de Dezenas a partir dos bichos selecionados, sem introduzir um segundo seletor de animais.",
+921-        "output": "Combinações prontas respeitando o tamanho exigido por cada modalidade.",
+922-        "note": "Modalidades que possuem colocação fixa por regra própria continuam fixas; isso não é trava de método.",
+923-    },
+924-    {
+925-        "name": "Experimental • Similaridade do Dia",
+926-        "status": "EXPERIMENTAL / SOMBRA",
+927-        "base": "Usa todas as extrações já ocorridas no dia corrente até a extração-base.",
+928-        "history": "Compara esse prefixo com dias históricos anteriores que tenham os mesmos horários; nunca usa dias posteriores à base.",
+--
+1218-                    valor TEXT
+1219-                )
+1220-            """)
+1221-
+1222-            con.execute("""
+1223-                CREATE TABLE IF NOT EXISTS jogos_congelados (
+1224-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+1225-                    criado_em TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+1226:                    seletor TEXT NOT NULL DEFAULT 'Não registrado',
+1227-                    estrategia TEXT NOT NULL,
+1228-                    tipo TEXT NOT NULL,
+1229-                    escopo TEXT NOT NULL,
+1230-                    base_data TEXT,
+1231-                    base_sorteio TEXT,
+1232-                    base_hora TEXT,
+1233-                    alvo_modo TEXT NOT NULL,
+1234-                    alvo_data TEXT,
+--
+1278-            # Migração v0.16.0: preserva bancos criados nas versões anteriores.
+1279-            game_columns = {
+1280-                r["name"]
+1281-                for r in con.execute(
+1282-                    "PRAGMA table_info(jogos_congelados)"
+1283-                ).fetchall()
+1284-            }
+1285-
+1286:            if "seletor" not in game_columns:
+1287-                con.execute(
+1288-                    "ALTER TABLE jogos_congelados "
+1289:                    "ADD COLUMN seletor TEXT "
+1290-                    "NOT NULL DEFAULT 'Não registrado'"
+1291-                )
+1292-
+1293-            financial_columns = {
+1294-                "jogado": "INTEGER NOT NULL DEFAULT 0",
+1295-                "jogado_em": "TEXT",
+1296-                "valor_unitario": "REAL",
+1297-                "valor_total": "REAL",
+--
+1462-                    ),
+1463-                )
+1464-
+1465-            con.execute(
+1466-                "CREATE INDEX IF NOT EXISTS idx_jogos_jogado "
+1467-                "ON jogos_congelados(jogado)"
+1468-            )
+1469-
+1470:            # A Seca possui seletor interno conhecido e pode ser recuperada
+1471-            # com segurança nos registros antigos.
+1472-            con.execute("""
+1473-                UPDATE jogos_congelados
+1474:                SET seletor='Seca do Dia 1º'
+1475-                WHERE estrategia='Seca do Dia 1º'
+1476-                  AND (
+1477:                    seletor IS NULL
+1478:                    OR TRIM(seletor)=''
+1479:                    OR seletor='Não registrado'
+1480-                  )
+1481-            """)
+1482-
+1483-            con.execute(
+1484:                "CREATE INDEX IF NOT EXISTS idx_jogos_seletor "
+1485:                "ON jogos_congelados(seletor)"
+1486-            )
+1487-
+1488-
+1489-            # v0.27.0 — Central de Decisão / congelamento prospectivo.
+1490-            # Uma leitura é salva ANTES do resultado e nunca recalculada retroativamente.
+1491-            con.execute("""
+1492-                CREATE TABLE IF NOT EXISTS decision_snapshots (
+1493-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+--
+4967-                    int(i.get("grupo") or 0),
+4968-                    str(i.get("regra") or ""),
+4969-                )
+4970-                for i in detail["items"]
+4971-            )
+4972-
+4973-            fingerprints.add((
+4974-                str(game.get("criado_em") or ""),
+4975:                str(game.get("seletor") or "Não registrado"),
+4976-                str(game.get("estrategia") or ""),
+4977-                str(game.get("tipo") or ""),
+4978-                str(game.get("submodalidade") or ""),
+4979-                str(game.get("escopo") or ""),
+4980-                str(game.get("base_data") or ""),
+4981-                str(game.get("base_sorteio") or ""),
+4982-                str(game.get("base_hora") or ""),
+4983-                str(game.get("alvo_modo") or ""),
+--
+5225-                            for r in ext.execute(
+5226-                                "SELECT * FROM jogos_itens "
+5227-                                "WHERE jogo_id=? ORDER BY ordem",
+5228-                                (game["id"],),
+5229-                            ).fetchall()
+5230-                        ]
+5231-
+5232-                    selector = (
+5233:                        game.get("seletor")
+5234:                        if "seletor" in game_columns
+5235-                        else None
+5236-                    )
+5237-
+5238-                    if not selector:
+5239-                        selector = (
+5240-                            "Seca do Dia 1º"
+5241-                            if game.get("estrategia") == "Seca do Dia 1º"
+5242-                            else "Não registrado"
+--
+5278-                        else None
+5279-                    )
+5280-
+5281-                    with self.connect() as con:
+5282-                        cur = con.execute("""
+5283-                            INSERT INTO jogos_congelados
+5284-                            (
+5285-                                criado_em,
+5286:                                seletor,
+5287-                                estrategia,
+5288-                                tipo,
+5289-                                submodalidade,
+5290-                                escopo,
+5291-                                base_data,
+5292-                                base_sorteio,
+5293-                                base_hora,
+5294-                                alvo_modo,
+--
+5444-    @staticmethod
+5445-    def _sync_game_fingerprint(row, items=None):
+5446-        item_numbers = tuple(
+5447-            str(i.get("numero") or "")
+5448-            for i in (items or row.get("items") or [])
+5449-        )
+5450-        return (
+5451-            str(row.get("criado_em") or ""),
+5452:            str(row.get("seletor") or ""),
+5453-            str(row.get("estrategia") or ""),
+5454-            str(row.get("tipo") or ""),
+5455-            str(row.get("submodalidade") or ""),
+5456-            str(row.get("escopo") or ""),
+5457-            str(row.get("alvo_data") or ""),
+5458-            str(row.get("alvo_sorteio") or ""),
+5459-            str(row.get("alvo_hora") or ""),
+5460-            item_numbers,
+--
+7981-        kind="Centena",
+7982-        total=20,
+7983-        previous_draw=None,
+7984-        scope="1º–5º",
+7985-        date_to=None,
+7986-    ):
+7987-        """Lei de Geração GP-H para Centena e Milhar.
+7988-
+7989:        O método seletor entrega apenas o ranking dos bichos. Esta camada única
+7990-        transforma o ranking em números, independentemente de ele vir de Meta,
+7991:        Reset, Puxada, Similaridade, Seca ou de seletores futuros.
+7992-
+7993-        Regras estruturais:
+7994-        - quantidade total distribuída por round-robin; sobras favorecem líderes;
+7995-        - aproximadamente 2/3 na dezena principal ativa e 1/3 na segunda ativa;
+7996-        - 4 números por bicho => 3+1; 5=>3+2; 6=>4+2; 7=>5+2;
+7997-          8=>5+3; 9=>6+3; 10=>7+3;
+7998-        - a máquina persistente de congelamento do 3+1 é reutilizada sem mudança:
+7999-          principal livre -> principal+segunda; congelada -> segunda+terceira;
+--
+8426-        self,
+8427-        base_date,
+8428-        top_n=2,
+8429-        targets_per_source=3,
+8430-        min_support=3,
+8431-        count_repeats=True,
+8432-    ):
+8433-        """
+8434:        Seca do Dia — seletor diário baseado exclusivamente em 1º prêmio.
+8435-
+8436-        Unidade histórica:
+8437-        - fonte: bichos que apareceram no 1º prêmio de um dia;
+8438-        - alvo: bichos que apareceram no 1º prêmio do próximo dia disponível.
+8439-
+8440-        Ranking final:
+8441-        1) nº de indicações;
+8442-        2) nº de fontes distintas;
+--
+8672-        kind="Centena",
+8673-        total=2,
+8674-        top_animals=2,
+8675-        targets_per_source=3,
+8676-        min_support=3,
+8677-        count_repeats=True,
+8678-        previous_draw=None,
+8679-    ):
+8680:        """Seca do Dia: seletor próprio, geração numérica pela Lei GP-H."""
+8681-        if kind not in ("Centena", "Milhar"):
+8682-            raise ValueError("A Seca do Dia gera apenas Centena ou Milhar.")
+8683-
+8684-        total = max(1, int(total))
+8685-        top_animals = max(1, min(10, int(top_animals), total))
+8686-        method = self.method_dry_day_first_prize(
+8687-            base_date=base_date,
+8688-            top_n=top_animals,
+--
+8742-        intended_data = intended_target.get("data")
+8743-        intended_sort = intended_target.get("sorteio")
+8744-        intended_hour = intended_target.get("hora")
+8745-
+8746-        with self.connect() as con:
+8747-            cur = con.execute("""
+8748-                INSERT INTO jogos_congelados
+8749-                (
+8750:                    seletor, estrategia, tipo, submodalidade, escopo,
+8751-                    base_data, base_sorteio, base_hora,
+8752-                    alvo_modo, alvo_data, alvo_sorteio, alvo_hora,
+8753-                    total_itens, observacao, origem_jogada
+8754-                )
+8755-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+8756-            """, (
+8757-                selector,
+8758-                strategy,
+--
+11271-            if date_to and d > date_to:
+11272-                continue
+11273-
+11274-            label = game["tipo"]
+11275-            if game.get("submodalidade"):
+11276-                label += f" / {game['submodalidade']}"
+11277-
+11278-            method_label = (
+11279:                f"{game.get('seletor') or '—'} | "
+11280-                f"{game.get('estrategia') or '—'}"
+11281-            )
+11282-
+11283-            if modality and modality != "Todos" and label != modality:
+11284-                continue
+11285-            if method and method != "Todos" and method_label != method:
+11286-                continue
+11287-
+--
+11345-                continue
+11346-
+11347-            modality = game["tipo"]
+11348-            if game.get("submodalidade"):
+11349-                modality += f" / {game['submodalidade']}"
+11350-            modalities.add(modality)
+11351-
+11352-            methods.add(
+11353:                f"{game.get('seletor') or '—'} | "
+11354-                f"{game.get('estrategia') or '—'}"
+11355-            )
+11356-
+11357-        return {
+11358-            "modalidades": ["Todos"] + sorted(modalities),
+11359-            "metodos": ["Todos"] + sorted(methods),
+11360-            "status": [
+11361-                "Todos",
+--
+11382-                continue
+11383-
+11384-            d = target["data"]
+11385-            if date_from and d < date_from:
+11386-                continue
+11387-            if date_to and d > date_to:
+11388-                continue
+11389-
+11390:            selector = game.get("seletor") or "Não registrado"
+11391-            strategy = game.get("estrategia") or "—"
+11392-            key = (selector, strategy)
+11393-
+11394-            rec = groups.setdefault(key, {
+11395:                "seletor": selector,
+11396-                "estrategia": strategy,
+11397-                "jogos": 0,
+11398-                "fechados": 0,
+11399-                "vencedores": 0,
+11400-                "itens": 0,
+11401-                "acertos": 0,
+11402-                "apostado": 0.0,
+11403-                "retorno": 0.0,
+--
+11436-                if rec["itens"] > 0
+11437-                else None
+11438-            )
+11439-
+11440-        rows.sort(
+11441-            key=lambda r: (
+11442-                -r["fechados"],
+11443-                -(r["roi"] if r["roi"] is not None else -999999),
+11444:                r["seletor"],
+11445-                r["estrategia"],
+11446-            )
+11447-        )
+11448-        return rows
+11449-
+11450-    def set_bankroll(self, initial_value, start_date=None):
+11451-        value = float(initial_value)
+11452-        if value < 0:
+--
+11719-        )
+11720-
+11721-        with self.connect() as con:
+11722-            if changed_definition:
+11723-                selector = "Manual/Editado"
+11724-                strategy = "Manual/Editado"
+11725-            else:
+11726-                selector = (
+11727:                    game.get("seletor")
+11728-                    or "Não registrado"
+11729-                )
+11730-                strategy = (
+11731-                    game.get("estrategia")
+11732-                    or "Manual"
+11733-                )
+11734-
+11735-            con.execute("""
+11736-                UPDATE jogos_congelados
+11737-                SET
+11738:                    seletor=?,
+11739-                    estrategia=?,
+11740-                    tipo=?,
+11741-                    submodalidade=?,
+11742-                    escopo=?,
+11743-                    alvo_modo='ALVO_ESPECIFICO',
+11744-                    alvo_data=?,
+11745-                    alvo_sorteio=?,
+11746-                    alvo_hora=?,
+--
+11818-            )
+11819-
+11820-        return self.frozen_game_details(game_id)
+11821-
+11822-    def frozen_performance_filter_options(self):
+11823-        with self.connect() as con:
+11824-            selectors = [
+11825-                r[0] for r in con.execute("""
+11826:                    SELECT DISTINCT seletor
+11827-                    FROM jogos_congelados
+11828:                    WHERE seletor IS NOT NULL AND TRIM(seletor) <> ''
+11829:                    ORDER BY seletor
+11830-                """).fetchall()
+11831-            ]
+11832-            strategies = [
+11833-                r[0] for r in con.execute("""
+11834-                    SELECT DISTINCT estrategia
+11835-                    FROM jogos_congelados
+11836-                    ORDER BY estrategia
+11837-                """).fetchall()
+--
+11875-        - média: acertos exatos / jogo auditado.
+11876-
+11877-        A tabela é agrupada por Seletor + Estratégia + Tipo + Escopo.
+11878-        """
+11879-        where = []
+11880-        args = []
+11881-
+11882-        if selector != "Todos":
+11883:            where.append("seletor = ?")
+11884-            args.append(selector)
+11885-        if strategy != "Todos":
+11886-            where.append("estrategia = ?")
+11887-            args.append(strategy)
+11888-        if kind != "Todos":
+11889-            where.append("tipo = ?")
+11890-            args.append(kind)
+11891-        if scope != "Todos":
+--
+11894-
+11895-        where_sql = ""
+11896-        if where:
+11897-            where_sql = " WHERE " + " AND ".join(where)
+11898-
+11899-        with self.connect() as con:
+11900-            rows = con.execute(f"""
+11901-                SELECT
+11902:                    seletor,
+11903-                    estrategia,
+11904-                    tipo,
+11905-                    escopo,
+11906-                    COUNT(*) AS jogos_total,
+11907-                    SUM(CASE WHEN status='AUDITADO' THEN 1 ELSE 0 END)
+11908-                        AS jogos_auditados,
+11909-                    SUM(CASE WHEN status='PENDENTE' THEN 1 ELSE 0 END)
+11910-                        AS jogos_pendentes,
+--
+11917-                    SUM(
+11918-                        CASE WHEN status='AUDITADO' THEN total_itens ELSE 0 END
+11919-                    ) AS itens_auditados,
+11920-                    SUM(
+11921-                        CASE WHEN status='AUDITADO' THEN acertos ELSE 0 END
+11922-                    ) AS acertos
+11923-                FROM jogos_congelados
+11924-                {where_sql}
+11925:                GROUP BY seletor, estrategia, tipo, escopo
+11926-            """, args).fetchall()
+11927-
+11928-        result_rows = []
+11929-
+11930-        for r in rows:
+11931-            audited = int(r["jogos_auditados"] or 0)
+11932-            pending = int(r["jogos_pendentes"] or 0)
+11933-            winners = int(r["jogos_vencedores"] or 0)
+--
+11935-            hits = int(r["acertos"] or 0)
+11936-
+11937-            game_rate = winners / audited * 100.0 if audited else 0.0
+11938-            item_rate = hits / items * 100.0 if items else 0.0
+11939-            avg_hits = hits / audited if audited else 0.0
+11940-            avg_items = items / audited if audited else 0.0
+11941-
+11942-            result_rows.append({
+11943:                "seletor": r["seletor"] or "Não registrado",
+11944-                "estrategia": r["estrategia"],
+11945-                "tipo": r["tipo"],
+11946-                "escopo": r["escopo"],
+11947-                "jogos_total": int(r["jogos_total"] or 0),
+11948-                "jogos_auditados": audited,
+11949-                "jogos_pendentes": pending,
+11950-                "jogos_vencedores": winners,
+11951-                "itens_auditados": items,
+--
+11958-
+11959-        # Prioriza amostra auditada, não a taxa. Evita fazer um método com
+11960-        # 1 jogo aparecer automaticamente como "melhor" que um método testado.
+11961-        result_rows.sort(
+11962-            key=lambda r: (
+11963-                -r["jogos_auditados"],
+11964-                -r["itens_auditados"],
+11965-                -r["taxa_itens"],
+11966:                r["seletor"],
+11967-                r["estrategia"],
+11968-                r["tipo"],
+11969-            )
+11970-        )
+11971-
+11972-        summary = {
+11973-            "jogos_total": sum(r["jogos_total"] for r in result_rows),
+11974-            "jogos_auditados": sum(r["jogos_auditados"] for r in result_rows),
+--
+13327-            if game["alvo_sorteio"]:
+13328-                target += f" • {game['alvo_sorteio']} {game['alvo_hora']}"
+13329-            else:
+13330-                target += " • dia inteiro 1º"
+13331-
+13332-        ttk.Label(
+13333-            outer,
+13334-            text=(
+13335:                f"Seletor: {game.get('seletor') or 'Não registrado'} • "
+13336-                f"Tipo: {game['tipo']} • Escopo: {game['escopo']} • "
+13337-                f"Base: {base} • Alvo: {target} • Status: {game['status']} • "
+13338-                f"Acertos: {game['acertos']}/{game['total_itens']} • "
+13339-                + (
+13340-                    f"Apostado: R$ {float(game.get('valor_total') or 0):.2f}"
+13341-                    if game.get("jogado")
+13342-                    else "Valor não informado"
+13343-                )
+--
+17362-            bg="#124A7A",
+17363-            fg="#DCEEFF",
+17364-            font=("Segoe UI Semibold", 8),
+17365-            padx=8,
+17366-            pady=3,
+17367-        )
+17368-        self.play_method_badge.grid(row=2, column=5, sticky="w", pady=(2, 0))
+17369-
+17370:        # GP-H META v0.2 — seletor jogável, visualmente separado dos demais.
+17371-        self.play_meta_card = tk.Frame(
+17372-            self.play_body,
+17373-            bg=self.colors["card2"],
+17374-            highlightbackground="#19A7B8",
+17375-            highlightthickness=2,
+17376-            bd=0,
+17377-            padx=12,
+17378-            pady=9,
+--
+17800-            self.db.audit_shadow_snapshots()
+17801-            rec = self.db.shadow_recommendation(target, window=120, scope=self.play_scope.get())
+17802-            family = self.play_family.get() if hasattr(self, "play_family") else "Centena"
+17803-            scope = self.play_scope.get() if hasattr(self, "play_scope") else "1º–5º"
+17804-            rank = {"FORTE": 4, "MODERADA": 3, "BAIXA": 2, "AMOSTRA INSUFICIENTE": 1, "SEM DADOS": 0}
+17805-            candidates = []
+17806-
+17807-            # Para Centena, compara as construções de Centenas. Nas demais famílias,
+17808:            # usa o seletor de bichos como sinal operacional mais compatível.
+17809-            if family == "Centena":
+17810-                cent = rec.get("centena") or {}
+17811-                best = cent.get("best")
+17812-                if best:
+17813-                    status = cent.get("status", "SEM DADOS")
+17814-                    candidates.append({
+17815-                        "name": best.get("name") or "Centenas",
+17816-                        "status": status,
+--
+19220-        uses_law_controls = method != "Manual" and kind != "Fechamento de Grupo"
+19221-        if uses_law_controls:
+19222-            self.play_meta_card.pack(fill="x", pady=(0, 6), before=self.play_stake_card)
+19223-            self.play_meta_animals_label.grid()
+19224-            self.play_meta_animals_spin.grid()
+19225-            if "Similaridade" in method:
+19226-                law_status = "Bichos do topo dos até 5 slots da Similaridade; repetições podem reduzir os bichos únicos disponíveis."
+19227-            elif method.startswith("Especial"):
+19228:                law_status = "Bichos mais fortes do seletor Seca. A geração numérica segue a Lei GP-H preservando o histórico de 1º prêmio."
+19229-            else:
+19230-                law_status = "Escolha quantos bichos do topo do método entrarão no jogo. Sobras favorecem os primeiros do ranking."
+19231-            self.play_meta_status.configure(text=law_status)
+19232-        else:
+19233-            self.play_meta_card.pack_forget()
+19234-
+19235-        if kind == "Grupo" and self.play_total.get() == "20":
+19236-            self.play_total.set("5")
+--
+19248-        if method.startswith("★ META"):
+19249-            badge = ("META • ADAPTATIVO", "#0B6273", "#E7FDFF")
+19250-            help_text = (
+19251-                "GP-H Meta v0.2 usa 21 características; a Tabela 1 entrou como sinal adicional após passar no walk-forward de admissão. "
+19252-                "A estrutura do cérebro permanece congelada e a previsão usada no jogo é congelada antes do resultado."
+19253-            )
+19254-        elif method.startswith("Oficial"):
+19255-            badge = ("OFICIAL", "#124A7A", "#DCEEFF")
+19256:            help_text = "Reset é o seletor oficial; a Lei de Geração GP-H é a camada comum que transforma o ranking em jogo."
+19257-        elif method.startswith("Histórico"):
+19258-            badge = ("HISTÓRICO", "#155E63", "#D9FAF5")
+19259-            help_text = (
+19260-                "Recupera o GP-H Histórico v0.1 que teve o melhor resultado nos Ternos. "
+19261-                "Terno preserva o fechamento concentrado; Dupla, Quadra e Quina são extensões prospectivas da mesma regra."
+19262-            )
+19263-        elif method.startswith("Experimental"):
+19264-            badge = ("EXPERIMENTAL", "#4C2A78", "#E9D9FF")
+--
+20763-            )
+20764-
+20765-            self.play_method_finance_tree.insert(
+20766-                "",
+20767-                "end",
+20768-                iid=f"perf-{idx}",
+20769-                tags=(tag,) if tag else (),
+20770-                values=(
+20771:                    f"{row['seletor']} | {row['estrategia']}",
+20772-                    row["fechados"],
+20773-                    row["vencedores"],
+20774-                    row["acertos"],
+20775-                    self._money(row["apostado"]),
+20776-                    self._money(row["retorno"]),
+20777-                    self._money(row["liquido"]),
+20778-                    (
+20779-                        f"{roi:.1f}%"
+--
+22269-            text="Detalhes",
+22270-            command=self.results_open_game_details,
+22271-        ).pack(side="right")
+22272-
+22273-        table = ttk.Frame(self.results_body)
+22274-        table.pack(fill="both", expand=True)
+22275-
+22276-        cols = (
+22277:            "id","criado","seletor","estrategia","tipo",
+22278-            "base","alvo","qtd","acertos","status",
+22279-        )
+22280-        self.games_tree = ttk.Treeview(
+22281-            table,
+22282-            columns=cols,
+22283-            show="headings",
+22284-            selectmode="browse",
+22285-        )
+22286-
+22287-        labels = {
+22288-            "id":"#",
+22289-            "criado":"Criado",
+22290:            "seletor":"Seletor",
+22291-            "estrategia":"Estratégia",
+22292-            "tipo":"Tipo",
+22293-            "base":"Base",
+22294-            "alvo":"Alvo real",
+22295-            "qtd":"Qtd.",
+22296-            "acertos":"Acertos",
+22297-            "status":"Status",
+22298-        }
+22299-        widths = {
+22300-            "id":42,
+22301-            "criado":118,
+22302:            "seletor":160,
+22303-            "estrategia":150,
+22304-            "tipo":70,
+22305-            "base":150,
+22306-            "alvo":175,
+22307-            "qtd":48,
+22308-            "acertos":60,
+22309-            "status":78,
+22310-        }
+--
+22314-                c, text=labels[c]
+22315-            )
+22316-            self.games_tree.column(
+22317-                c,
+22318-                width=widths[c],
+22319-                anchor=(
+22320-                    "w"
+22321-                    if c in (
+22322:                        "seletor","estrategia","base","alvo"
+22323-                    )
+22324-                    else "center"
+22325-                ),
+22326-            )
+22327-
+22328-        y = ttk.Scrollbar(
+22329-            table,
+22330-            orient="vertical",
+--
+22500-            note,
+22501-            text="Compare principalmente linhas do mesmo Tipo e Escopo.",
+22502-        ).pack(side="right")
+22503-
+22504-        table = ttk.Frame(self.results_body)
+22505-        table.pack(fill="both", expand=True)
+22506-
+22507-        cols = (
+22508:            "seletor","estrategia","tipo","escopo",
+22509-            "total","aud","pend","venc","taxa_jogos",
+22510-            "itens","hits","taxa_itens","media",
+22511-        )
+22512-        self.perf_tree = ttk.Treeview(
+22513-            table,
+22514-            columns=cols,
+22515-            show="headings",
+22516-            selectmode="browse",
+22517-        )
+22518-
+22519-        labels = {
+22520:            "seletor":"Seletor",
+22521-            "estrategia":"Estratégia",
+22522-            "tipo":"Tipo",
+22523-            "escopo":"Escopo",
+22524-            "total":"Jogos",
+22525-            "aud":"Audit.",
+22526-            "pend":"Pend.",
+22527-            "venc":"Venc.",
+22528-            "taxa_jogos":"% jogos",
+22529-            "itens":"Itens",
+22530-            "hits":"Acertos",
+22531-            "taxa_itens":"% itens",
+22532-            "media":"Média/jogo",
+22533-        }
+22534-        widths = {
+22535:            "seletor":180,
+22536-            "estrategia":160,
+22537-            "tipo":75,
+22538-            "escopo":65,
+22539-            "total":55,
+22540-            "aud":55,
+22541-            "pend":55,
+22542-            "venc":55,
+22543-            "taxa_jogos":65,
+--
+22549-
+22550-        for c in cols:
+22551-            self.perf_tree.heading(
+22552-                c, text=labels[c]
+22553-            )
+22554-            self.perf_tree.column(
+22555-                c,
+22556-                width=widths[c],
+22557:                anchor="w" if c in ("seletor","estrategia") else "center",
+22558-            )
+22559-
+22560-        y = ttk.Scrollbar(
+22561-            table,
+22562-            orient="vertical",
+22563-            command=self.perf_tree.yview,
+22564-        )
+22565-        x = ttk.Scrollbar(
+--
+22610-
+22611-        for item in self.perf_tree.get_children():
+22612-            self.perf_tree.delete(item)
+22613-
+22614-        for idx, r in enumerate(data["rows"], start=1):
+22615-            self.perf_tree.insert(
+22616-                "", "end", iid=f"perf-{idx}",
+22617-                values=(
+22618:                    r["seletor"],
+22619-                    r["estrategia"],
+22620-                    r["tipo"],
+22621-                    r["escopo"],
+22622-                    r["jogos_total"],
+22623-                    r["jogos_auditados"],
+22624-                    r["jogos_pendentes"],
+22625-                    r["jogos_vencedores"],
+22626-                    f'{r["taxa_jogos"]:.1f}%',
+--
+22716-
+22717-            self.games_tree.insert(
+22718-                "",
+22719-                "end",
+22720-                iid=str(g["id"]),
+22721-                values=(
+22722-                    g["id"],
+22723-                    created,
+22724:                    g.get("seletor") or "Não registrado",
+22725-                    g["estrategia"],
+22726-                    g["tipo"],
+22727-                    base,
+22728-                    target,
+22729-                    g["total_itens"],
+22730-                    (
+22731-                        f"{g['acertos']}/{g['total_itens']}"
+22732-                        if g["status"] == "AUDITADO"
+--
+23762-        ttk.Label(c3,text="SECA DO DIA • 1º",style="CardMuted.TLabel").pack(anchor="w")
+23763-        ttk.Label(c3,text="Seca do Dia 1º",style="Card.TLabel",font=("Segoe UI Semibold",11)).pack(anchor="w",pady=(3,1))
+23764-        ttk.Label(c3,text=f"Evidência: {dry.get('status','SEM DADOS')}",style="CardMuted.TLabel").pack(anchor="w")
+23765-        if int(dry.get("rounds") or 0):
+23766-            ttk.Label(c3,text=f"{int(dry.get('rounds') or 0)} rodadas • {float(dry.get('hit_rate') or 0):.1f}% de acerto do 1º",style="CardMuted.TLabel",wraplength=310).pack(anchor="w",pady=(2,0))
+23767-        else:
+23768-            ttk.Label(c3,text="Amostra ainda em formação.",style="CardMuted.TLabel").pack(anchor="w",pady=(2,0))
+23769-
+23770:        # Ranking transparente dos seletores de bicho.
+23771-        rank = ttk.Frame(host, style="Card.TFrame", padding=10)
+23772-        rank.pack(fill="x", pady=(0,8))
+23773:        ttk.Label(rank,text="Ranking prospectivo dos seletores de bicho",style="CardTitle.TLabel").pack(anchor="w")
+23774-        ttk.Label(rank,text="Reset, Puxada Combinada e Similaridade são comparados nas mesmas leituras sombra disponíveis para este horário.",style="CardMuted.TLabel",wraplength=1050).pack(anchor="w",pady=(2,5))
+23775-        cols=("method","rounds","main","recent")
+23776-        tv=ttk.Treeview(rank,columns=cols,show="headings",height=max(3,min(5,len(bichos.get('rows') or []))))
+23777-        heads={"method":"Método","rounds":"Rodadas","main":"Métrica geral","recent":"Recente"}
+23778-        widths={"method":250,"rounds":80,"main":160,"recent":160}
+23779-        for cc in cols:
+23780-            tv.heading(cc,text=heads[cc]); tv.column(cc,width=widths[cc],anchor="w" if cc=="method" else "center")
+23781-        for row in bichos.get("rows") or []:
