@@ -11,21 +11,15 @@ jobs:
       - uses: actions/checkout@v4
         with:
           ref: feature-lei-geracao-meta-tabela1-v0474
-      - name: Extrair integração da tela Jogar
+      - name: Listar nomes dos geradores
         run: |
           python - <<'PY'
           import ast
           from pathlib import Path
           s=Path('source/gph_central.py').read_text(encoding='utf-8'); t=ast.parse(s)
-          wanted={
-            'generate_historical_number_suggestions',
-            '_generate_play_meta_ranked','_generate_play_puxada','_generate_play_similaridade',
-            '_generate_play_historico_concentrado','_generate_play_reset_3plus1',
-            'generate_play_suggestions','_meta_generation_context'
-          }
           for node in ast.walk(t):
-            if isinstance(node,ast.FunctionDef) and node.name in wanted:
-              seg=ast.get_source_segment(s,node) or ''
-              print(f'\n===== {node.name} L{node.lineno}-{node.end_lineno} ({len(seg)} chars) =====')
-              print(seg)
+            if isinstance(node,ast.FunctionDef):
+              n=node.name.lower()
+              if 'generate' in n or ('play' in n and any(k in n for k in ('suggest','strategy','method','meta','pux','sim','histor'))):
+                print(f'{node.name} L{node.lineno}-{node.end_lineno}')
           PY
