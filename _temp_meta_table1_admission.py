@@ -6,6 +6,7 @@ import importlib.util
 import json
 import math
 import os
+import sys
 import tempfile
 from collections import Counter
 from datetime import datetime
@@ -16,6 +17,7 @@ os.environ['GPH_DISABLE_STARTUP_DIALOGS'] = '1'
 SOURCE = Path('source/gph_central.py')
 spec = importlib.util.spec_from_file_location('gph_admission', SOURCE)
 mod = importlib.util.module_from_spec(spec)
+sys.modules[spec.name] = mod
 spec.loader.exec_module(mod)
 Database = mod.Database
 PrizeRow = mod.PrizeRow
