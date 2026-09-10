@@ -1,28 +1,21 @@
-name: TEMP inspeciona lei GP-H v0.47.4
+name: TEMP teste Tabela 1 no Meta v0.47.4
 on:
   push:
     branches: [feature-lei-geracao-meta-tabela1-v0474]
 permissions:
   contents: read
 jobs:
-  inspect:
+  admission:
     runs-on: ubuntu-latest
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@v4
         with:
           ref: feature-lei-geracao-meta-tabela1-v0474
-      - name: Extrair similaridade e rankings
+      - name: Preparar Python
         run: |
-          python - <<'PY'
-          import ast
-          from pathlib import Path
-          s=Path('source/gph_central.py').read_text(encoding='utf-8'); t=ast.parse(s)
-          wanted={'method_similarity_day','centena_rankings_for_dezena','centena_31_freeze_state'}
-          for node in ast.walk(t):
-            if isinstance(node,ast.FunctionDef):
-              n=node.name.lower()
-              if node.name in wanted or ('milhar' in n and 'rank' in n) or ('dezena' in n and 'rank' in n):
-                print(f'\n===== {node.name} L{node.lineno}-{node.end_lineno} =====')
-                seg=ast.get_source_segment(s,node) or ''
-                print(seg if len(seg)<20000 else seg[:20000])
-          PY
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq python3-tk
+          python -m pip install -q numpy
+      - name: Rodar walk-forward Meta 20 vs Meta + Tabela 1
+        run: python _temp_meta_table1_admission.py
