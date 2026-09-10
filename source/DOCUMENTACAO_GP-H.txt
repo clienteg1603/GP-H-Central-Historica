@@ -1,3 +1,12 @@
+REVISÃO v0.47.5 — MANUAL MULTIJOGO / ABA REDUNDANTE
+
+- Em Jogar > Nova aposta > Método Manual, novas entradas compatíveis passam a ser somadas aos palpites já exibidos em vez de substituir a entrada anterior.
+- A acumulação ocorre somente quando rodada, modalidade, colocação e submodalidade são as mesmas; ao mudar esse contexto, a nova entrada inicia uma geração compatível com o novo contexto, preservando o comportamento seguro anterior.
+- Palpites repetidos não são duplicados na lista. A quantidade e os cálculos de valor acompanham automaticamente o total acumulado.
+- A aba superior redundante "Jogo manual" foi removida; toda a montagem manual fica concentrada em Nova aposta > Método Manual.
+- Bilhetes, Financeiro, Cotações e registro de múltiplas modalidades permanecem inalterados.
+- O Database e os cérebros Meta v0.2, Reset, Puxada, Similaridade, Histórico, Decisão e Lei de Geração GP-H não foram alterados.
+
 REVISÃO v0.47.4 — LEI DE GERAÇÃO GP-H UNIVERSAL
 
 - Cria uma camada única entre seleção de bichos e montagem do jogo: o método escolhe/rankeia; a Lei GP-H gera.

@@ -91,7 +91,7 @@ def write_crash_log(exc: BaseException):
 
 
 APP_NAME = "GP-H Central Histórica"
-APP_VERSION = "0.47.4"
+APP_VERSION = "0.47.5"
 START_DATE = date(2026, 1, 2)
 BASE_URL = "https://brasildeunoposte.com.br/resultado-do-jogo-do-bicho-deu-no-poste-{date}/"
 # Ao buscar/atualizar resultados, relê os últimos 7 dias para absorver
@@ -17060,7 +17060,6 @@ class App(tk.Tk):
 
         for key, text, command in (
             ("new", "Nova aposta", self.play_show_new),
-            ("manual_builder", "Jogo manual", self.play_show_manual_builder),
             ("games", "Bilhetes", self.play_show_games),
             ("summary", "Financeiro", self.play_show_summary),
         ):
@@ -18534,6 +18533,46 @@ class App(tk.Tk):
             "mode": self.play_value_mode.get(),
         }
 
+    @staticmethod
+    def _merge_manual_generation(existing, incoming):
+        """Acumula palpites manuais compatíveis sem substituir os anteriores."""
+        incoming = copy.deepcopy(incoming or {})
+        incoming_rows = list(incoming.get("rows") or [])
+        if not existing or str(existing.get("strategy") or "") != "Manual":
+            return incoming, len(incoming_rows), False
+        if str(incoming.get("strategy") or "") != "Manual":
+            return incoming, len(incoming_rows), False
+
+        def target_key(generation):
+            target = generation.get("intended_target") or {}
+            return (target.get("data"), target.get("sorteio"), target.get("hora"))
+
+        compatible = (
+            str(existing.get("kind") or "") == str(incoming.get("kind") or "")
+            and str(existing.get("scope") or "") == str(incoming.get("scope") or "")
+            and str(existing.get("submodalidade") or "") == str(incoming.get("submodalidade") or "")
+            and target_key(existing) == target_key(incoming)
+        )
+        if not compatible:
+            return incoming, len(incoming_rows), False
+
+        merged = copy.deepcopy(existing)
+        merged_rows = list(merged.get("rows") or [])
+        seen = {
+            (str(row.get("numero") or ""), str(row.get("modalidade") or ""))
+            for row in merged_rows
+        }
+        added = 0
+        for row in incoming_rows:
+            key = (str(row.get("numero") or ""), str(row.get("modalidade") or ""))
+            if key in seen:
+                continue
+            merged_rows.append(copy.deepcopy(row))
+            seen.add(key)
+            added += 1
+        merged["rows"] = merged_rows
+        return merged, added, True
+
     def play_manual_input(self):
         kind = self.play_kind.get()
         target = self.play_get_selected_target()
@@ -18594,12 +18633,26 @@ class App(tk.Tk):
             generation["selector"] = "Manual"
             generation["strategy"] = "Manual"
 
-            self.play_generation = generation
-            self.play_total.set(
-                str(len(generation["rows"]))
+            generation, added, accumulated = self._merge_manual_generation(
+                self.play_generation, generation
             )
+            self.play_generation = generation
+            self.play_total.set(str(len(generation.get("rows") or [])))
             self.play_render_generation()
             self.play_financial_refresh()
+
+            if accumulated:
+                status = getattr(self, "status", None)
+                if status is not None:
+                    if added:
+                        status.configure(
+                            text=(
+                                f"Manual: {added} novo(s) palpite(s) adicionado(s) • "
+                                f"{len(generation.get('rows') or [])} na lista atual."
+                            )
+                        )
+                    else:
+                        status.configure(text="Manual: esse palpite já estava na lista atual.")
 
         except Exception as exc:
             messagebox.showerror(
