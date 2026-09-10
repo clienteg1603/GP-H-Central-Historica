@@ -11,16 +11,22 @@ jobs:
       - uses: actions/checkout@v4
         with:
           ref: feature-lei-geracao-meta-tabela1-v0474
-      - name: Extrair UI e controles Jogar
+      - name: Localizar controles Jogar
         run: |
           python - <<'PY'
-          import ast
           from pathlib import Path
-          s=Path('source/gph_central.py').read_text(encoding='utf-8'); t=ast.parse(s)
-          for node in ast.walk(t):
-            if isinstance(node,ast.FunctionDef):
-              n=node.name.lower()
-              if n in {'show_play','play_method_changed','play_kind_changed','play_update_method_controls','play_refresh_method_controls','play_on_method_changed','play_on_kind_changed'} or ('play' in n and ('method' in n or 'kind' in n) and node.lineno>15000):
-                print(f'\n===== {node.name} L{node.lineno}-{node.end_lineno} =====')
-                print(ast.get_source_segment(s,node) or '')
+          lines=Path('source/gph_central.py').read_text(encoding='utf-8').splitlines()
+          keys=('play_meta_animals','play_hc_base_animals','play_method =','play_method.set','play_method.configure','Método','Quantidade de bichos')
+          hits=[]
+          for i,line in enumerate(lines):
+            if any(k in line for k in keys) and 15000 <= i+1 <= 20000:
+              hits.append(i)
+          seen=set()
+          for i in hits:
+            a=max(0,i-8); b=min(len(lines),i+13)
+            key=(a,b)
+            if key in seen: continue
+            seen.add(key)
+            print(f'\n===== L{a+1}-{b} =====')
+            for j in range(a,b): print(f'{j+1}: {lines[j]}')
           PY
