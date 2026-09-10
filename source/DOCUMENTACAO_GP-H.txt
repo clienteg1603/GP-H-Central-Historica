@@ -1,3 +1,14 @@
+REVISÃO v0.47.6 — EVOLUÇÃO DE COBERTURA / META DIAGNÓSTICA
+
+- Decisão > Auditoria recebe o painel Evolução de Cobertura, com janelas móveis de 20, 30 e 60 rodadas.
+- O objetivo oficial desta fase fica explícito: primeiro elevar a capacidade de colocar pelo menos 2 bichos corretos no Top 5 em mais de 50% das rodadas; depois converter cobertura suficiente em mais Ternos 3/3; Quadras e Quinas ficam para etapa posterior.
+- Cobertura do núcleo mede quantos grupos do resultado estavam no Top 5 do GP-H Meta congelado antes do sorteio. Taxa 2+ mede a frequência de rodadas com pelo menos dois acertos de grupo.
+- Melhor Terno mede 0/3, 1/3, 2/3 ou 3/3 usando apenas Ternos de Grupo GP-H Meta realmente registrados antes do resultado.
+- Conversão 3→3 considera somente oportunidades em que o Top 5 tinha pelo menos 3 bichos corretos e existe Terno Meta rastreável, gerado da mesma extração-base e integralmente contido no Top 5. Ausência de Terno não é transformada em falha.
+- O diagnóstico recente separa falha de núcleo (cérebro não ofereceu 3 grupos) de falha de montagem (núcleo tinha 3+, mas os Ternos do Top 5 não fecharam 3/3).
+- Ternos de Reset, Manual, Puxada, Similaridade ou bilhetes Meta reaproveitados para outra base não contaminam a Conversão 3→3.
+- A meta de 50% é SOMENTE uma régua de avaliação. Ela não entra nas características, pesos, regressão, score, ranking, calibração ou decisão do GP-H Meta; nenhum cérebro foi recalibrado nesta versão.
+
 REVISÃO v0.47.5 — MANUAL MULTIJOGO / ABA REDUNDANTE
 
 - Em Jogar > Nova aposta > Método Manual, novas entradas compatíveis passam a ser somadas aos palpites já exibidos em vez de substituir a entrada anterior.
