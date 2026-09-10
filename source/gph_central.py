@@ -91,7 +91,7 @@ def write_crash_log(exc: BaseException):
 
 
 APP_NAME = "GP-H Central Histórica"
-APP_VERSION = "0.47.7"
+APP_VERSION = "0.47.8"
 START_DATE = date(2026, 1, 2)
 BASE_URL = "https://brasildeunoposte.com.br/resultado-do-jogo-do-bicho-deu-no-poste-{date}/"
 # Ao buscar/atualizar resultados, relê os últimos 7 dias para absorver
@@ -1824,6 +1824,21 @@ class Database:
             "latest_best_terno": latest_best,
         }
 
+    def _coverage_candidate_rows(self):
+        """
+        Retorna snapshots candidatos ao diagnóstico de cobertura sem exigir status AUDITADO.
+
+        A elegibilidade real continua sendo decidida depois: precisa existir Top 5 Meta
+        já congelado e resultado posterior disponível. Esta consulta é exclusiva do
+        painel diagnóstico e não altera status, pesos, ranking ou previsão.
+        """
+        with self.connect() as con:
+            rows = con.execute(
+                "SELECT * FROM decision_snapshots "
+                "ORDER BY target_data DESC, target_hora DESC, id DESC"
+            ).fetchall()
+        return [dict(row) for row in rows]
+
     def decision_coverage_evolution(self, windows=(20, 30, 60), recent_limit=10):
         """
         Auditoria prospectiva do objetivo GP-H: cobertura do Top 5 Meta e conversão em Terno.
@@ -1846,7 +1861,7 @@ class Database:
             recent_limit = 10
         needed = max(max(windows), recent_limit)
 
-        raw_rows = self._decision_audited_rows(window="Todos")
+        raw_rows = self._coverage_candidate_rows()
         records = []
         with self.connect() as con:
             for raw in raw_rows:
@@ -1855,14 +1870,31 @@ class Database:
                 audit = row.get("meta_audit") or {}
                 audit_source = "saved_audit"
                 if not audit.get("available"):
-                    try:
-                        frozen_result_json = raw["result_groups_json"]
-                    except Exception:
-                        frozen_result_json = row.get("result_groups_json") or "[]"
+                    frozen_result_json = raw.get("result_groups_json") or row.get("result_groups_json") or "[]"
                     audit = self._coverage_frozen_audit(meta, frozen_result_json)
-                    if not audit.get("available"):
-                        continue
-                    audit_source = "frozen_history"
+                    if audit.get("available"):
+                        audit_source = "frozen_history"
+                    else:
+                        # Snapshots antigos podem nunca ter recebido status AUDITADO/result_groups_json.
+                        # O resultado é apenas consultado AGORA no histórico; o Top 5 permanece aquele
+                        # que já estava congelado no snapshot antes da rodada.
+                        target = self.get_draw(
+                            row.get("target_data"),
+                            row.get("target_sorteio"),
+                            row.get("target_hora"),
+                        )
+                        prizes = (target or {}).get("prizes") or []
+                        if len(prizes) >= 5:
+                            lookup_groups = []
+                            for prize in prizes[:5]:
+                                try:
+                                    lookup_groups.append(int(prize["grupo"]))
+                                except Exception:
+                                    pass
+                            audit = self._coverage_frozen_audit(meta, lookup_groups)
+                        if not audit.get("available"):
+                            continue
+                        audit_source = "result_lookup"
                 core_groups = []
                 for raw_group in (meta.get("groups") or [])[:5]:
                     try:
@@ -1971,10 +2003,11 @@ class Database:
             "windows": summaries,
             "recent": records[:recent_limit],
             "eligible_rounds": len(records),
-            "historical_bootstrap_rounds": sum(r.get("audit_source") == "frozen_history" for r in records),
+            "historical_bootstrap_rounds": sum(r.get("audit_source") in ("frozen_history", "result_lookup") for r in records),
+            "result_lookup_rounds": sum(r.get("audit_source") == "result_lookup" for r in records),
             "note": (
-                "Cobertura e Taxa 2+ reaproveitam também Top 5 Meta que já estavam congelados antes dos resultados, "
-                "mesmo quando a auditoria Meta ainda não existia. Conversão 3→3 continua usando somente Ternos Meta "
+                "Cobertura e Taxa 2+ reaproveitam todo Top 5 Meta já congelado que possua resultado correspondente no banco, "
+                "mesmo que o snapshot antigo nunca tenha recebido status AUDITADO. Conversão 3→3 continua usando somente Ternos Meta "
                 "realmente registrados, da mesma base prospectiva e formados integralmente pelo Top 5; ausência de Terno não vira falha."
             ),
         }
@@ -24700,7 +24733,7 @@ class App(tk.Tk):
         head = ttk.Frame(card, style="Card.TFrame")
         head.pack(fill="x")
         ttk.Label(head, text="EVOLUÇÃO DE COBERTURA", style="CardTitle.TLabel").pack(side="left")
-        ttk.Label(head, text="histórico congelado + novas rodadas • janelas 20 / 30 / 60", style="CardMuted.TLabel").pack(side="right")
+        ttk.Label(head, text="histórico Meta existente + novas rodadas • janelas 20 / 30 / 60", style="CardMuted.TLabel").pack(side="right")
         ttk.Label(
             card,
             text=(

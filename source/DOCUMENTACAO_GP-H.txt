@@ -1,3 +1,11 @@
+REVISÃO v0.47.8 — CORREÇÃO DO BOOTSTRAP HISTÓRICO DA COBERTURA
+
+- Corrige a v0.47.7, que ainda iniciava pela função _decision_audited_rows e por isso descartava snapshots antigos antes do bootstrap.
+- Evolução de Cobertura agora lê diretamente os snapshots existentes sem exigir status AUDITADO; uma rodada só entra se já houver Top 5 Meta congelado e resultado correspondente disponível.
+- Quando result_groups_json/meta_audit antigos não existem, o painel consulta o resultado pelo alvo data+sorteio+hora via get_draw e compara esse resultado com o Top 5 que já estava salvo.
+- Essa consulta é somente de auditoria posterior: não recalcula Meta, ranking, pesos, confiança, sinais nem previsões antigas.
+- Ternos continuam sem reconstrução retrospectiva: Melhor Terno/Conversão 3→3 só usam apostas Meta realmente registradas para a mesma base prospectiva.
+
 REVISÃO v0.47.7 — BOOTSTRAP HISTÓRICO DA EVOLUÇÃO DE COBERTURA
 
 - O painel Decisão > Auditoria > Evolução de Cobertura deixa de depender exclusivamente de meta_audit_json criado nas versões mais recentes.
