@@ -1,0 +1,27 @@
+name: TEMP inspect generation law main
+on:
+  push:
+    paths: ['.github/workflows/inspect-generation-law-main.yml']
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Inspect generation/play functions
+        run: |
+          python - <<'PY'
+          import ast
+          from pathlib import Path
+          s=Path('source/gph_central.py').read_text(encoding='utf-8')
+          t=ast.parse(s)
+          needles=('distribute_game_counts','generate_centenas_3plus1','generate_group_combinations','generate_milhar','generate_centena','show_play_page','_play','play_')
+          for node in ast.walk(t):
+              if isinstance(node, ast.FunctionDef) and any(k in node.name for k in needles):
+                  seg=ast.get_source_segment(s,node) or ''
+                  if len(seg) < 32000:
+                      print(f'\n===== {node.name} L{node.lineno}-{getattr(node,"end_lineno",0)} =====')
+                      print(seg)
+                  else:
+                      print(f'\n===== {node.name} L{node.lineno}-{getattr(node,"end_lineno",0)} (TRUNC) =====')
+                      print(seg[:30000])
+          PY
