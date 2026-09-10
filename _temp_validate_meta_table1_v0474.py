@@ -30,7 +30,7 @@ def methods(source,cls_name):
 bm=methods(BEFORE,'Database'); am=methods(AFTER,'Database')
 added=set(am)-set(bm); removed=set(bm)-set(am)
 changed={n for n in set(am)&set(bm) if am[n]!=bm[n]}
-allowed={'_meta_feature_vector','meta_walk_forward_evaluation','meta_shadow_prediction','meta_play_formation_prediction'}
+allowed={'_meta_feature_vector','meta_walk_forward','meta_shadow_prediction','meta_play_formation_prediction'}
 assert not added, added
 assert not removed, removed
 assert changed <= allowed, changed
