@@ -1,0 +1,36 @@
+name: TEMP inspeciona manual v0.47.5
+on:
+  push:
+    branches: [fix-manual-multijogo-v0475]
+permissions:
+  contents: read
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix-manual-multijogo-v0475
+      - name: Mapear UI e geração manual
+        run: |
+          python - <<'PY'
+          import ast
+          from pathlib import Path
+          p=Path('source/gph_central.py')
+          s=p.read_text(encoding='utf-8')
+          lines=s.splitlines()
+          print('=== LINHAS COM JOGO MANUAL / NOVA APOSTA ===')
+          for i,line in enumerate(lines,1):
+              low=line.lower()
+              if 'jogo manual' in low or 'nova aposta' in low or 'manual' in low and ('play_' in low or 'palpit' in low or 'gerar' in low or 'entry' in low or 'button' in low):
+                  print(f'{i}: {line[:500]}')
+          print('\n=== FUNÇÕES RELEVANTES ===')
+          tree=ast.parse(s)
+          for node in ast.walk(tree):
+              if isinstance(node,(ast.FunctionDef,ast.AsyncFunctionDef)):
+                  seg=ast.get_source_segment(s,node) or ''
+                  low=(node.name+' '+seg[:30000]).lower()
+                  if any(k in low for k in ('jogo manual','nova aposta','manual_number','manual_game','manual_palpit','play_manual')):
+                      print(f'\n===== {node.name} L{node.lineno} =====')
+                      print(seg[:30000])
+          PY
