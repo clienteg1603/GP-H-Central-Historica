@@ -1,21 +1,23 @@
-name: TEMP teste Tabela 1 no Meta v0.47.4
+name: TEMP inspeciona Meta v0.47.4
 on:
   push:
     branches: [feature-lei-geracao-meta-tabela1-v0474]
 permissions:
   contents: read
 jobs:
-  admission:
+  inspect:
     runs-on: ubuntu-latest
-    timeout-minutes: 25
     steps:
       - uses: actions/checkout@v4
         with:
           ref: feature-lei-geracao-meta-tabela1-v0474
-      - name: Preparar Python
+      - name: Localizar versões e rótulos Meta
         run: |
-          sudo apt-get update -qq
-          sudo apt-get install -y -qq python3-tk
-          python -m pip install -q numpy
-      - name: Rodar walk-forward Meta 20 vs Meta + Tabela 1
-        run: python _temp_meta_table1_admission.py
+          python - <<'PY'
+          from pathlib import Path
+          s=Path('source/gph_central.py').read_text(encoding='utf-8').splitlines()
+          for i,line in enumerate(s,1):
+            low=line.lower()
+            if ('gp-h meta' in low or 'model_version' in low or 'meta_model' in low or 'meta v0' in low) and i < 22000:
+              print(f'{i}: {line}')
+          PY
