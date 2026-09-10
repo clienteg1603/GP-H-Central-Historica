@@ -11,15 +11,15 @@ jobs:
       - uses: actions/checkout@v4
         with:
           ref: feature-lei-geracao-meta-tabela1-v0474
-      - name: Listar nomes dos geradores
+      - name: Extrair play_generate e números
         run: |
           python - <<'PY'
           import ast
           from pathlib import Path
           s=Path('source/gph_central.py').read_text(encoding='utf-8'); t=ast.parse(s)
+          wanted={'play_generate','generate_historical_numbers'}
           for node in ast.walk(t):
-            if isinstance(node,ast.FunctionDef):
-              n=node.name.lower()
-              if 'generate' in n or ('play' in n and any(k in n for k in ('suggest','strategy','method','meta','pux','sim','histor'))):
-                print(f'{node.name} L{node.lineno}-{node.end_lineno}')
+            if isinstance(node,ast.FunctionDef) and node.name in wanted:
+              print(f'\n===== {node.name} L{node.lineno}-{node.end_lineno} =====')
+              print(ast.get_source_segment(s,node) or '')
           PY
