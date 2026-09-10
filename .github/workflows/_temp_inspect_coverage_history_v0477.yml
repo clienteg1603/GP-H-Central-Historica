@@ -1,24 +1,44 @@
-name: TEMP inspeciona histórico da cobertura v0.47.7
+name: TEMP valida bootstrap histórico da cobertura v0.47.7
 on:
   push:
     branches: [fix-coverage-history-v0477]
 jobs:
-  inspect:
+  validate:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
-      - uses: actions/checkout@v4
-      - name: Extrair métodos relevantes
+      - name: Baixar branch
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Preparar ambiente e baseline
         run: |
-          python - <<'PY'
-          import ast
-          from pathlib import Path
-          p=Path('source/gph_central.py')
-          text=p.read_text(encoding='utf-8')
-          tree=ast.parse(text)
-          lines=text.splitlines()
-          wanted={'_decision_row_to_dict','_decision_audited_rows','decision_coverage_evolution','_meta_audit_payload','audit_decision_snapshots'}
-          for node in ast.walk(tree):
-              if isinstance(node,(ast.FunctionDef,ast.AsyncFunctionDef)) and node.name in wanted:
-                  print('\n'+'='*25+' '+node.name+' '+'='*25)
-                  print('\n'.join(lines[node.lineno-1:node.end_lineno]))
-          PY
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq python3-tk
+          cp source/gph_central.py /tmp/gph_before_coverage_history_v0477.py
+      - name: Aplicar bootstrap histórico
+        run: python _temp_patch_coverage_history_v0477.py
+      - name: Validar código e isolamento do Meta
+        run: |
+          python -m py_compile source/gph_central.py source/gph_updater.py source/CRIAR_PACOTE_ATUALIZACAO.py
+          python _temp_test_coverage_history_v0477.py
+          git diff --check
+      - name: Conferir alterações
+        run: |
+          git diff --stat
+          git diff -- source/DOCUMENTACAO_GP-H.txt | head -120
+          git diff -- source/gph_central.py | head -260
+      - name: Limpar temporários e salvar versão validada
+        run: |
+          git rm -f _temp_patch_coverage_history_v0477.py _temp_test_coverage_history_v0477.py .github/workflows/_temp_inspect_coverage_history_v0477.yml
+          git add source/gph_central.py source/DOCUMENTACAO_GP-H.txt
+          if find . -maxdepth 2 -type f \( -name '*coverage_history_v0477*' -o -name '_temp_*v0477*' \) | grep -q .; then
+            echo 'ERRO: temporários v0.47.7 restantes'
+            find . -maxdepth 2 -type f \( -name '*coverage_history_v0477*' -o -name '_temp_*v0477*' \)
+            exit 1
+          fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git commit -m 'v0.47.7 Bootstrap histórico da Evolução de Cobertura [coverage-history-final]'
+          git push origin HEAD:fix-coverage-history-v0477
