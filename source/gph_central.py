@@ -1105,6 +1105,34 @@ def fetch_day(day: date, timeout=18) -> tuple[str, list[PrizeRow]]:
     return url, parse_daily_html(raw, day, url)
 
 
+META_TABLE1_PULLS = {
+    1: (25, 2, 13, 19, 20),
+    2: (10, 1, 13, 19, 20),
+    3: (11, 12, 21, 24, 10, 9),
+    4: (6, 12, 14, 16, 5, 13),
+    5: (13, 14, 8, 17, 18, 19),
+    6: (7, 17, 12, 21, 22, 23),
+    7: (6, 10, 25),
+    8: (5, 12, 23),
+    9: (15, 18, 3, 14),
+    10: (7, 2, 3),
+    11: (3, 6, 21),
+    12: (6, 23, 22, 16, 3),
+    13: (5, 1, 2, 19, 20),
+    14: (5, 16, 22, 9),
+    15: (9, 18, 4, 17),
+    16: (12, 14, 22, 23),
+    17: (5, 6, 20, 15),
+    18: (9, 20, 15, 5),
+    19: (1, 2, 13, 20),
+    20: (1, 2, 13, 19, 24),
+    21: (25, 3, 6),
+    22: (14, 16, 6),
+    23: (16, 12, 8, 6),
+    24: (20, 3, 6),
+    25: (21, 1, 7),
+}
+
 class Database:
     def __init__(self, path: Path):
         self.path = path
@@ -2551,7 +2579,7 @@ class Database:
 
 
     # ========================================================
-    # GP-H META v0.1 — v0.41.0
+    # GP-H META v0.2 — v0.47.4 (Tabela 1 admitida como 21ª característica)
     # Meta-aprendizado SOMBRA, sem alterar qualquer método oficial.
     # Modelo: regressão logística L2 nativa, determinística e sem dependências.
     # ========================================================
@@ -2650,6 +2678,13 @@ class Database:
             except Exception: pass
         count=base_groups.count(group)
         features += [float(count>0), min(1.0,max(0,count-1)/2.0)]
+
+        table1_votes = sum(
+            1 for source_group in base_groups
+            if group in META_TABLE1_PULLS.get(int(source_group), ())
+        )
+        table1_strength = float(table1_votes) / float(max(1, len(base_groups)))
+        features += [table1_strength]
         return [float(v) for v in features]
 
     @classmethod
@@ -2803,7 +2838,7 @@ class Database:
 
     def meta_walk_forward(self, window=30, progress_callback=None, cancel_event=None):
         """
-        Walk-Forward rigoroso do GP-H Meta v0.1, exclusivamente diagnóstico.
+        Walk-Forward rigoroso do GP-H Meta v0.2, exclusivamente diagnóstico.
 
         Reconstrói sinais históricos com os métodos atuais e cutoff da própria
         extração-base. Para cada rodada avaliada:
@@ -2826,7 +2861,7 @@ class Database:
         benchmark_names=(
             "Reset Cobertura","Puxada Combinada","Similaridade","Histórico Concentrado"
         )
-        method_order=("GP-H Meta v0.1",)+benchmark_names
+        method_order=("GP-H Meta v0.2",)+benchmark_names
 
         draws=self._draws_in_order()
         key_to_index={(d["data"],d["sorteio"],d["hora"]):i for i,d in enumerate(draws)}
@@ -2925,7 +2960,7 @@ class Database:
                 "window":window,"requested_rounds":window,"reconstructed_rounds":len(reconstructed),
                 "simulated_rounds":0,"cancelled":True,"summary":[],"details":[],
                 "meta_head_to_head":[],"random_baseline":{},"lookahead_safe":True,
-                "model_version":"META_LOGIT_NATIVE_V1","brain_frozen":True,
+                "model_version":"META_LOGIT_NATIVE_V2_TABLE1","brain_frozen":True,
             }
 
         if len(reconstructed) <= min_train:
@@ -2933,7 +2968,7 @@ class Database:
                 "window":window,"requested_rounds":window,"reconstructed_rounds":len(reconstructed),
                 "simulated_rounds":0,"cancelled":False,"summary":[],"details":[],
                 "meta_head_to_head":[],"random_baseline":{},"lookahead_safe":True,
-                "model_version":"META_LOGIT_NATIVE_V1","brain_frozen":True,
+                "model_version":"META_LOGIT_NATIVE_V2_TABLE1","brain_frozen":True,
                 "note":f"A reconstrução produziu {len(reconstructed)} rodada(s) válidas; o Meta exige pelo menos {min_train} anteriores para começar.",
             }
 
@@ -2960,17 +2995,17 @@ class Database:
                 ranking.sort(key=lambda item:(-item[0],item[1]))
                 groups=[int(g) for _score,g in ranking[:5]]
                 target_unique=set(int(g) for g in current["result_groups"])
-                methods["GP-H Meta v0.1"]={
+                methods["GP-H Meta v0.2"]={
                     "available":True,"groups":groups,
                     "animals":[BICHOS.get(g,str(g)) for g in groups],
                     "scores":[round(float(score),3) for score,_g in ranking[:5]],
                     "coverage_hits":len(set(groups)&target_unique),"position_hits":None,
                     "random_expected":5.0*len(target_unique)/25.0,
                     "training_rounds":len(prior),"training_examples":len(examples),
-                    "model_version":"META_LOGIT_NATIVE_V1","lookahead_safe":True,
+                    "model_version":"META_LOGIT_NATIVE_V2_TABLE1","lookahead_safe":True,
                 }
             else:
-                methods["GP-H Meta v0.1"]={
+                methods["GP-H Meta v0.2"]={
                     "available":False,"groups":[],"animals":[],"coverage_hits":None,
                     "position_hits":None,"random_expected":0.0,"training_rounds":len(prior),
                     "error":"Modelo não pôde ser ajustado.","lookahead_safe":True,
@@ -3036,7 +3071,7 @@ class Database:
         for method in benchmark_names:
             vals=[]
             for row in details:
-                m=row["methods"].get("GP-H Meta v0.1") or {}
+                m=row["methods"].get("GP-H Meta v0.2") or {}
                 b=row["methods"].get(method) or {}
                 if m.get("available") and b.get("available"):
                     vals.append((int(m.get("coverage_hits") or 0),int(b.get("coverage_hits") or 0)))
@@ -3069,7 +3104,7 @@ class Database:
             "paired_summary":paired_summary,"best_paired":paired_summary[0] if paired_summary else None,
             "meta_head_to_head":meta_head_to_head,"random_baseline":random_baseline,
             "robustness":robustness,"details":details,"date_from":date_from,"date_to":date_to,
-            "model_version":"META_LOGIT_NATIVE_V1","brain_frozen":True,
+            "model_version":"META_LOGIT_NATIVE_V2_TABLE1","brain_frozen":True,
             "lookahead_safe":all(
                 bool(sig.get("lookahead_safe",True))
                 for row in details for sig in row.get("methods",{}).values() if sig.get("available")
@@ -3092,7 +3127,7 @@ class Database:
                 "available":False,"status":"AMOSTRA INSUFICIENTE","training_snapshots":n,
                 "same_hour_snapshots":same_hour,"minimum_snapshots":20,
                 "reason":"O GP-H Meta começa somente com 20 snapshots auditados anteriores.",
-                "model_version":"META_LOGIT_NATIVE_V1","lookahead_safe":True,
+                "model_version":"META_LOGIT_NATIVE_V2_TABLE1","lookahead_safe":True,
             }
         try:
             historical=self.method_historico_concentrado_v01(
@@ -3118,7 +3153,7 @@ class Database:
         status="SOMBRA ATIVA" if n>=30 and same_hour>=6 else "EXPERIMENTAL"
         return {
             "available":True,"status":status,"objective":"1º–5º",
-            "model_version":"META_LOGIT_NATIVE_V1","training_snapshots":n,
+            "model_version":"META_LOGIT_NATIVE_V2_TABLE1","training_snapshots":n,
             "training_examples":len(examples),"same_hour_snapshots":same_hour,
             "groups":[r["grupo"] for r in ranking[:5]],
             "animals":[r["bicho"] for r in ranking[:5]],
@@ -3172,7 +3207,7 @@ class Database:
                 "minimum_play_snapshots": 1,
                 "minimum_maturity_snapshots": 20,
                 "reason": "O GP-H Meta precisa de pelo menos 1 snapshot auditado anterior para iniciar o modo jogável em formação.",
-                "model_version": "META_LOGIT_NATIVE_V1",
+                "model_version": "META_LOGIT_NATIVE_V2_TABLE1",
                 "lookahead_safe": True,
                 "play_only": True,
             }
@@ -3213,7 +3248,7 @@ class Database:
             "available": True,
             "status": "EM FORMAÇÃO",
             "objective": "1º–5º",
-            "model_version": "META_LOGIT_NATIVE_V1",
+            "model_version": "META_LOGIT_NATIVE_V2_TABLE1",
             "training_snapshots": n,
             "training_examples": len(examples),
             "same_hour_snapshots": same_hour,
@@ -17333,7 +17368,7 @@ class App(tk.Tk):
         )
         self.play_method_badge.grid(row=2, column=5, sticky="w", pady=(2, 0))
 
-        # GP-H META v0.1 — seletor jogável, visualmente separado dos demais.
+        # GP-H META v0.2 — seletor jogável, visualmente separado dos demais.
         self.play_meta_card = tk.Frame(
             self.play_body,
             bg=self.colors["card2"],
@@ -17346,7 +17381,7 @@ class App(tk.Tk):
         meta_head = tk.Frame(self.play_meta_card, bg=self.colors["card2"])
         meta_head.pack(fill="x")
         tk.Label(
-            meta_head, text="GP-H META v0.1", bg=self.colors["card2"],
+            meta_head, text="GP-H META v0.2", bg=self.colors["card2"],
             fg=self.colors["text"], font=("Segoe UI Semibold", 12),
         ).pack(side="left")
         tk.Label(
@@ -18653,7 +18688,7 @@ class App(tk.Tk):
                     "Manual"
                     if generation.get("strategy") == "Manual"
                     else "Gerada • GP-H Meta"
-                    if generation.get("selector") == "GP-H Meta v0.1"
+                    if generation.get("selector") == "GP-H Meta v0.2"
                     else "Gerada"
                 ),
             })
@@ -19047,12 +19082,12 @@ class App(tk.Tk):
         if kind == "Fechamento de Grupo":
             methods = [
                 "Histórico • Concentrado",
-                "★ META • GP-H Meta v0.1",
+                "★ META • GP-H Meta v0.2",
             ]
         elif kind == "Centena":
             methods = [
                 "Oficial • Reset + Lei GP-H",
-                "★ META • GP-H Meta v0.1",
+                "★ META • GP-H Meta v0.2",
                 "Especial • Seca do Dia 1º",
                 "Experimental • Puxada Combinada",
                 "Experimental • Similaridade do Dia",
@@ -19061,7 +19096,7 @@ class App(tk.Tk):
         elif kind == "Milhar":
             methods = [
                 "Oficial • Reset + Lei GP-H",
-                "★ META • GP-H Meta v0.1",
+                "★ META • GP-H Meta v0.2",
                 "Especial • Seca do Dia 1º",
                 "Experimental • Puxada Combinada",
                 "Experimental • Similaridade do Dia",
@@ -19070,7 +19105,7 @@ class App(tk.Tk):
         elif kind == "Grupo":
             methods = [
                 "Oficial • Reset",
-                "★ META • GP-H Meta v0.1",
+                "★ META • GP-H Meta v0.2",
                 "Experimental • Puxada Combinada",
                 "Experimental • Similaridade do Dia",
                 "Manual",
@@ -19078,7 +19113,7 @@ class App(tk.Tk):
         elif kind in GROUP_COMBO_SIZES or kind in PASSE_MODALITIES:
             methods = [
                 "Oficial • Reset combinações",
-                "★ META • GP-H Meta v0.1",
+                "★ META • GP-H Meta v0.2",
                 "Experimental • Puxada Combinada",
                 "Experimental • Similaridade combinações",
                 "Manual",
@@ -19086,7 +19121,7 @@ class App(tk.Tk):
         elif kind in DEZENA_COMBO_SIZES or kind in INVERTED_MODALITIES or kind == "Dezena":
             methods = [
                 "Oficial • Reset + Histórica",
-                "★ META • GP-H Meta v0.1",
+                "★ META • GP-H Meta v0.2",
                 "Experimental • Puxada Combinada",
                 "Experimental • Similaridade do Dia",
                 "Manual",
@@ -19160,7 +19195,7 @@ class App(tk.Tk):
         if method.startswith("★ META"):
             badge = ("META • ADAPTATIVO", "#0B6273", "#E7FDFF")
             help_text = (
-                "GP-H Meta v0.1 usa o ranking aprendido com snapshots auditados. "
+                "GP-H Meta v0.2 usa 21 características; a Tabela 1 entrou como sinal adicional após passar no walk-forward de admissão. "
                 "A estrutura do cérebro permanece congelada e a previsão usada no jogo é congelada antes do resultado."
             )
         elif method.startswith("Oficial"):
@@ -19510,10 +19545,10 @@ class App(tk.Tk):
                             meta_payload = formation
                         else:
                             reason = formation.get("reason") or formation.get("status") or "Meta em formação indisponível"
-                            raise ValueError(f"GP-H Meta v0.1 ainda não pode gerar esta rodada: {reason}")
+                            raise ValueError(f"GP-H Meta v0.2 ainda não pode gerar esta rodada: {reason}")
                     else:
                         reason = meta_payload.get("reason") or meta_payload.get("status") or "Meta indisponível"
-                        raise ValueError(f"GP-H Meta v0.1 ainda não pode gerar esta rodada: {reason}")
+                        raise ValueError(f"GP-H Meta v0.2 ainda não pode gerar esta rodada: {reason}")
 
                 ranking = list(meta_payload.get("ranking") or [])
                 if len(ranking) < top_animals:
@@ -19521,7 +19556,7 @@ class App(tk.Tk):
                         f"O Meta disponibilizou {len(ranking)} bichos no ranking; foram pedidos {top_animals}."
                     )
                 groups = [int(r["grupo"]) for r in ranking[:top_animals]]
-                selector = "GP-H Meta v0.1"
+                selector = "GP-H Meta v0.2"
                 if hasattr(self, "play_meta_status"):
                     names = ", ".join(BICHOS[g].title() for g in groups[:8])
                     suffix = "..." if len(groups) > 8 else ""
@@ -24007,7 +24042,7 @@ class App(tk.Tk):
         card=ttk.Frame(body,style="Card.TFrame",padding=11)
         card.pack(fill="x",pady=(0,8))
         head=ttk.Frame(card,style="Card.TFrame"); head.pack(fill="x")
-        ttk.Label(head,text="GP-H META v0.1 — SOMBRA",style="CardTitle.TLabel").pack(side="left")
+        ttk.Label(head,text="GP-H META v0.2 — SOMBRA",style="CardTitle.TLabel").pack(side="left")
         ttk.Label(head,text=meta.get("status") or "AGUARDANDO",style="CardMuted.TLabel").pack(side="right")
 
         if not meta:
@@ -24283,7 +24318,7 @@ class App(tk.Tk):
         self.meta_wf_status.configure(text=status)
         self.meta_wf_note.configure(text=(
             f"Treino mínimo {int(result.get('min_training_rounds') or 20)} • até {int(result.get('training_limit') or 160)} rodadas anteriores por previsão. "
-            "O cérebro META_LOGIT_NATIVE_V1 é o mesmo da v0.41; este simulador só mede desempenho e não alimenta nem altera o Meta prospectivo."
+            "O cérebro META_LOGIT_NATIVE_V2_TABLE1 é o mesmo da v0.41; este simulador só mede desempenho e não alimenta nem altera o Meta prospectivo."
         ))
         self.meta_wf_run_btn.configure(state="normal"); self.meta_wf_cancel_btn.configure(state="disabled")
         self.meta_wf_export_btn.configure(state="normal" if n else "disabled")

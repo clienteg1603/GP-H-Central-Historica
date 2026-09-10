@@ -8,6 +8,12 @@ REVISÃO v0.47.4 — LEI DE GERAÇÃO GP-H UNIVERSAL
 - A quantidade de bichos deixa de ser controle exclusivo do Meta e passa a ser um controle da Lei GP-H para os métodos automáticos.
 - Fechamentos de Grupo preservam o gerador comum concentrado/equilibrado validado na v0.47.3, evitando dependência total do líder quando existe alternativa.
 - O cérebro dos seletores não é recalibrado por esta mudança; a alteração é de geração operacional.
+- Tabela 1 / Puxada Antiga: o teste de admissão foi definido antes do resultado e comparou o Meta de 20 características com um candidato de 21 características em 180 rodadas walk-forward, sem lookahead.
+- Resultado do teste: Meta 20f = 155 acertos de bicho no Top 5; Meta 21f + Tabela 1 = 165, ganho líquido +10. No confronto por rodada, o candidato venceu 50, perdeu 42 e empatou 88.
+- Nas três janelas temporais contíguas: 47→52 (+5), 56→51 (-5), 52→62 (+10). Duas das três janelas melhoraram.
+- Como os três critérios pré-declarados foram cumpridos — ganho líquido positivo, melhora em pelo menos 2/3 janelas e mais vitórias que derrotas — a Tabela 1 foi ADMITIDA como 21ª característica do GP-H Meta v0.2.
+- A 21ª característica usa somente a extração-base já conhecida: cada bicho da base vota nos grupos listados na Tabela 1, repetição conta novamente e a força é normalizada pela quantidade de prêmios da base. O resultado-alvo nunca entra no cálculo da previsão.
+- Reset, Puxada, Similaridade, Histórico Concentrado e Decisão permanecem com seus cérebros inalterados; somente o Meta muda de 20 para 21 características por autorização condicionada ao teste.
 
 REVISÃO v0.47.3 — TERNOS / DIVERSIFICAÇÃO DO LÍDER
 
