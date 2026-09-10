@@ -1,0 +1,26 @@
+name: TEMP inspect coverage button v0.47.9
+on:
+  push:
+    branches: [feat-coverage-manual-search-v0479]
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Inspect UI methods
+        run: |
+          python - <<'PY'
+          import ast
+          from pathlib import Path
+          text=Path('source/gph_central.py').read_text(encoding='utf-8')
+          tree=ast.parse(text); lines=text.splitlines()
+          wanted={'_decision_build_coverage_evolution','show_decision_page','decision_coverage_evolution'}
+          for n in ast.walk(tree):
+              if isinstance(n,ast.FunctionDef) and n.name in wanted:
+                  print('\n==== '+n.name+' ====')
+                  print('\n'.join(lines[n.lineno-1:n.end_lineno]))
+          print('\n==== BUTTON PATTERNS ====')
+          for i,line in enumerate(lines,1):
+              if 'TButton' in line and ('command=' in line or 'style=' in line):
+                  print(i, line[:300])
+          PY
