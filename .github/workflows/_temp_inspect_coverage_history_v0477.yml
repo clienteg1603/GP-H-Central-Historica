@@ -1,0 +1,24 @@
+name: TEMP inspeciona histórico da cobertura v0.47.7
+on:
+  push:
+    branches: [fix-coverage-history-v0477]
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Extrair métodos relevantes
+        run: |
+          python - <<'PY'
+          import ast
+          from pathlib import Path
+          p=Path('source/gph_central.py')
+          text=p.read_text(encoding='utf-8')
+          tree=ast.parse(text)
+          lines=text.splitlines()
+          wanted={'_decision_row_to_dict','_decision_audited_rows','decision_coverage_evolution','_meta_audit_payload','audit_decision_snapshots'}
+          for node in ast.walk(tree):
+              if isinstance(node,(ast.FunctionDef,ast.AsyncFunctionDef)) and node.name in wanted:
+                  print('\n'+'='*25+' '+node.name+' '+'='*25)
+                  print('\n'.join(lines[node.lineno-1:node.end_lineno]))
+          PY
