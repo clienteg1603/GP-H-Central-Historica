@@ -91,7 +91,7 @@ def write_crash_log(exc: BaseException):
 
 
 APP_NAME = "GP-H Central Histórica"
-APP_VERSION = "0.47.6"
+APP_VERSION = "0.47.7"
 START_DATE = date(2026, 1, 2)
 BASE_URL = "https://brasildeunoposte.com.br/resultado-do-jogo-do-bicho-deu-no-poste-{date}/"
 # Ao buscar/atualizar resultados, relê os últimos 7 dias para absorver
@@ -1722,6 +1722,55 @@ class Database:
         return True
 
     @staticmethod
+    def _coverage_frozen_audit(meta, result_groups_json):
+        """
+        Audita um Top 5 Meta JÁ CONGELADO contra o resultado já conhecido.
+
+        Não recalcula previsão, ranking, peso ou confiança. Serve somente para
+        reaproveitar snapshots prospectivos antigos que ainda não possuíam
+        meta_audit_json quando o painel Evolução de Cobertura foi criado.
+        """
+        meta = meta or {}
+        core_groups = []
+        for raw_group in (meta.get("groups") or [])[:5]:
+            try:
+                group = int(raw_group)
+            except Exception:
+                continue
+            if 1 <= group <= 25 and group not in core_groups:
+                core_groups.append(group)
+
+        decoded = result_groups_json
+        if isinstance(decoded, str):
+            try:
+                decoded = json.loads(decoded or "[]")
+            except Exception:
+                decoded = []
+        if not isinstance(decoded, (list, tuple)):
+            decoded = []
+
+        result_groups = []
+        for raw_group in decoded:
+            try:
+                group = int(raw_group)
+            except Exception:
+                continue
+            if 1 <= group <= 25:
+                result_groups.append(group)
+
+        if not core_groups or not result_groups:
+            return {"available": False, "source": "frozen_history"}
+
+        coverage_hits = len(set(core_groups) & set(result_groups))
+        return {
+            "available": True,
+            "source": "frozen_history",
+            "groups": core_groups,
+            "result_groups": result_groups,
+            "coverage_hits": coverage_hits,
+        }
+
+    @staticmethod
     def _coverage_evolution_summary(records, window, target_pct=50.0):
         """Resume uma janela diagnóstica; não alimenta ranking, pesos ou Meta."""
         try:
@@ -1804,8 +1853,16 @@ class Database:
                 row = self._decision_row_to_dict(raw)
                 meta = row.get("meta") or {}
                 audit = row.get("meta_audit") or {}
+                audit_source = "saved_audit"
                 if not audit.get("available"):
-                    continue
+                    try:
+                        frozen_result_json = raw["result_groups_json"]
+                    except Exception:
+                        frozen_result_json = row.get("result_groups_json") or "[]"
+                    audit = self._coverage_frozen_audit(meta, frozen_result_json)
+                    if not audit.get("available"):
+                        continue
+                    audit_source = "frozen_history"
                 core_groups = []
                 for raw_group in (meta.get("groups") or [])[:5]:
                     try:
@@ -1895,6 +1952,7 @@ class Database:
                     "best_core_terno": best_core_terno,
                     "terno_count": terno_count,
                     "core_terno_count": core_terno_count,
+                    "audit_source": audit_source,
                     "diagnostic": diagnostic,
                 })
                 if len(records) >= needed:
@@ -1913,9 +1971,11 @@ class Database:
             "windows": summaries,
             "recent": records[:recent_limit],
             "eligible_rounds": len(records),
+            "historical_bootstrap_rounds": sum(r.get("audit_source") == "frozen_history" for r in records),
             "note": (
-                "Cobertura usa o Top 5 Meta congelado. Conversão 3→3 só usa Ternos Meta registrados, "
-                "da mesma base prospectiva e formados integralmente pelo Top 5; ausência de Terno não vira falha de conversão."
+                "Cobertura e Taxa 2+ reaproveitam também Top 5 Meta que já estavam congelados antes dos resultados, "
+                "mesmo quando a auditoria Meta ainda não existia. Conversão 3→3 continua usando somente Ternos Meta "
+                "realmente registrados, da mesma base prospectiva e formados integralmente pelo Top 5; ausência de Terno não vira falha."
             ),
         }
 
@@ -24640,7 +24700,7 @@ class App(tk.Tk):
         head = ttk.Frame(card, style="Card.TFrame")
         head.pack(fill="x")
         ttk.Label(head, text="EVOLUÇÃO DE COBERTURA", style="CardTitle.TLabel").pack(side="left")
-        ttk.Label(head, text="diagnóstico • janelas 20 / 30 / 60", style="CardMuted.TLabel").pack(side="right")
+        ttk.Label(head, text="histórico congelado + novas rodadas • janelas 20 / 30 / 60", style="CardMuted.TLabel").pack(side="right")
         ttk.Label(
             card,
             text=(
@@ -24677,7 +24737,7 @@ class App(tk.Tk):
         if not summaries or not int(report.get("eligible_rounds") or 0):
             ttk.Label(
                 card,
-                text="A coleta ainda não possui snapshots Meta auditados suficientes para formar este painel.",
+                text="Ainda não há Top 5 Meta congelados com resultado disponível suficientes para formar este painel.",
                 style="CardMuted.TLabel", wraplength=1050,
             ).pack(anchor="w")
             return

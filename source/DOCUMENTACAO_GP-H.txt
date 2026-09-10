@@ -1,3 +1,11 @@
+REVISÃO v0.47.7 — BOOTSTRAP HISTÓRICO DA EVOLUÇÃO DE COBERTURA
+
+- O painel Decisão > Auditoria > Evolução de Cobertura deixa de depender exclusivamente de meta_audit_json criado nas versões mais recentes.
+- Rodadas antigas passam a entrar em Cobertura do Núcleo e Taxa 2+ quando já possuíam Top 5 do GP-H Meta congelado antes do sorteio e o resultado posterior está registrado.
+- Esse bootstrap é somente de auditoria: o Meta antigo NÃO é recalculado com dados futuros, nenhum ranking histórico é recriado e nenhum peso/confiança/decisão é alterado.
+- Melhor Terno e Conversão 3→3 continuam exigindo Ternos Meta realmente registrados para aquela mesma base prospectiva; Ternos ausentes não são reconstruídos retrospectivamente.
+- O objetivo é iniciar as janelas 20/30/60 com o máximo de histórico prospectivo legítimo já existente, reduzindo o tempo de formação do diagnóstico sem contaminar a avaliação.
+
 REVISÃO v0.47.6 — EVOLUÇÃO DE COBERTURA / META DIAGNÓSTICA
 
 - Decisão > Auditoria recebe o painel Evolução de Cobertura, com janelas móveis de 20, 30 e 60 rodadas.
