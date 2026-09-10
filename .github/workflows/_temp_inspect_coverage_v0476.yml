@@ -12,16 +12,17 @@ jobs:
       - uses: actions/checkout@v4
         with:
           ref: feat-evolucao-cobertura-v0476
-      - name: Extrair jogos congelados e Ternos
+      - name: Extrair fluxo Meta e Lei GP-H
         run: |
-          sed -n '1180,1490p' source/gph_central.py > _ctx_games_schema_v0476.txt
-          grep -n -C 8 'jogos_congelados' source/gph_central.py > _ctx_games_queries_v0476.txt || true
-          grep -n -C 10 'Terno de Grupo' source/gph_central.py > _ctx_ternos_v0476.txt || true
-          grep -n -C 8 'seletor' source/gph_central.py > _ctx_seletor_v0476.txt || true
+          sed -n '7800,8200p' source/gph_central.py > _ctx_law_v0476.txt
+          sed -n '9900,10160p' source/gph_central.py > _ctx_group_bundle_v0476.txt
+          sed -n '18650,19580p' source/gph_central.py > _ctx_play_meta_v0476.txt
+          grep -n -C 12 'meta_bundle' source/gph_central.py > _ctx_meta_bundle_hits_v0476.txt || true
+          grep -n -C 12 'META' source/gph_central.py | tail -n 700 > _ctx_meta_hits_v0476.txt || true
       - name: Persistir inspeção
         run: |
           git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add _ctx_games_schema_v0476.txt _ctx_games_queries_v0476.txt _ctx_ternos_v0476.txt _ctx_seletor_v0476.txt
-          git commit -m "TEMP fonte prospectiva dos Ternos [skip-inspect]" || exit 0
+          git config user.email "41898282+clienteg1603@users.noreply.github.com"
+          git add _ctx_law_v0476.txt _ctx_group_bundle_v0476.txt _ctx_play_meta_v0476.txt _ctx_meta_bundle_hits_v0476.txt _ctx_meta_hits_v0476.txt
+          git commit -m "TEMP fluxo Meta e Lei GP-H [skip-inspect]" || exit 0
           git push
