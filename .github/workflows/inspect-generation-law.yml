@@ -1,0 +1,30 @@
+name: Inspect generation law
+on:
+  workflow_dispatch:
+  push:
+    branches: [study-meta-table1]
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: study-meta-table1
+      - name: Inspect
+        run: |
+          python - <<'PY'
+          import ast
+          from pathlib import Path
+          p=Path('source/gph_central.py')
+          s=p.read_text(encoding='utf-8')
+          t=ast.parse(s)
+          wanted=('distribute_game_counts','generate_centenas_3plus1','generate_group_combinations','show_play_page','_play','play_','generate_')
+          for node in ast.walk(t):
+              if isinstance(node, ast.FunctionDef):
+                  name=node.name
+                  if any(x in name for x in wanted):
+                      seg=ast.get_source_segment(s,node) or ''
+                      if ('centena' in seg.lower() or 'milhar' in seg.lower() or 'group' in seg.lower() or 'jogar' in seg.lower() or 'play' in name.lower()):
+                          print(f'\n===== {name} L{node.lineno}-{getattr(node,"end_lineno",0)} =====')
+                          print(seg[:26000])
+          PY
