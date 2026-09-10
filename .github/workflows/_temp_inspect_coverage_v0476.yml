@@ -12,16 +12,16 @@ jobs:
       - uses: actions/checkout@v4
         with:
           ref: feat-evolucao-cobertura-v0476
-      - name: Extrair trechos exatos
+      - name: Extrair jogos congelados e Ternos
         run: |
-          sed -n '1580,2200p' source/gph_central.py > _ctx_decision_core_v0476.txt
-          sed -n '4200,4450p' source/gph_central.py > _ctx_decision_audit_v0476.txt
-          sed -n '23250,24280p' source/gph_central.py > _ctx_decision_ui_v0476.txt
-          sed -n '24280,24980p' source/gph_central.py > _ctx_decision_ui2_v0476.txt
-      - name: Persistir trechos no branch
+          sed -n '1180,1490p' source/gph_central.py > _ctx_games_schema_v0476.txt
+          grep -n -C 8 'jogos_congelados' source/gph_central.py > _ctx_games_queries_v0476.txt || true
+          grep -n -C 10 'Terno de Grupo' source/gph_central.py > _ctx_ternos_v0476.txt || true
+          grep -n -C 8 'seletor' source/gph_central.py > _ctx_seletor_v0476.txt || true
+      - name: Persistir inspeção
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add _ctx_decision_core_v0476.txt _ctx_decision_audit_v0476.txt _ctx_decision_ui_v0476.txt _ctx_decision_ui2_v0476.txt
-          git commit -m "TEMP trechos exatos Decisão v0.47.6 [skip-inspect]" || exit 0
+          git add _ctx_games_schema_v0476.txt _ctx_games_queries_v0476.txt _ctx_ternos_v0476.txt _ctx_seletor_v0476.txt
+          git commit -m "TEMP fonte prospectiva dos Ternos [skip-inspect]" || exit 0
           git push
