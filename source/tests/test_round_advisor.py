@@ -41,8 +41,6 @@ class RoundAdvisorTests(unittest.TestCase):
         self.assertEqual(rec["method"], "★ META • GP-H Meta v0.2")
         self.assertEqual(rec["quantity"], 5)
         self.assertAlmostEqual(rec["gain"], .32)
-        # Histórico Concentrado não pode competir como Centena, ainda que o
-        # relatório contenha artificialmente um ótimo score de Centena.
         self.assertFalse(any(
             row["selector"] == "Histórico Concentrado" and row["kind"] == "Centena"
             for row in [rec] + rec["alternatives"]
@@ -90,6 +88,16 @@ class RoundAdvisorTests(unittest.TestCase):
         for name in ("Reset Cobertura", "Puxada Combinada", "Similaridade", "GP-H Meta v0.2"):
             self.assertEqual(set(advisor.PLAY_MAPPING[name]), {"Centena", "Terno de Grupo"})
 
+    def test_historical_concentrated_preview_is_editable_as_terno(self):
+        rows = [{"numero": "01-02-03"}, {"numero": "01-02-04"}]
+        kind, selected = advisor._generation_rows_for_edit({
+            "historical_concentrated": True,
+            "kind": "Fechamento de Grupo",
+            "rows": rows,
+        })
+        self.assertEqual(kind, "Terno de Grupo")
+        self.assertEqual(selected, rows)
+
     def test_frozen_meta_reader_requires_real_freeze_and_five_distinct_groups(self):
         con = sqlite3.connect(":memory:")
         con.row_factory = sqlite3.Row
@@ -106,8 +114,6 @@ class RoundAdvisorTests(unittest.TestCase):
             def connect(self):
                 return con
 
-        # O helper fecha a conexão por contrato; use backup para consultar sem
-        # depender dela depois.
         mapping, diag = advisor._load_frozen_meta_groups(FakeDB(), "2026-08-01", "2026-08-31", "14:00")
         self.assertEqual(mapping, {"2026-08-10|PT|14:00": [1,2,3,4,5]})
         self.assertEqual(diag["eligible_rows"], 1)
