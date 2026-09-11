@@ -9,7 +9,7 @@ datas = [
 ]
 
 analysis = Analysis(
-    ["gph_central.py"],
+    ["gph_bootstrap.py"],
     pathex=[str(root)],
     binaries=[],
     datas=datas,
