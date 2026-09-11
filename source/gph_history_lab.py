@@ -22,8 +22,10 @@ PROTOCOL = "GP-H Pesquisa Histórica v1"
 SELECTORS = {
     "Reset Cobertura": "method_reset_coverage_v1",
     "Puxada Combinada": "method_convergencia_g5",
+    "Similaridade": "method_similarity_day",
     "Histórico Concentrado": "method_historico_concentrado_v01",
 }
+FROZEN_SELECTOR = "__FROZEN_GROUPS__"
 RANDOM_REPEATS = 200
 MIN_TRAIN = 60
 SEED = 478049
@@ -399,7 +401,9 @@ def run_history(db_class, db_path, options, progress=None, cancel=None):
         raise ValueError("A data inicial deve ser anterior ou igual à final.")
     scope = options.get("scope", SCOPES[0])
     selector = options.get("selector", next(iter(SELECTORS)))
-    if scope not in SCOPES or selector not in SELECTORS:
+    frozen_groups = dict(options.get("frozen_groups") or {})
+    is_frozen_selector = selector == FROZEN_SELECTOR
+    if scope not in SCOPES or (selector not in SELECTORS and not is_frozen_selector):
         raise ValueError("Escopo ou seletor inválido.")
     draws, integrity = read_history(db_path)
     draws = [d for d in draws if d["data"] <= end]
@@ -454,8 +458,21 @@ def run_history(db_class, db_path, options, progress=None, cancel=None):
             if progress:
                 progress(len(records), len(pending), f"{target['data']} · {target['sorteio']} {target['hora']}")
             try:
-                selection = getattr(db, SELECTORS[selector])(*key(base), top_n=5)
-                groups = [int(r["grupo"]) for r in selection.get("selected", [])]
+                if is_frozen_selector:
+                    frozen_key = "|".join(str(target.get(k) or "") for k in ("data", "sorteio", "hora"))
+                    groups = [int(g) for g in frozen_groups.get(frozen_key, [])]
+                    if not groups:
+                        raise ValueError("alvo sem grupos congelados prospectivamente")
+                elif selector == "Similaridade":
+                    selection = db.method_similarity_day(*key(base), top_days=12)
+                    groups = []
+                    for row in selection.get("selected", []):
+                        group = int(row["grupo"])
+                        if group not in groups:
+                            groups.append(group)
+                else:
+                    selection = getattr(db, SELECTORS[selector])(*key(base), top_n=5)
+                    groups = [int(r["grupo"]) for r in selection.get("selected", [])]
                 if len(groups) != 5 or len(set(groups)) != 5:
                     raise ValueError("seletor não produziu cinco grupos distintos")
                 current = db.generate_gph_law_numbers(groups, total=20, scope=scope, previous_draw=base)
