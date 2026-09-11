@@ -43,6 +43,12 @@ jobs:
           if (-not (Test-Path (Join-Path $src "gph_central.py"))) {
             throw "Código-fonte não encontrado em source/gph_central.py"
           }
+          if (-not (Test-Path (Join-Path $src "gph_bootstrap.py"))) {
+            throw "Bootstrap não encontrado em source/gph_bootstrap.py"
+          }
+          if (-not (Test-Path (Join-Path $src "gph_round_advisor.py"))) {
+            throw "Assistente de rodada não encontrado em source/gph_round_advisor.py"
+          }
           if (-not (Test-Path (Join-Path $src "gph_updater.py"))) {
             throw "Código-fonte não encontrado em source/gph_updater.py"
           }
@@ -57,9 +63,9 @@ jobs:
         shell: pwsh
         run: |
           Set-Location "$env:SOURCE_DIR"
-          $text = Get-Content "gph_central.py" -Raw
+          $text = Get-Content "gph_version.py" -Raw
           $m = [regex]::Match($text, 'APP_VERSION\s*=\s*"([0-9]+\.[0-9]+\.[0-9]+)"')
-          if (-not $m.Success) { throw "APP_VERSION não encontrado em gph_central.py" }
+          if (-not $m.Success) { throw "APP_VERSION não encontrado em gph_version.py" }
           $version = $m.Groups[1].Value
           if ($env:CHANNEL -eq "stable") { $tag = "v$version" } else { $tag = "v$version-test" }
           $packageName = "GP-H_update_v$version.zip"
@@ -73,14 +79,14 @@ jobs:
         shell: pwsh
         run: |
           Set-Location "$env:SOURCE_DIR"
-          python -m py_compile gph_central.py gph_updater.py gph_history_lab.py gph_history_ui.py CRIAR_PACOTE_ATUALIZACAO.py
+          python -m py_compile gph_central.py gph_bootstrap.py gph_version.py gph_round_advisor.py gph_updater.py gph_history_lab.py gph_history_ui.py CRIAR_PACOTE_ATUALIZACAO.py
 
       - name: Testar laboratório histórico e interface Windows
         shell: pwsh
         run: |
           Set-Location "$env:SOURCE_DIR"
           python -m unittest discover -s tests -v
-          if ($LASTEXITCODE -ne 0) { throw "Testes do laboratório histórico falharam" }
+          if ($LASTEXITCODE -ne 0) { throw "Testes do laboratório histórico/assistente falharam" }
 
       - name: Instalar PyInstaller
         shell: pwsh
