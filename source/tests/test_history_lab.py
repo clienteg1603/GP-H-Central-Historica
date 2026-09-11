@@ -1,4 +1,5 @@
 """Regressões do laboratório: causalidade, isolamento e comparações equivalentes."""
+import gc
 import hashlib
 import json
 import math
@@ -22,7 +23,8 @@ def fixture(path, days=18, seed=771):
     db = central.Database(path)
     rng = random.Random(seed)
     day = date(2026, 1, 2)
-    with db.connect() as con:
+    con = db.connect()
+    try:
         for offset in range(days):
             current = day+timedelta(days=offset)
             for name, hour in db._operational_schedule_for_date(current.isoformat()):
@@ -31,6 +33,9 @@ def fixture(path, days=18, seed=771):
                     group = lab.group_of(number)
                     con.execute("INSERT INTO resultados(data,sorteio,hora,premio,milhar,centena,dezena,grupo,bicho,fonte) VALUES(?,?,?,?,?,?,?,?,?,?)",
                         (current.isoformat(), name, hour, prize, number, number[-3:], number[-2:], group, central.BICHOS[group], "https://example.test/result"))
+        con.commit()
+    finally:
+        con.close()
     return db
 
 
@@ -42,6 +47,10 @@ class HistoricalLabTests(unittest.TestCase):
         self.options = {"start": "2026-01-17", "end": "2026-01-18", "scope": "1º–5º", "selector": "Reset Cobertura"}
 
     def tearDown(self):
+        # Database.connect() usa conexões curtas em vários helpers legados. No
+        # Windows o arquivo temporário não pode ser removido até essas conexões
+        # sem referência serem finalizadas; force a coleta antes do cleanup.
+        gc.collect()
         self.tmp.cleanup()
 
     def test_hierarchy_is_normalized_and_preserves_group_support(self):
@@ -91,9 +100,13 @@ class HistoricalLabTests(unittest.TestCase):
         self.assertEqual(hashlib.sha256(self.path.read_bytes()).hexdigest(), before)
         target = first["records"][0]["target"]
         # Muda o alvo e todo o futuro: a previsão para esse alvo é idêntica.
-        with self.db.connect() as con:
+        con = self.db.connect()
+        try:
             con.execute("UPDATE resultados SET milhar='0000',centena='000',dezena='00',grupo=25,bicho='Vaca' "
                         "WHERE data > ? OR (data=? AND hora>=?)", (target["data"], target["data"], target["hora"]))
+            con.commit()
+        finally:
+            con.close()
         second = lab.run_history(central.Database, self.path, self.options)
         self.assertEqual(first["records"][0]["predictions"], second["records"][0]["predictions"])
         self.assertEqual(first["records"][0]["groups"], second["records"][0]["groups"])
@@ -115,9 +128,13 @@ class HistoricalLabTests(unittest.TestCase):
         draws, _ = lab.read_history(self.path)
         removed = next(d for d in draws if d["data"] == "2026-01-17" and d["sorteio"] == "PT")
         invalid = next(d for d in draws if d["data"] == "2026-01-18" and d["sorteio"] == "PTV")
-        with self.db.connect() as con:
+        con = self.db.connect()
+        try:
             con.execute("DELETE FROM resultados WHERE data=? AND sorteio=? AND hora=?", lab.key(removed))
             con.execute("UPDATE resultados SET centena='x' WHERE data=? AND sorteio=? AND hora=? AND premio=1", lab.key(invalid))
+            con.commit()
+        finally:
+            con.close()
         result = lab.run_history(central.Database, self.path, self.options)
         self.assertEqual(len(result["integrity"]["excluded"]), 1)
         missing = {lab.key(s["target"]) for s in result["skipped"]}
@@ -188,6 +205,7 @@ class HistoricalLabTests(unittest.TestCase):
                 process.terminate()
                 process.join(timeout=5)
             output.close()
+            output.join_thread()
 
     def test_no_spurious_confirmation_for_empty_or_tied_results(self):
         records = []
@@ -226,6 +244,7 @@ class UIIntegrationTests(unittest.TestCase):
                 self.assertTrue(lab_ui.alive())
             finally:
                 root.destroy()
+                gc.collect()
 
 
 if __name__ == "__main__":
