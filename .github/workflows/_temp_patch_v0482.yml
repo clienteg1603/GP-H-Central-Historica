@@ -1,0 +1,106 @@
+name: TEMP patch v0.48.2
+
+on:
+  push:
+    branches:
+      - feat-round-advisor-all-methods-v0482
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: ${{ !contains(github.event.head_commit.message, '[v0482-patch]') }}
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - name: Aplicar patch causal do laboratório
+        shell: pwsh
+        run: |
+          Set-Location "$env:GITHUB_WORKSPACE"
+          @'
+          from pathlib import Path
+
+          path = Path('source/gph_history_lab.py')
+          text = path.read_text(encoding='utf-8')
+
+          old = '''SELECTORS = {
+              "Reset Cobertura": "method_reset_coverage_v1",
+              "Puxada Combinada": "method_convergencia_g5",
+              "Histórico Concentrado": "method_historico_concentrado_v01",
+          }
+          RANDOM_REPEATS = 200'''
+          new = '''SELECTORS = {
+              "Reset Cobertura": "method_reset_coverage_v1",
+              "Puxada Combinada": "method_convergencia_g5",
+              "Similaridade": "method_similarity_day",
+              "Histórico Concentrado": "method_historico_concentrado_v01",
+          }
+          FROZEN_SELECTOR = "__FROZEN_GROUPS__"
+          RANDOM_REPEATS = 200'''
+          if old not in text:
+              raise SystemExit('bloco SELECTORS não encontrado')
+          text = text.replace(old, new, 1)
+
+          old = '''    scope = options.get("scope", SCOPES[0])
+              selector = options.get("selector", next(iter(SELECTORS)))
+              if scope not in SCOPES or selector not in SELECTORS:
+                  raise ValueError("Escopo ou seletor inválido.")
+              draws, integrity = read_history(db_path)'''
+          new = '''    scope = options.get("scope", SCOPES[0])
+              selector = options.get("selector", next(iter(SELECTORS)))
+              frozen_groups = dict(options.get("frozen_groups") or {})
+              is_frozen_selector = selector == FROZEN_SELECTOR
+              if scope not in SCOPES or (selector not in SELECTORS and not is_frozen_selector):
+                  raise ValueError("Escopo ou seletor inválido.")
+              draws, integrity = read_history(db_path)'''
+          if old not in text:
+              raise SystemExit('validação run_history não encontrada')
+          text = text.replace(old, new, 1)
+
+          old = '''            try:
+                          selection = getattr(db, SELECTORS[selector])(*key(base), top_n=5)
+                          groups = [int(r["grupo"]) for r in selection.get("selected", [])]
+                          if len(groups) != 5 or len(set(groups)) != 5:
+                              raise ValueError("seletor não produziu cinco grupos distintos")
+                          current = db.generate_gph_law_numbers(groups, total=20, scope=scope, previous_draw=base)'''
+          new = '''            try:
+                          if is_frozen_selector:
+                              frozen_key = "|".join(str(target.get(k) or "") for k in ("data", "sorteio", "hora"))
+                              groups = [int(g) for g in frozen_groups.get(frozen_key, [])]
+                              if not groups:
+                                  raise ValueError("alvo sem grupos congelados prospectivamente")
+                          elif selector == "Similaridade":
+                              selection = db.method_similarity_day(*key(base), top_days=12)
+                              groups = []
+                              for row in selection.get("selected", []):
+                                  group = int(row["grupo"])
+                                  if group not in groups:
+                                      groups.append(group)
+                          else:
+                              selection = getattr(db, SELECTORS[selector])(*key(base), top_n=5)
+                              groups = [int(r["grupo"]) for r in selection.get("selected", [])]
+                          if len(groups) != 5 or len(set(groups)) != 5:
+                              raise ValueError("seletor não produziu cinco grupos distintos")
+                          current = db.generate_gph_law_numbers(groups, total=20, scope=scope, previous_draw=base)'''
+          if old not in text:
+              raise SystemExit('bloco de seleção run_history não encontrado')
+          text = text.replace(old, new, 1)
+          path.write_text(text, encoding='utf-8')
+
+          docs = Path('source/DOCUMENTACAO_GP-H.txt')
+          doc = docs.read_text(encoding='utf-8')
+          marker = 'REVISÃO v0.48.2 — RECOMENDAÇÃO DA PRÓXIMA RODADA / TODOS OS MÉTODOS VÁLIDOS'
+          if marker not in doc:
+              doc += f'''\n\n{marker}\n- O botão AVALIAR PRÓXIMA RODADA usa a última extração disponível apenas como estado/base atual e avalia o próximo horário com uma janela de até 90 dias anteriores.\n- A disputa operacional fica restrita, nesta fase, a Centena (20 palpites padrão) e Terno de Grupo (5 palpites padrão).\n- Entram na comparação os seletores que podem ser reconstruídos causalmente: Reset Cobertura, Puxada Combinada, Similaridade do Dia e Histórico Concentrado.\n- O GP-H Meta entra somente por Top 5 realmente congelado prospectivamente em decision_snapshots; o avaliador nunca recria um Meta antigo usando informação posterior.\n- Para cada Top 5 Meta congelado, o laboratório reconstrói Centenas e Ternos sobre uma base-prefixo que contém somente resultados anteriores ao alvo.\n- Similaridade só entra numa rodada histórica quando produz cinco grupos distintos, preservando comparação equivalente de 20 Centenas e 5 Ternos.\n- Histórico Concentrado compete em Terno de Grupo, modalidade que já possui geração operacional própria; ele não é inventado retroativamente como método de Centena.\n- Seca do Dia permanece fora desta disputa porque seu objetivo é exclusivamente 1º prêmio e não é diretamente comparável ao protocolo 1º–5º de Centena/Terno.\n- A escolha usa ganho de acerto sobre um controle aleatório equivalente dentro dos mesmos grupos. A meta de 50% continua exclusivamente diagnóstica e não vira peso, filtro ou alvo de calibração.\n- Quantidade e valor continuam editáveis; RECALCULAR JOGOS refaz a carteira com a quantidade atual e EDITAR PALPITES permite ajuste manual antes do bilhete.\n- Esta evolução é infraestrutura de decisão/aplicação e não altera pesos, treino, features ou calibração do cérebro Meta.\n'''
+              docs.write_text(doc, encoding='utf-8')
+          '@ | python -
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add source/gph_history_lab.py source/DOCUMENTACAO_GP-H.txt
+          git diff --cached --check
+          git commit -m "v0.48.2 amplia laboratório para métodos válidos [v0482-patch]"
+          git push
