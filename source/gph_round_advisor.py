@@ -404,9 +404,10 @@ def _generation_rows_for_edit(generation):
     if not generation:
         return None, []
     if generation.get("historical_concentrated"):
-        for sub in generation.get("bundle_generations") or []:
-            if sub.get("kind") == "Terno de Grupo":
-                return "Terno de Grupo", list(sub.get("rows") or [])
+        # A recomendação v0.48.2 configura o Fechamento Concentrado somente
+        # com Ternos; portanto as linhas visíveis desse bundle são editadas
+        # como Terno de Grupo, sem depender de estrutura interna do bundle.
+        return "Terno de Grupo", list(generation.get("rows") or [])
     return str(generation.get("kind") or ""), list(generation.get("rows") or [])
 
 
