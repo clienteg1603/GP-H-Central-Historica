@@ -8,13 +8,10 @@ from __future__ import annotations
 import multiprocessing as mp
 
 import gph_central as central
+from gph_profile_recovery import install_profile_recovery
 from gph_round_advisor import install_round_advisor
 from gph_version import APP_VERSION
 
-
-# A versão efetiva precisa existir antes de a janela e as preferências de
-# atualização serem criadas. _is_newer_version tinha o valor antigo capturado
-# como argumento default, então ela é redefinida para usar a versão efetiva.
 central.APP_VERSION = APP_VERSION
 
 
@@ -25,6 +22,7 @@ def _is_newer_version(candidate, current=None):
 
 
 central._is_newer_version = _is_newer_version
+install_profile_recovery(central)
 install_round_advisor(central)
 
 
