@@ -1,4 +1,4 @@
-"""Proteção de amostra mínima para a Recomendação da Próxima Rodada — v0.48.4.
+"""Proteção de amostra mínima para a Recomendação da Próxima Rodada — v0.48.5.
 
 Esta camada não altera nenhum seletor, cérebro Meta, peso, score ou gerador.
 Ela atua somente na comparação operacional: candidatos com menos de oito
@@ -6,6 +6,9 @@ rodadas válidas ficam visíveis como amostra insuficiente, mas não podem vence
 o ranking. A régua de 50% continua exclusivamente diagnóstica.
 """
 from __future__ import annotations
+
+import sys
+import gph_meta_review
 
 MIN_RANKING_SAMPLE = 8
 
@@ -82,9 +85,6 @@ def install_round_advisor_guard(advisor, app_version):
         return rec
 
     def build_advisor_card(app):
-        # A etiqueta antiga era literal "v0.48.2". Interceptamos apenas essa
-        # criação de Label para exibir a versão efetiva sem reescrever o módulo
-        # histórico inteiro.
         original_label = advisor.ttk.Label
 
         def label_proxy(*args, **kwargs):
@@ -103,3 +103,9 @@ def install_round_advisor_guard(advisor, app_version):
     advisor._build_advisor_card = build_advisor_card
     advisor.MIN_RANKING_SAMPLE = MIN_RANKING_SAMPLE
     advisor._round_advisor_guard_v0484_installed = True
+
+    # Instala a revisão estrutural do Meta pela mesma extensão fina já carregada
+    # pelo bootstrap. A revisão só lê snapshots congelados e não altera o cérebro.
+    central_module = sys.modules.get("gph_central")
+    if central_module is not None:
+        gph_meta_review.install_meta_review(central_module)
