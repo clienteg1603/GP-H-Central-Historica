@@ -1,7 +1,8 @@
-"""Etapas 5 e 7 da cura visual.
+"""Etapas 5, 7 e 8 da cura visual.
 
 Etapa 5: acabamento visual comum das telas da área Análise.
 Etapa 7: acabamento visual de Resultados, Jogos do dia e histórico operacional.
+Etapa 8: acabamento visual de Configurações, Perfil, Sync, Atualizações e Base.
 Somente apresentação; consultas, cálculos, banco, auditoria e geração permanecem intactos.
 """
 from __future__ import annotations
@@ -34,6 +35,22 @@ RESULTS_INFO = {
     "changes_methods": False,
 }
 
+SETTINGS_VERSION = "8.0"
+SETTINGS_INFO = {
+    "stage": 8,
+    "visual_only": True,
+    "changes_profile": False,
+    "changes_sync": False,
+    "changes_updater": False,
+    "changes_database": False,
+}
+SETTINGS_SECTIONS = {
+    "account": "Conta e Sync",
+    "appearance": "Aparência",
+    "updates": "Atualizações",
+    "data": "Base de dados",
+}
+
 
 def analysis_spec():
     return {"version": ANALYSIS_VERSION, "pages": tuple(TREE_BY_PAGE), "visual_only": True}
@@ -43,6 +60,14 @@ def results_spec():
     return {
         "version": RESULTS_VERSION,
         "pages": ("results", "games_day"),
+        "visual_only": True,
+    }
+
+
+def settings_spec():
+    return {
+        "version": SETTINGS_VERSION,
+        "sections": dict(SETTINGS_SECTIONS),
         "visual_only": True,
     }
 
@@ -96,6 +121,32 @@ def configure_results_styles(app, central):
     style.map("Results.Treeview.Heading", background=[("active", c["hover"])])
 
 
+def configure_settings_styles(app, central):
+    style = central.ttk.Style(app)
+    c = app.colors
+    font = central.UI_FONT_FAMILY
+    semi = central.UI_FONT_SEMIBOLD
+    sizes = central.UI_FONT_SIZES
+
+    style.configure("SettingsCard.TFrame", background=c["card"], bordercolor=c["border"], borderwidth=1, relief="solid")
+    style.configure("SettingsInset.TFrame", background=c["card2"], bordercolor=c["border"], borderwidth=1, relief="solid")
+    style.configure("SettingsSection.TLabel", background=c["card"], foreground=c["text"], font=(semi, sizes["section"]))
+    style.configure("SettingsValue.TLabel", background=c["card"], foreground=c["text"], font=(semi, sizes["body"]))
+    style.configure("SettingsMuted.TLabel", background=c["card"], foreground=c["muted"], font=(font, sizes["secondary"]))
+    style.configure("SettingsStatusOk.TLabel", background=c["card"], foreground=c["success"], font=(semi, sizes["secondary"]))
+    style.configure("SettingsStatusWait.TLabel", background=c["card"], foreground=c["warning"], font=(semi, sizes["secondary"]))
+
+    style.configure("SettingsNav.TButton", font=(semi, sizes["body"]), padding=(14, 8), background=c["card2"], foreground=c["muted"], bordercolor=c["border"], relief="flat")
+    style.configure("SettingsNavActive.TButton", font=(semi, sizes["body"]), padding=(14, 8), background=c["selection"], foreground=c["text"], bordercolor=c["accent"], relief="flat")
+    style.map("SettingsNav.TButton", background=[("active", c["hover"])], foreground=[("active", c["text"])])
+    style.map("SettingsNavActive.TButton", background=[("active", c["selection"])])
+
+    style.configure("SettingsPrimary.TButton", font=(semi, sizes["body"]), padding=(14, 8), background=c["accent"], foreground=central.UI_TEXT_ON_ACCENT, bordercolor=c["accent"], relief="flat")
+    style.map("SettingsPrimary.TButton", background=[("active", c["accent_hover"])])
+    style.configure("SettingsQuiet.TButton", font=(font, sizes["body"]), padding=(10, 6), background=c["card2"], foreground=c["muted"], bordercolor=c["border"], relief="flat")
+    style.map("SettingsQuiet.TButton", background=[("active", c["hover"])], foreground=[("active", c["text"])])
+
+
 def _read(widget, key):
     try:
         return str(widget.cget(key) or "")
@@ -127,6 +178,30 @@ def results_button_role(text):
     if any(token in value for token in ("DETALH", "EXPORTAR", "COPIAR", "TÉCNIC", "TECNIC", "VOLTAR", "LIMPAR")):
         return "quiet"
     return "normal"
+
+
+def settings_button_role(text, section="account"):
+    value = str(text or "").strip()
+    upper = value.upper()
+    for key, label in SETTINGS_SECTIONS.items():
+        if value == label:
+            return "nav_active" if key == section else "nav"
+    if any(token in upper for token in ("SALVAR", "ATUALIZAR", "VERIFICAR", "BUSCAR", "INSTALAR", "SINCRONIZAR", "CONECTAR", "ESCOLHER PASTA")):
+        return "primary"
+    if any(token in upper for token in ("EXPORTAR", "COPIAR", "ABRIR PASTA", "DETALH", "LOG", "LIMPAR")):
+        return "quiet"
+    return "normal"
+
+
+def settings_status_role(text):
+    value = str(text or "").strip().upper()
+    if not value:
+        return None
+    if any(token in value for token in ("CONECTADO", "ATUALIZADO", "ATIVA", "ATIVO", "SINCRONIZADO", "VÁLIDO", "VALIDO")):
+        return "ok"
+    if any(token in value for token in ("PENDENTE", "DESCONECTADO", "NÃO CONFIGURADO", "NAO CONFIGURADO", "AGUARDANDO")):
+        return "wait"
+    return None
 
 
 def polish_children(root):
@@ -219,6 +294,49 @@ def polish_results_children(root, app):
         polish_results_children(child, app)
 
 
+def polish_settings_children(root, section):
+    try:
+        children = list(root.winfo_children())
+    except Exception:
+        return
+
+    for child in children:
+        try:
+            kind = str(child.winfo_class() or "")
+            current = _read(child, "style")
+            text = _read(child, "text")
+            if kind == "TFrame":
+                if current == "Card.TFrame":
+                    child.configure(style="SettingsCard.TFrame")
+                elif current == "Card2.TFrame":
+                    child.configure(style="SettingsInset.TFrame")
+            elif kind == "TLabel":
+                status = settings_status_role(text)
+                if status == "ok" and current in {"CardMuted.TLabel", "Sub.TLabel"}:
+                    child.configure(style="SettingsStatusOk.TLabel")
+                elif status == "wait" and current in {"CardMuted.TLabel", "Sub.TLabel"}:
+                    child.configure(style="SettingsStatusWait.TLabel")
+                elif current in {"CardTitle.TLabel", "Section.TLabel"}:
+                    child.configure(style="SettingsSection.TLabel")
+                elif current == "CardMuted.TLabel":
+                    child.configure(style="SettingsMuted.TLabel")
+                elif current == "Kpi.TLabel":
+                    child.configure(style="SettingsValue.TLabel")
+            elif kind == "TButton":
+                role = settings_button_role(text, section)
+                if role == "nav_active":
+                    child.configure(style="SettingsNavActive.TButton")
+                elif role == "nav":
+                    child.configure(style="SettingsNav.TButton")
+                elif role == "primary" and current != "Danger.TButton":
+                    child.configure(style="SettingsPrimary.TButton")
+                elif role == "quiet" and current != "Danger.TButton":
+                    child.configure(style="SettingsQuiet.TButton")
+        except Exception:
+            pass
+        polish_settings_children(child, section)
+
+
 def polish_analysis_page(app, central, page_key):
     configure_analysis_styles(app, central)
     content = getattr(app, "content", None)
@@ -245,3 +363,38 @@ def polish_results_page(app, central, page_key):
     app._gph_results_polished = True
     central.GPH_UI_RESULTS_VERSION = RESULTS_VERSION
     return RESULTS_INFO
+
+
+def polish_settings_page(app, central, section="account"):
+    section = section if section in SETTINGS_SECTIONS else "account"
+    configure_settings_styles(app, central)
+    content = getattr(app, "content", None)
+    if content is not None:
+        polish_settings_children(content, section)
+    app._gph_settings_section = section
+    app._gph_settings_polished = True
+    central.GPH_UI_SETTINGS_VERSION = SETTINGS_VERSION
+    return SETTINGS_INFO
+
+
+def install_settings_polish(central):
+    app_cls = central.App
+    if getattr(app_cls, "_gph_ui_settings_installed", False):
+        return SETTINGS_INFO
+    original = app_cls.show_base_config
+
+    def show_base_config(self, section=None, *args, **kwargs):
+        requested = section or getattr(self, "base_section", "account")
+        if requested not in SETTINGS_SECTIONS:
+            requested = "account"
+        result = original(self, section=section, *args, **kwargs)
+        try:
+            polish_settings_page(self, central, requested)
+        except Exception as exc:
+            self._gph_settings_polish_error = str(exc)
+        return result
+
+    app_cls.show_base_config = show_base_config
+    app_cls._gph_ui_settings_installed = True
+    central.GPH_UI_SETTINGS_VERSION = SETTINGS_VERSION
+    return SETTINGS_INFO
