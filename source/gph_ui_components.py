@@ -40,11 +40,11 @@ def section_header(parent, title, subtitle=None):
 
 
 def metric(parent, title, value, subtitle=None):
-    frame = card(parent, alternate=True, padding=10)
-    ttk.Label(frame, text=title, style="Card2Muted.TLabel").pack(anchor="w")
+    frame = card(parent, padding=10)
+    ttk.Label(frame, text=title, style="CardMuted.TLabel").pack(anchor="w")
     ttk.Label(frame, text=str(value), style="Metric.TLabel").pack(anchor="w", pady=(2, 0))
     if subtitle:
-        ttk.Label(frame, text=subtitle, style="Card2Muted.TLabel").pack(anchor="w", pady=(2, 0))
+        ttk.Label(frame, text=subtitle, style="CardMuted.TLabel").pack(anchor="w", pady=(2, 0))
     return frame
 
 
