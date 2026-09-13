@@ -40,7 +40,7 @@ jobs:
         shell: pwsh
         run: |
           $src = Join-Path $env:GITHUB_WORKSPACE "source"
-          foreach ($file in @("gph_central.py", "gph_bootstrap.py", "gph_profile_recovery.py", "gph_round_advisor.py", "gph_round_advisor_guard.py", "gph_ui_foundation.py", "gph_ui_components.py", "gph_updater.py")) {
+          foreach ($file in @("gph_central.py", "gph_bootstrap.py", "gph_profile_recovery.py", "gph_round_advisor.py", "gph_round_advisor_guard.py", "gph_ui_foundation.py", "gph_ui_components.py", "gph_ui_navigation.py", "gph_updater.py")) {
             if (-not (Test-Path (Join-Path $src $file))) { throw "Código-fonte não encontrado: source/$file" }
           }
           "SOURCE_DIR=$src" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
@@ -70,7 +70,7 @@ jobs:
         shell: pwsh
         run: |
           Set-Location "$env:SOURCE_DIR"
-          python -m py_compile gph_central.py gph_bootstrap.py gph_version.py gph_profile_recovery.py gph_round_advisor.py gph_round_advisor_guard.py gph_ui_foundation.py gph_ui_components.py gph_updater.py gph_history_lab.py gph_history_ui.py CRIAR_PACOTE_ATUALIZACAO.py
+          python -m py_compile gph_central.py gph_bootstrap.py gph_version.py gph_profile_recovery.py gph_round_advisor.py gph_round_advisor_guard.py gph_ui_foundation.py gph_ui_components.py gph_ui_navigation.py gph_updater.py gph_history_lab.py gph_history_ui.py CRIAR_PACOTE_ATUALIZACAO.py
 
       - name: Testar laboratório histórico e interface Windows
         shell: pwsh
