@@ -16272,6 +16272,16 @@ class App(tk.Tk):
 
         summary = self.db.home_summary()
         delays = self.db.delay_leaders()
+        # v0.48.20: atraso específico da cabeça (somente 1º prêmio).
+        # É uma métrica paralela; o atraso de Bicho 1º–5º permanece intacto.
+        try:
+            from gph_ui_home import head_bicho_delay
+            head_delay = head_bicho_delay(DB_PATH)
+            if head_delay:
+                delays["bicho_p1"] = head_delay
+        except Exception:
+            # A Home continua utilizável mesmo se a métrica adicional falhar.
+            pass
         latest = summary["latest"]
         operational = self.db.latest_operational_draw()
         next_target = self.db.next_operational_target()
@@ -16302,6 +16312,7 @@ class App(tk.Tk):
         main.grid_columnconfigure(0, weight=59, uniform="homecols")
         main.grid_columnconfigure(1, weight=41, uniform="homecols")
         main.grid_rowconfigure(0, weight=1)
+        main.grid_rowconfigure(1, weight=0)
 
         # ------------------------------------------------------------------
         # ESQUERDA — 25 bichos, sempre com Grupo + Nome + 4 dezenas visíveis.
@@ -16340,7 +16351,7 @@ class App(tk.Tk):
             self.home_cards.append(card)
 
         # ------------------------------------------------------------------
-        # DIREITA — próxima rodada, último resultado vertical e atrasos atuais.
+        # DIREITA — próxima rodada e último resultado vertical.
         side = ttk.Frame(main)
         side.grid(row=0, column=1, sticky="nsew", padx=(5, 0))
         side.grid_columnconfigure(0, weight=1)
@@ -16415,7 +16426,7 @@ class App(tk.Tk):
             padx=10,
             pady=8,
         )
-        latest_card.pack(fill="both", expand=True, pady=(0, 6))
+        latest_card.pack(fill="both", expand=True)
 
         latest_head = tk.Frame(latest_card, bg=self.colors["card"])
         latest_head.pack(fill="x", pady=(0, 5))
@@ -16502,9 +16513,12 @@ class App(tk.Tk):
                 font=("Segoe UI", 9),
             ).pack(anchor="w", pady=(3, 0))
 
-        # Atrasos atuais — mais legíveis, abaixo do último resultado.
-        delay_card = ttk.Frame(side, style="Card.TFrame", padding=(10, 7))
-        delay_card.pack(fill="x")
+        # v0.48.20 — faixa horizontal inferior. Ela ocupa as duas colunas e
+        # aproveita a área livre da Home sem alongar a coluna da direita.
+        delay_card = ttk.Frame(main, style="Card.TFrame", padding=(10, 7))
+        delay_card.grid(
+            row=1, column=0, columnspan=2, sticky="ew", pady=(7, 0)
+        )
         delay_head = ttk.Frame(delay_card, style="Card.TFrame")
         delay_head.pack(fill="x", pady=(0, 5))
         ttk.Label(
@@ -16525,7 +16539,7 @@ class App(tk.Tk):
             if not item:
                 return "—", "—", "Sem dados suficientes na base."
             raw = item["value"]
-            if field == "bicho":
+            if field in ("bicho", "bicho_p1"):
                 shown = BICHOS.get(int(raw), str(raw))
             else:
                 shown = str(raw).zfill(3 if field == "centena" else 2)
@@ -16536,7 +16550,7 @@ class App(tk.Tk):
             d = datetime.strptime(last["data"], "%Y-%m-%d").strftime("%d/%m/%Y")
             tied_values = []
             for v in item["ties"][:6]:
-                if field == "bicho":
+                if field in ("bicho", "bicho_p1"):
                     tied_values.append(BICHOS.get(int(v), str(v)))
                 else:
                     tied_values.append(str(v).zfill(3 if field == "centena" else 2))
@@ -16554,7 +16568,13 @@ class App(tk.Tk):
 
         delays_row = ttk.Frame(delay_card, style="Card.TFrame")
         delays_row.pack(fill="x")
-        for idx, (field, caption) in enumerate((("bicho", "Bicho"), ("centena", "Centena"), ("dezena", "Dezena"))):
+        delay_fields = (
+            ("bicho", "Bicho · 1º–5º"),
+            ("bicho_p1", "Cabeça · 1º prêmio"),
+            ("centena", "Centena"),
+            ("dezena", "Dezena"),
+        )
+        for idx, (field, caption) in enumerate(delay_fields):
             shown, delay_value, tip = _delay_text(field, caption)
             box = tk.Frame(
                 delays_row,
@@ -16565,7 +16585,10 @@ class App(tk.Tk):
                 padx=6,
                 pady=5,
             )
-            box.pack(side="left", fill="x", expand=True, padx=(0, 4 if idx < 2 else 0))
+            box.pack(
+                side="left", fill="x", expand=True,
+                padx=(0, 4 if idx < len(delay_fields) - 1 else 0),
+            )
             cap = tk.Label(
                 box,
                 text=caption,
