@@ -1,7 +1,9 @@
-"""Fundação visual do GP-H — Etapas 1 e 9.
+"""Fundação visual do GP-H — Etapa 1.
 
-Tipografia, espaçamento e estilos. A Etapa 9 acrescenta acabamento visual às
-janelas secundárias existentes, sem alterar banco, Meta, métodos ou geradores.
+Tipografia, espaçamento e estilos da janela principal. O acabamento automático
+adicionado na Etapa 9 para Toplevels foi retirado no hotfix v0.48.17 para
+preservar integralmente o comportamento nativo dos ttk.Combobox no Windows.
+Sem alterações em banco, Meta, métodos, geradores ou auditoria.
 """
 from __future__ import annotations
 
@@ -14,10 +16,14 @@ FOUNDATION_INFO = {
     "changes_generators": False,
 }
 
-DIALOG_VERSION = "9.1"
+# A Etapa 9 continua registrada historicamente, mas o polimento dinâmico de
+# Toplevels fica desativado. Não instalamos bind_all/bind_class em <Map>.
+# Isso devolve ao Tk o controle exclusivo dos popups internos do Combobox.
+DIALOG_VERSION = "9.2"
 DIALOG_INFO = {
     "stage": 9,
     "visual_only": True,
+    "runtime_polish_enabled": False,
     "changes_business_logic": False,
     "changes_database": False,
     "changes_profile": False,
@@ -62,6 +68,7 @@ def _map(style, name, **kwargs):
 
 
 def dialog_button_role(text, current_style=""):
+    """Mantido para compatibilidade/testes da Etapa 9; sem binding automático."""
     value = str(text or "").strip().upper()
     if str(current_style or "") == "Danger.TButton":
         return "danger"
@@ -78,103 +85,18 @@ def dialog_button_role(text, current_style=""):
     return "normal"
 
 
-def _widget_text(widget, key):
-    try:
-        return str(widget.cget(key) or "")
-    except Exception:
-        return ""
-
-
-def _polish_dialog_tree(root):
-    try:
-        children = list(root.winfo_children())
-    except Exception:
-        return
-    for child in children:
-        try:
-            kind = str(child.winfo_class() or "")
-            current = _widget_text(child, "style")
-            text = _widget_text(child, "text")
-            if kind == "TFrame" and current == "Card.TFrame":
-                child.configure(style="DialogCard.TFrame")
-            elif kind == "TFrame" and current == "Card2.TFrame":
-                child.configure(style="DialogInset.TFrame")
-            elif kind == "TLabelframe":
-                child.configure(style="Dialog.TLabelframe")
-            elif kind == "TLabel" and current in {"CardTitle.TLabel", "Section.TLabel"}:
-                child.configure(style="DialogTitle.TLabel")
-            elif kind == "TLabel" and current in {"CardMuted.TLabel", "Sub.TLabel"}:
-                child.configure(style="DialogMuted.TLabel")
-            elif kind == "Treeview":
-                child.configure(style="Dialog.Treeview")
-            elif kind == "TButton":
-                role = dialog_button_role(text, current)
-                if role == "primary":
-                    child.configure(style="DialogPrimary.TButton")
-                elif role == "quiet":
-                    child.configure(style="DialogQuiet.TButton")
-        except Exception:
-            pass
-        _polish_dialog_tree(child)
-
-
-def _polish_toplevel(win, app, central):
-    try:
-        win.configure(background=app.colors["bg"])
-    except Exception:
-        pass
-    _polish_dialog_tree(win)
-    try:
-        win._gph_dialog_polished = True
-        win._gph_dialog_version = DIALOG_VERSION
-    except Exception:
-        pass
-    central.GPH_UI_DIALOG_VERSION = DIALOG_VERSION
-
-
-def _is_real_dialog_toplevel(win, app, central):
-    """Aceita apenas Toplevels Tk reais criados pelo GP-H.
-
-    O popup interno do ttk.Combobox também dispara <Map>, mas não é uma janela
-    secundária da aplicação. Interceptá-lo quebra a escolha dos itens no Windows.
-    """
-    if win is None or win is app:
-        return False
-    try:
-        top_type = central.tk.Toplevel
-        if not isinstance(win, top_type):
-            return False
-        if win.winfo_toplevel() is not win:
-            return False
-        class_name = str(win.winfo_class() or "")
-        if class_name in {"ComboboxPopdown", "TCombobox"}:
-            return False
-    except Exception:
-        return False
-    return True
-
-
 def _install_dialog_polish(app, central):
-    if getattr(app, "_gph_dialog_binding_installed", False):
-        return DIALOG_INFO
+    """Hotfix v0.48.17: não toca em bindings globais ou de classe do Tk.
 
-    def on_map(event):
-        win = getattr(event, "widget", None)
-        if not _is_real_dialog_toplevel(win, app, central):
-            return
-        try:
-            if getattr(win, "_gph_dialog_polished", False):
-                return
-            win._gph_dialog_polished = True
-            win.after_idle(lambda: _polish_toplevel(win, app, central))
-        except Exception:
-            return
-
+    A v0.48.15 introduziu observação de <Map> para estilizar Toplevels. Como os
+    popups internos de ttk.Combobox pertencem ao mesmo mecanismo de janelas do
+    Tk no Windows, qualquer observador desse ciclo pode interferir na seleção.
+    Até a Etapa 10 revisar diálogos com uma estratégia explícita, o polimento
+    dinâmico fica desativado e o Tk mantém controle nativo integral.
+    """
     try:
-        # Importante: não usar bind_all aqui. O popup do ttk.Combobox usa o
-        # mesmo evento <Map> e precisa permanecer totalmente sob controle do Tk.
-        app.bind_class("Toplevel", "<Map>", on_map, add="+")
-        app._gph_dialog_binding_installed = True
+        app._gph_dialog_binding_installed = False
+        app._gph_dialog_runtime_polish_enabled = False
         central.GPH_UI_DIALOG_VERSION = DIALOG_VERSION
     except Exception:
         pass
@@ -234,6 +156,8 @@ def apply_ui_foundation(app, central):
     ):
         _cfg(style, name, background=c["card"], foreground=color, font=(semibold, secondary))
 
+    # Estilos da Etapa 9 permanecem disponíveis para uso explícito por janelas,
+    # mas não são aplicados por observação automática de eventos do Tk.
     _cfg(style, "DialogCard.TFrame", background=c["card"], bordercolor=c["border"], borderwidth=1, relief="solid")
     _cfg(style, "DialogInset.TFrame", background=c["card2"], bordercolor=c["border"], borderwidth=1, relief="solid")
     _cfg(style, "Dialog.TLabelframe", background=c["card"], bordercolor=c["border"], borderwidth=1, relief="solid")
@@ -248,6 +172,7 @@ def apply_ui_foundation(app, central):
     _cfg(style, "Dialog.Treeview.Heading", background=c["card2"], foreground=c["text"], bordercolor=c["border"], font=(semibold, sizes["table_heading"]), padding=(9, 8), relief="flat")
     _map(style, "Dialog.Treeview", background=[("selected", c["selection"])], foreground=[("selected", c["text"])])
 
+    # Estas opções já existiam antes da Etapa 9 e são apenas visuais.
     try:
         app.option_add("*TCombobox*Listbox.font", f"{font} {body}")
         app.option_add("*TCombobox*Listbox.background", c["entry"])

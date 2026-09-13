@@ -1,3 +1,4 @@
+import os
 from types import SimpleNamespace
 import unittest
 
@@ -32,39 +33,10 @@ class FakeApp:
         self.options[key] = value
 
     def bind_class(self, tag, sequence, callback, add=None):
-        self.bindings[(tag, sequence)] = (callback, add)
+        self.bindings[("class", tag, sequence)] = (callback, add)
 
-
-class FakeTop:
-    def __init__(self, class_name="Toplevel"):
-        self.config = {}
-        self.class_name = class_name
-
-    def winfo_toplevel(self):
-        return self
-
-    def winfo_children(self):
-        return []
-
-    def winfo_class(self):
-        return self.class_name
-
-    def after_idle(self, callback):
-        callback()
-
-    def configure(self, **kwargs):
-        self.config.update(kwargs)
-
-
-class FakeComboboxPopup:
-    def __init__(self):
-        self.class_name = "ComboboxPopdown"
-
-    def winfo_toplevel(self):
-        return self
-
-    def winfo_class(self):
-        return self.class_name
+    def bind_all(self, sequence, callback, add=None):
+        self.bindings[("all", sequence)] = (callback, add)
 
 
 class UIFoundationTests(unittest.TestCase):
@@ -78,7 +50,6 @@ class UIFoundationTests(unittest.TestCase):
             UI_FONT_SEMIBOLD="Segoe UI Semibold",
             UI_TEXT_ON_ACCENT="#FFFFFF",
             ttk=SimpleNamespace(Style=lambda _app: style),
-            tk=SimpleNamespace(Toplevel=FakeTop),
             computation_sentinel=object(),
         )
         return central, style
@@ -109,15 +80,16 @@ class UIFoundationTests(unittest.TestCase):
         self.assertEqual(style.configured["TButton"]["padding"], (12, 7))
         self.assertIn("*TCombobox*Listbox.background", app.options)
 
-    def test_stage9_is_visual_only(self):
+    def test_stage9_runtime_polish_is_disabled(self):
         self.assertEqual(ui.DIALOG_INFO["stage"], 9)
         self.assertTrue(ui.DIALOG_INFO["visual_only"])
+        self.assertFalse(ui.DIALOG_INFO["runtime_polish_enabled"])
         self.assertFalse(ui.DIALOG_INFO["changes_business_logic"])
         self.assertFalse(ui.DIALOG_INFO["changes_database"])
         self.assertFalse(ui.DIALOG_INFO["changes_profile"])
         self.assertFalse(ui.DIALOG_INFO["changes_updater"])
 
-    def test_dialog_button_hierarchy(self):
+    def test_dialog_button_hierarchy_remains_available(self):
         self.assertEqual(ui.dialog_button_role("Salvar"), "primary")
         self.assertEqual(ui.dialog_button_role("Confirmar"), "primary")
         self.assertEqual(ui.dialog_button_role("Fechar"), "quiet")
@@ -125,29 +97,73 @@ class UIFoundationTests(unittest.TestCase):
         self.assertEqual(ui.dialog_button_role("Excluir", "Danger.TButton"), "danger")
         self.assertEqual(ui.dialog_button_role("Outra ação"), "normal")
 
-    def test_dialog_styles_use_toplevel_class_binding_only(self):
+    def test_foundation_does_not_install_map_bindings(self):
         central, style = self.make_central()
         ui.prepare_ui_foundation(central)
         app = FakeApp()
         ui.apply_ui_foundation(app, central)
         for name in ("DialogCard.TFrame", "DialogPrimary.TButton", "DialogQuiet.TButton", "Dialog.Treeview"):
             self.assertIn(name, style.configured)
-        key = ("Toplevel", "<Map>")
-        self.assertIn(key, app.bindings)
-        top = FakeTop()
-        callback, add = app.bindings[key]
-        callback(SimpleNamespace(widget=top))
-        self.assertEqual(add, "+")
-        self.assertTrue(top._gph_dialog_polished)
-        self.assertEqual(top._gph_dialog_version, "9.1")
-        self.assertEqual(top.config.get("background"), app.colors["bg"])
-        self.assertEqual(central.GPH_UI_DIALOG_VERSION, "9.1")
+        self.assertEqual(app.bindings, {})
+        self.assertFalse(app._gph_dialog_binding_installed)
+        self.assertFalse(app._gph_dialog_runtime_polish_enabled)
+        self.assertEqual(central.GPH_UI_DIALOG_VERSION, "9.2")
 
-    def test_combobox_popup_is_not_a_dialog(self):
-        central, _ = self.make_central()
-        app = FakeApp()
-        popup = FakeComboboxPopup()
-        self.assertFalse(ui._is_real_dialog_toplevel(popup, app, central))
+    @unittest.skipUnless(os.name == "nt", "Smoke real do ttk.Combobox é específico do build Windows")
+    def test_real_windows_readonly_combobox_can_select_from_popup(self):
+        import tkinter as tk
+        from tkinter import ttk
+
+        root = tk.Tk()
+        root.geometry("320x120+20+20")
+        try:
+            root.colors = {
+                "bg": "#101214", "card": "#181b1f", "card2": "#20242a", "entry": "#111417",
+                "divider": "#303640", "text": "#f2f4f7", "muted": "#9ca6b3", "border": "#46505c",
+                "accent": "#4d8df7", "accent_hover": "#6aa0fa", "hover": "#2a3038", "band": "#252b32",
+                "tree": "#111417", "selection": "#315b8a", "success": "#35b96f",
+                "warning": "#d6a23d", "danger": "#e85b5b",
+            }
+            central = SimpleNamespace(
+                UI_FONT_SIZES=dict(ui.FONT_SIZES),
+                UI_SPACING=dict(ui.SPACING),
+                UI_TABLE_ROWHEIGHT=ui.TABLE_ROWHEIGHT,
+                UI_FONT_FAMILY="Segoe UI",
+                UI_FONT_SEMIBOLD="Segoe UI Semibold",
+                UI_TEXT_ON_ACCENT="#FFFFFF",
+                ttk=ttk,
+            )
+            ui.prepare_ui_foundation(central)
+            ui.apply_ui_foundation(root, central)
+
+            value = tk.StringVar(value="A")
+            combo = ttk.Combobox(
+                root,
+                textvariable=value,
+                values=("A", "B", "C"),
+                state="readonly",
+                width=18,
+            )
+            combo.pack(padx=20, pady=20)
+            root.update_idletasks()
+            root.update()
+
+            # Abre o popup nativo e simula a escolha da segunda linha usando
+            # os próprios comandos internos do ttk. Isso exercita o popdown
+            # que foi quebrado pela Etapa 9, não apenas combo.current().
+            root.tk.call("ttk::combobox::Post", str(combo))
+            root.update()
+            popdown = root.tk.call("ttk::combobox::PopdownWindow", str(combo))
+            listbox = f"{popdown}.f.l"
+            root.tk.call(listbox, "selection", "clear", 0, "end")
+            root.tk.call(listbox, "selection", "set", 1)
+            root.tk.call(listbox, "activate", 1)
+            root.tk.call("ttk::combobox::LBSelected", listbox)
+            root.update()
+
+            self.assertEqual(value.get(), "B")
+        finally:
+            root.destroy()
 
 
 if __name__ == "__main__":
