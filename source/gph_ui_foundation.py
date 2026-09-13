@@ -30,6 +30,11 @@ DIALOG_INFO = {
     "changes_updater": False,
 }
 
+# O popup interno do ttk.Combobox deve permanecer 100% nativo. Em Tk 8.6/Windows,
+# inserir uma fonte como texto simples no option database (ex.: "Segoe UI 10")
+# pode ser interpretado como lista Tcl inválida ao postar o menu e quebrar a seleção.
+COMBOBOX_POPUP_NATIVE = True
+
 FONT_SIZES = {
     "page": 18,
     "hero": 20,
@@ -172,15 +177,7 @@ def apply_ui_foundation(app, central):
     _cfg(style, "Dialog.Treeview.Heading", background=c["card2"], foreground=c["text"], bordercolor=c["border"], font=(semibold, sizes["table_heading"]), padding=(9, 8), relief="flat")
     _map(style, "Dialog.Treeview", background=[("selected", c["selection"])], foreground=[("selected", c["text"])])
 
-    # Estas opções já existiam antes da Etapa 9 e são apenas visuais.
-    try:
-        app.option_add("*TCombobox*Listbox.font", f"{font} {body}")
-        app.option_add("*TCombobox*Listbox.background", c["entry"])
-        app.option_add("*TCombobox*Listbox.foreground", c["text"])
-        app.option_add("*TCombobox*Listbox.selectBackground", c["selection"])
-        app.option_add("*TCombobox*Listbox.selectForeground", c["text"])
-    except Exception:
-        pass
-
+    # Não usamos option_add em *TCombobox*Listbox. O Listbox é parte interna
+    # do popup nativo e deve ficar sob controle integral do ttk/Tk do Windows.
     _install_dialog_polish(app, central)
     return FOUNDATION_INFO
