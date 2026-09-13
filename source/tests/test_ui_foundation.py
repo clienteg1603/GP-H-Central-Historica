@@ -31,13 +31,14 @@ class FakeApp:
     def option_add(self, key, value):
         self.options[key] = value
 
-    def bind_all(self, sequence, callback, add=None):
-        self.bindings[sequence] = (callback, add)
+    def bind_class(self, tag, sequence, callback, add=None):
+        self.bindings[(tag, sequence)] = (callback, add)
 
 
 class FakeTop:
-    def __init__(self):
+    def __init__(self, class_name="Toplevel"):
         self.config = {}
+        self.class_name = class_name
 
     def winfo_toplevel(self):
         return self
@@ -45,11 +46,25 @@ class FakeTop:
     def winfo_children(self):
         return []
 
+    def winfo_class(self):
+        return self.class_name
+
     def after_idle(self, callback):
         callback()
 
     def configure(self, **kwargs):
         self.config.update(kwargs)
+
+
+class FakeComboboxPopup:
+    def __init__(self):
+        self.class_name = "ComboboxPopdown"
+
+    def winfo_toplevel(self):
+        return self
+
+    def winfo_class(self):
+        return self.class_name
 
 
 class UIFoundationTests(unittest.TestCase):
@@ -63,6 +78,7 @@ class UIFoundationTests(unittest.TestCase):
             UI_FONT_SEMIBOLD="Segoe UI Semibold",
             UI_TEXT_ON_ACCENT="#FFFFFF",
             ttk=SimpleNamespace(Style=lambda _app: style),
+            tk=SimpleNamespace(Toplevel=FakeTop),
             computation_sentinel=object(),
         )
         return central, style
@@ -109,22 +125,29 @@ class UIFoundationTests(unittest.TestCase):
         self.assertEqual(ui.dialog_button_role("Excluir", "Danger.TButton"), "danger")
         self.assertEqual(ui.dialog_button_role("Outra ação"), "normal")
 
-    def test_dialog_styles_and_map_binding(self):
+    def test_dialog_styles_use_toplevel_class_binding_only(self):
         central, style = self.make_central()
         ui.prepare_ui_foundation(central)
         app = FakeApp()
         ui.apply_ui_foundation(app, central)
         for name in ("DialogCard.TFrame", "DialogPrimary.TButton", "DialogQuiet.TButton", "Dialog.Treeview"):
             self.assertIn(name, style.configured)
-        self.assertIn("<Map>", app.bindings)
+        key = ("Toplevel", "<Map>")
+        self.assertIn(key, app.bindings)
         top = FakeTop()
-        callback, add = app.bindings["<Map>"]
+        callback, add = app.bindings[key]
         callback(SimpleNamespace(widget=top))
         self.assertEqual(add, "+")
         self.assertTrue(top._gph_dialog_polished)
-        self.assertEqual(top._gph_dialog_version, "9.0")
+        self.assertEqual(top._gph_dialog_version, "9.1")
         self.assertEqual(top.config.get("background"), app.colors["bg"])
-        self.assertEqual(central.GPH_UI_DIALOG_VERSION, "9.0")
+        self.assertEqual(central.GPH_UI_DIALOG_VERSION, "9.1")
+
+    def test_combobox_popup_is_not_a_dialog(self):
+        central, _ = self.make_central()
+        app = FakeApp()
+        popup = FakeComboboxPopup()
+        self.assertFalse(ui._is_real_dialog_toplevel(popup, app, central))
 
 
 if __name__ == "__main__":

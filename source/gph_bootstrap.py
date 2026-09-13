@@ -9,6 +9,7 @@ import multiprocessing as mp
 
 import gph_central as central
 import gph_round_advisor as round_advisor
+from gph_bugfix_round_targets import install_round_target_hotfix
 from gph_profile_recovery import install_profile_recovery
 from gph_round_advisor import install_round_advisor
 from gph_round_advisor_guard import install_round_advisor_guard
@@ -54,6 +55,7 @@ def _install_results_polish():
 
 
 central._is_newer_version = _is_newer_version
+install_round_target_hotfix(central)
 prepare_ui_foundation(central)
 install_navigation_polish(central)
 install_profile_recovery(central)

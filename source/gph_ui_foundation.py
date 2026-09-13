@@ -14,7 +14,7 @@ FOUNDATION_INFO = {
     "changes_generators": False,
 }
 
-DIALOG_VERSION = "9.0"
+DIALOG_VERSION = "9.1"
 DIALOG_INFO = {
     "stage": 9,
     "visual_only": True,
@@ -132,17 +132,37 @@ def _polish_toplevel(win, app, central):
     central.GPH_UI_DIALOG_VERSION = DIALOG_VERSION
 
 
+def _is_real_dialog_toplevel(win, app, central):
+    """Aceita apenas Toplevels Tk reais criados pelo GP-H.
+
+    O popup interno do ttk.Combobox também dispara <Map>, mas não é uma janela
+    secundária da aplicação. Interceptá-lo quebra a escolha dos itens no Windows.
+    """
+    if win is None or win is app:
+        return False
+    try:
+        top_type = central.tk.Toplevel
+        if not isinstance(win, top_type):
+            return False
+        if win.winfo_toplevel() is not win:
+            return False
+        class_name = str(win.winfo_class() or "")
+        if class_name in {"ComboboxPopdown", "TCombobox"}:
+            return False
+    except Exception:
+        return False
+    return True
+
+
 def _install_dialog_polish(app, central):
     if getattr(app, "_gph_dialog_binding_installed", False):
         return DIALOG_INFO
 
     def on_map(event):
         win = getattr(event, "widget", None)
-        if win is None or win is app:
+        if not _is_real_dialog_toplevel(win, app, central):
             return
         try:
-            if win.winfo_toplevel() is not win:
-                return
             if getattr(win, "_gph_dialog_polished", False):
                 return
             win._gph_dialog_polished = True
@@ -151,7 +171,9 @@ def _install_dialog_polish(app, central):
             return
 
     try:
-        app.bind_all("<Map>", on_map, add="+")
+        # Importante: não usar bind_all aqui. O popup do ttk.Combobox usa o
+        # mesmo evento <Map> e precisa permanecer totalmente sob controle do Tk.
+        app.bind_class("Toplevel", "<Map>", on_map, add="+")
         app._gph_dialog_binding_installed = True
         central.GPH_UI_DIALOG_VERSION = DIALOG_VERSION
     except Exception:
