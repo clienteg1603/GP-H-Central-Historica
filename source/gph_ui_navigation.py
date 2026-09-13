@@ -187,7 +187,7 @@ def _rebuild_sidebar(app, central):
     ).pack(fill="x", pady=(5, 0))
     central.tk.Label(
         brand,
-        text=f"v{central.APP_VERSION}  •  canal Teste",
+        text=f"v{central.APP_VERSION}  •  interface 2",
         bg=app.colors["sidebar"],
         fg=app.colors["muted"],
         font=(central.UI_FONT_FAMILY, central.UI_FONT_SIZES["secondary"]),
