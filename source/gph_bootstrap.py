@@ -15,6 +15,7 @@ from gph_round_advisor_guard import install_round_advisor_guard
 from gph_ui_foundation import apply_ui_foundation, prepare_ui_foundation
 from gph_ui_navigation import install_navigation_polish
 from gph_ui_play import install_play_polish
+from gph_ui_decision import install_decision_polish
 from gph_version import APP_VERSION
 
 central.APP_VERSION = APP_VERSION
@@ -33,6 +34,7 @@ install_profile_recovery(central)
 install_round_advisor(central)
 install_round_advisor_guard(round_advisor, APP_VERSION)
 install_play_polish(round_advisor, APP_VERSION)
+install_decision_polish(central)
 
 
 def main():
