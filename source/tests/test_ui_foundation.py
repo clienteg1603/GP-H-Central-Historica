@@ -69,7 +69,7 @@ class UIFoundationTests(unittest.TestCase):
         self.assertFalse(info["changes_database"])
         self.assertFalse(info["changes_generators"])
 
-    def test_apply_registers_semantic_styles(self):
+    def test_apply_registers_semantic_styles_without_touching_combobox_popup(self):
         central, style = self.make_central()
         ui.prepare_ui_foundation(central)
         app = FakeApp()
@@ -78,7 +78,8 @@ class UIFoundationTests(unittest.TestCase):
             self.assertIn(name, style.configured)
         self.assertEqual(style.configured["Treeview"]["rowheight"], 30)
         self.assertEqual(style.configured["TButton"]["padding"], (12, 7))
-        self.assertIn("*TCombobox*Listbox.background", app.options)
+        self.assertTrue(ui.COMBOBOX_POPUP_NATIVE)
+        self.assertFalse(any(str(key).startswith("*TCombobox*Listbox") for key in app.options))
 
     def test_stage9_runtime_polish_is_disabled(self):
         self.assertEqual(ui.DIALOG_INFO["stage"], 9)
@@ -148,9 +149,6 @@ class UIFoundationTests(unittest.TestCase):
             root.update_idletasks()
             root.update()
 
-            # Abre o popup nativo e simula a escolha da segunda linha usando
-            # os próprios comandos internos do ttk. Isso exercita o popdown
-            # que foi quebrado pela Etapa 9, não apenas combo.current().
             root.tk.call("ttk::combobox::Post", str(combo))
             root.update()
             popdown = root.tk.call("ttk::combobox::PopdownWindow", str(combo))
