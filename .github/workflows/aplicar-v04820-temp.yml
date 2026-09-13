@@ -6,6 +6,7 @@ on:
       - home-atraso-cabeca-v04820
     paths:
       - "tmp_patch_v04820.py"
+      - "tmp_fix_patch_v04820.py"
       - ".github/workflows/aplicar-v04820-temp.yml"
 
 permissions:
@@ -26,6 +27,9 @@ jobs:
         with:
           python-version: "3.13"
 
+      - name: Corrigir patch temporário
+        run: python tmp_fix_patch_v04820.py
+
       - name: Aplicar patch v0.48.20
         run: python tmp_patch_v04820.py
 
@@ -41,6 +45,7 @@ jobs:
           python - <<'PY'
           from pathlib import Path
           import ast
+          import subprocess
           src = Path('source/gph_central.py').read_text(encoding='utf-8')
           assert 'delay_card = ttk.Frame(main, style="Card.TFrame"' in src
           assert 'row=1, column=0, columnspan=2, sticky="ew"' in src
@@ -48,8 +53,7 @@ jobs:
           assert '("bicho", "Bicho · 1º–5º")' in src
           assert 'APP_VERSION = "0.48.20"' in Path('source/gph_version.py').read_text(encoding='utf-8')
 
-          # Protege o cérebro: nenhuma das funções estatísticas/métodos pode mudar.
-          before = __import__('subprocess').check_output(
+          before = subprocess.check_output(
               ['git', 'show', 'origin/main:source/gph_central.py'],
               text=True, encoding='utf-8'
           )
@@ -120,7 +124,7 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git rm -f tmp_patch_v04820.py .github/workflows/aplicar-v04820-temp.yml
+          git rm -f tmp_patch_v04820.py tmp_fix_patch_v04820.py .github/workflows/aplicar-v04820-temp.yml
           git add source/gph_central.py source/gph_ui_home.py source/gph_version.py source/DOCUMENTACAO_GP-H.txt source/tests/test_home_head_delay_v04820.py
           git commit -m "v0.48.20: Home com atraso da cabeça em faixa inferior"
           git push origin HEAD:home-atraso-cabeca-v04820
