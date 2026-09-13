@@ -120,5 +120,42 @@ class ResultsPolishTests(unittest.TestCase):
         self.assertIn("ResultsStatusPending.TLabel", FakeTTK.style.configured)
 
 
+class SettingsPolishTests(unittest.TestCase):
+    def setUp(self):
+        FakeTTK.style = FakeStyle()
+
+    def test_stage8_is_visual_only(self):
+        spec = ui.settings_spec()
+        self.assertTrue(spec["visual_only"])
+        self.assertEqual(tuple(spec["sections"]), ("account", "appearance", "updates", "data"))
+        self.assertFalse(ui.SETTINGS_INFO["changes_profile"])
+        self.assertFalse(ui.SETTINGS_INFO["changes_sync"])
+        self.assertFalse(ui.SETTINGS_INFO["changes_updater"])
+        self.assertFalse(ui.SETTINGS_INFO["changes_database"])
+
+    def test_settings_navigation(self):
+        self.assertEqual(ui.settings_button_role("Conta e Sync", "account"), "nav_active")
+        self.assertEqual(ui.settings_button_role("Aparência", "account"), "nav")
+        self.assertEqual(ui.settings_button_role("Atualizações", "updates"), "nav_active")
+        self.assertEqual(ui.settings_button_role("Base de dados", "data"), "nav_active")
+
+    def test_settings_status(self):
+        self.assertEqual(ui.settings_status_role("Perfil conectado"), "ok")
+        self.assertEqual(ui.settings_status_role("Atualizado"), "ok")
+        self.assertEqual(ui.settings_status_role("Sync pendente"), "wait")
+        self.assertEqual(ui.settings_status_role("Não configurado"), "wait")
+        self.assertIsNone(ui.settings_status_role("Informação comum"))
+
+    def test_settings_styles_are_registered(self):
+        app = FakeApp()
+        ui.polish_settings_page(app, FakeCentral, "updates")
+        self.assertTrue(app._gph_settings_polished)
+        self.assertEqual(app._gph_settings_section, "updates")
+        self.assertIn("SettingsCard.TFrame", FakeTTK.style.configured)
+        self.assertIn("SettingsNavActive.TButton", FakeTTK.style.configured)
+        self.assertIn("SettingsPrimary.TButton", FakeTTK.style.configured)
+        self.assertIn("SettingsStatusOk.TLabel", FakeTTK.style.configured)
+
+
 if __name__ == "__main__":
     unittest.main()
