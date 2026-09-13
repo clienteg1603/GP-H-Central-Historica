@@ -13,6 +13,7 @@ from gph_profile_recovery import install_profile_recovery
 from gph_round_advisor import install_round_advisor
 from gph_round_advisor_guard import install_round_advisor_guard
 from gph_ui_foundation import apply_ui_foundation, prepare_ui_foundation
+from gph_ui_navigation import install_navigation_polish
 from gph_version import APP_VERSION
 
 central.APP_VERSION = APP_VERSION
@@ -26,6 +27,7 @@ def _is_newer_version(candidate, current=None):
 
 central._is_newer_version = _is_newer_version
 prepare_ui_foundation(central)
+install_navigation_polish(central)
 install_profile_recovery(central)
 install_round_advisor(central)
 install_round_advisor_guard(round_advisor, APP_VERSION)
