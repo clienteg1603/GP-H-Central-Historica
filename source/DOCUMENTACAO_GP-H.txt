@@ -1,3 +1,11 @@
+REVISÃO v0.48.20 — HOME: ATRASOS EM FAIXA + CABEÇA
+- Move “Atrasos atuais” da coluna direita para uma faixa horizontal inferior ocupando as duas colunas da Visão Geral.
+- O “Último resultado” passa a ocupar sozinho o espaço restante da coluna direita e ganha mais altura.
+- Mantém o atraso de Bicho 1º–5º sem mudança e acrescenta “Cabeça · 1º prêmio”, zerado apenas quando o bicho sai no 1º prêmio.
+- A nova métrica conta somente extrações completas e ignora aparições do mesmo bicho no 2º–5º prêmio.
+- A faixa inferior usa quatro cartões compactos: Bicho 1º–5º, Cabeça 1º prêmio, Centena e Dezena, preservando tooltip e leitura de última ocorrência.
+- Mudança restrita à Home/estatística de atraso; Meta, métodos, geradores, financeiro e auditorias permanecem inalterados.
+
 REVISÃO v0.48.0 — LABORATÓRIO HISTÓRICO EXPERIMENTAL
 
 Acesso: Métodos > LABORATÓRIO HISTÓRICO ou Decisão > Laboratório > Pesquisa histórica.
