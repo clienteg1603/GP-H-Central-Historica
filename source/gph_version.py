@@ -1,3 +1,1 @@
-"""Versão efetiva da distribuição Windows do GP-H Central Histórica."""
-
-APP_VERSION = "0.48.9"
+APP_VERSION = "0.48.10"
