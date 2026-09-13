@@ -6,7 +6,9 @@ Meta, métodos, auditoria ou geração de jogos.
 """
 from __future__ import annotations
 
-NAVIGATION_VERSION = "2.0"
+from gph_ui_analysis import polish_analysis_page
+
+NAVIGATION_VERSION = "2.1"
 NAVIGATION_INFO = {
     "stage": 2,
     "visual_only": True,
@@ -31,6 +33,13 @@ ANALYSIS_ITEMS = (
     ("Puxadas", "show_pulls_page", "pulls", True),
     ("Métodos", "show_methods_page", "methods", True),
 )
+
+ANALYSIS_METHOD_PAGE = {
+    "show_search": "search",
+    "show_statistics_page": "statistics",
+    "show_pulls_page": "pulls",
+    "show_methods_page": "methods",
+}
 
 BOTTOM_ITEMS = (
     ("Resultados", "show_results", "results", False),
@@ -91,7 +100,19 @@ def _add_nav_row(app, central, parent, label, command_name, icon_key, secondary=
     indicator.pack(side="left", fill="y")
     indicator.pack_propagate(False)
 
-    command = getattr(app, command_name)
+    base_command = getattr(app, command_name)
+    analysis_page = ANALYSIS_METHOD_PAGE.get(command_name)
+    if analysis_page:
+        def command(fn=base_command, page_key=analysis_page):
+            result = fn()
+            try:
+                polish_analysis_page(app, central, page_key)
+            except Exception as exc:
+                app._gph_analysis_polish_error = str(exc)
+            return result
+    else:
+        command = base_command
+
     img = app.nav_icon_images.get(icon_key) if icon_key else None
     btn = central.tk.Button(
         row,
@@ -301,8 +322,6 @@ def install_navigation_polish(central):
             _rebuild_sidebar(self, central)
             _polish_status_bar(self, central)
         except Exception as exc:
-            # A navegação é visual-only: uma falha de acabamento nunca deve
-            # impedir o usuário de abrir a Central.
             self._gph_navigation_error = str(exc)
         return result
 
