@@ -18,6 +18,7 @@ from gph_ui_navigation import install_navigation_polish
 from gph_ui_play import install_play_polish
 from gph_ui_decision import install_decision_polish
 from gph_ui_analysis import install_settings_polish, polish_results_page
+from gph_ui_final_audit import apply_final_audit
 from gph_version import APP_VERSION
 
 central.APP_VERSION = APP_VERSION
@@ -72,6 +73,7 @@ def main():
     try:
         app = central.App()
         apply_ui_foundation(app, central)
+        apply_final_audit(app, central)
         if not getattr(app, "_startup_cancelled", False):
             app.mainloop()
     except BaseException as exc:
