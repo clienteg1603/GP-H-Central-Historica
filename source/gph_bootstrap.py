@@ -16,6 +16,7 @@ from gph_ui_foundation import apply_ui_foundation, prepare_ui_foundation
 from gph_ui_navigation import install_navigation_polish
 from gph_ui_play import install_play_polish
 from gph_ui_decision import install_decision_polish
+from gph_ui_analysis import polish_results_page
 from gph_version import APP_VERSION
 
 central.APP_VERSION = APP_VERSION
@@ -27,6 +28,31 @@ def _is_newer_version(candidate, current=None):
     return central._version_key(candidate) > central._version_key(current)
 
 
+def _install_results_polish():
+    app_cls = central.App
+    if getattr(app_cls, "_gph_ui_results_installed", False):
+        return
+
+    for method_name, page_key in (("show_results", "results"), ("show_games_day", "games_day")):
+        original = getattr(app_cls, method_name, None)
+        if original is None:
+            continue
+
+        def make_wrapper(fn, key):
+            def wrapper(self, *args, **kwargs):
+                result = fn(self, *args, **kwargs)
+                try:
+                    polish_results_page(self, central, key)
+                except Exception as exc:
+                    self._gph_results_polish_error = str(exc)
+                return result
+            return wrapper
+
+        setattr(app_cls, method_name, make_wrapper(original, page_key))
+
+    app_cls._gph_ui_results_installed = True
+
+
 central._is_newer_version = _is_newer_version
 prepare_ui_foundation(central)
 install_navigation_polish(central)
@@ -35,6 +61,7 @@ install_round_advisor(central)
 install_round_advisor_guard(round_advisor, APP_VERSION)
 install_play_polish(round_advisor, APP_VERSION)
 install_decision_polish(central)
+_install_results_polish()
 
 
 def main():

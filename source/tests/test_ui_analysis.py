@@ -27,7 +27,10 @@ class FakeCentral:
     ttk = FakeTTK
     UI_FONT_FAMILY = "Segoe UI"
     UI_FONT_SEMIBOLD = "Segoe UI Semibold"
-    UI_FONT_SIZES = {"body": 10, "secondary": 9, "table": 10, "table_heading": 10}
+    UI_FONT_SIZES = {
+        "body": 10, "secondary": 9, "table": 10, "table_heading": 10,
+        "section": 12, "kpi": 16,
+    }
     UI_TABLE_ROWHEIGHT = 30
     UI_TEXT_ON_ACCENT = "#ffffff"
 
@@ -51,12 +54,17 @@ class FakeApp:
             "card": "#111111", "border": "#222222", "entry": "#090909",
             "text": "#eeeeee", "card2": "#161616", "selection": "#25364a",
             "hover": "#1f2933", "muted": "#999999", "accent": "#2374e1",
+            "accent_hover": "#4b91ef", "success": "#39b980", "warning": "#e5b94c",
+            "danger": "#e06470",
         }
         self.content = EmptyContent()
         self.method_tree = FakeTree()
 
 
 class AnalysisPolishTests(unittest.TestCase):
+    def setUp(self):
+        FakeTTK.style = FakeStyle()
+
     def test_stage_is_visual_only(self):
         spec = ui.analysis_spec()
         self.assertEqual(spec["pages"], ("search", "statistics", "pulls", "methods"))
@@ -71,6 +79,45 @@ class AnalysisPolishTests(unittest.TestCase):
         self.assertTrue(app._gph_analysis_polished)
         self.assertIn("Analysis.Treeview", FakeTTK.style.configured)
         self.assertIn("AnalysisPrimary.TButton", FakeTTK.style.configured)
+
+
+class ResultsPolishTests(unittest.TestCase):
+    def setUp(self):
+        FakeTTK.style = FakeStyle()
+
+    def test_stage7_is_visual_only(self):
+        spec = ui.results_spec()
+        self.assertEqual(spec["pages"], ("results", "games_day"))
+        self.assertTrue(spec["visual_only"])
+        self.assertFalse(ui.RESULTS_INFO["changes_database"])
+        self.assertFalse(ui.RESULTS_INFO["changes_audit"])
+        self.assertFalse(ui.RESULTS_INFO["changes_results"])
+        self.assertFalse(ui.RESULTS_INFO["changes_frozen_games"])
+
+    def test_status_hierarchy(self):
+        self.assertEqual(ui.status_role("PENDENTE"), "pending")
+        self.assertEqual(ui.status_role("AUDITADO"), "success")
+        self.assertEqual(ui.status_role("EM AUDITORIA"), "warning")
+        self.assertEqual(ui.status_role("ERRO"), "danger")
+        self.assertEqual(ui.status_role("CONGELADO"), "info")
+        self.assertIsNone(ui.status_role("sem status"))
+
+    def test_action_hierarchy(self):
+        self.assertEqual(ui.results_button_role("ATUALIZAR"), "primary")
+        self.assertEqual(ui.results_button_role("AUDITAR JOGOS"), "primary")
+        self.assertEqual(ui.results_button_role("DETALHES"), "quiet")
+        self.assertEqual(ui.results_button_role("EXPORTAR"), "quiet")
+        self.assertEqual(ui.results_button_role("OUTRA AÇÃO"), "normal")
+
+    def test_results_styles_are_registered(self):
+        app = FakeApp()
+        ui.polish_results_page(app, FakeCentral, "results")
+        self.assertTrue(app._gph_results_polished)
+        self.assertEqual(app._gph_results_page, "results")
+        self.assertIn("ResultsCard.TFrame", FakeTTK.style.configured)
+        self.assertIn("Results.Treeview", FakeTTK.style.configured)
+        self.assertIn("ResultsPrimary.TButton", FakeTTK.style.configured)
+        self.assertIn("ResultsStatusPending.TLabel", FakeTTK.style.configured)
 
 
 if __name__ == "__main__":
