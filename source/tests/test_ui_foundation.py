@@ -26,9 +26,30 @@ class FakeApp:
             "warning": "#16", "danger": "#17",
         }
         self.options = {}
+        self.bindings = {}
 
     def option_add(self, key, value):
         self.options[key] = value
+
+    def bind_all(self, sequence, callback, add=None):
+        self.bindings[sequence] = (callback, add)
+
+
+class FakeTop:
+    def __init__(self):
+        self.config = {}
+
+    def winfo_toplevel(self):
+        return self
+
+    def winfo_children(self):
+        return []
+
+    def after_idle(self, callback):
+        callback()
+
+    def configure(self, **kwargs):
+        self.config.update(kwargs)
 
 
 class UIFoundationTests(unittest.TestCase):
@@ -71,6 +92,39 @@ class UIFoundationTests(unittest.TestCase):
         self.assertEqual(style.configured["Treeview"]["rowheight"], 30)
         self.assertEqual(style.configured["TButton"]["padding"], (12, 7))
         self.assertIn("*TCombobox*Listbox.background", app.options)
+
+    def test_stage9_is_visual_only(self):
+        self.assertEqual(ui.DIALOG_INFO["stage"], 9)
+        self.assertTrue(ui.DIALOG_INFO["visual_only"])
+        self.assertFalse(ui.DIALOG_INFO["changes_business_logic"])
+        self.assertFalse(ui.DIALOG_INFO["changes_database"])
+        self.assertFalse(ui.DIALOG_INFO["changes_profile"])
+        self.assertFalse(ui.DIALOG_INFO["changes_updater"])
+
+    def test_dialog_button_hierarchy(self):
+        self.assertEqual(ui.dialog_button_role("Salvar"), "primary")
+        self.assertEqual(ui.dialog_button_role("Confirmar"), "primary")
+        self.assertEqual(ui.dialog_button_role("Fechar"), "quiet")
+        self.assertEqual(ui.dialog_button_role("Cancelar"), "quiet")
+        self.assertEqual(ui.dialog_button_role("Excluir", "Danger.TButton"), "danger")
+        self.assertEqual(ui.dialog_button_role("Outra ação"), "normal")
+
+    def test_dialog_styles_and_map_binding(self):
+        central, style = self.make_central()
+        ui.prepare_ui_foundation(central)
+        app = FakeApp()
+        ui.apply_ui_foundation(app, central)
+        for name in ("DialogCard.TFrame", "DialogPrimary.TButton", "DialogQuiet.TButton", "Dialog.Treeview"):
+            self.assertIn(name, style.configured)
+        self.assertIn("<Map>", app.bindings)
+        top = FakeTop()
+        callback, add = app.bindings["<Map>"]
+        callback(SimpleNamespace(widget=top))
+        self.assertEqual(add, "+")
+        self.assertTrue(top._gph_dialog_polished)
+        self.assertEqual(top._gph_dialog_version, "9.0")
+        self.assertEqual(top.config.get("background"), app.colors["bg"])
+        self.assertEqual(central.GPH_UI_DIALOG_VERSION, "9.0")
 
 
 if __name__ == "__main__":
