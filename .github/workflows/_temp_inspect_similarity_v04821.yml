@@ -1,4 +1,4 @@
-name: TEMP aplica correção Similaridade v0.48.21
+name: "TEMP aplica correcao Similaridade v0.48.21"
 
 on:
   push:
@@ -19,7 +19,7 @@ jobs:
           ref: fix-similaridade-top5-v04821
           fetch-depth: 0
 
-      - name: Aplicar correção v0.48.21
+      - name: Aplicar correcao v0.48.21
         shell: bash
         run: |
           python - <<'PY'
@@ -41,7 +41,7 @@ jobs:
 
                     groups = groups[:requested_animals]
                     selector = "Sombra Similaridade do Dia"
-'''
+          '''
           new_play = '''                    similarity = self.db.method_similarity_day(
                         latest["data"],
                         latest["sorteio"],
@@ -60,9 +60,12 @@ jobs:
                             f"com evidência para um pedido de {requested_animals}."
                         )
                     selector = "Sombra Similaridade do Dia"
-'''
+          '''
+          # Remove a indentacao extra usada apenas para manter o YAML valido.
+          old_play = old_play[:-10] if old_play.endswith('          ') else old_play
+          new_play = new_play[:-10] if new_play.endswith('          ') else new_play
           if central.count(old_play) != 1:
-              raise SystemExit(f'Bloco de geração Similaridade inesperado: {central.count(old_play)} ocorrência(s)')
+              raise SystemExit(f'Bloco de geracao Similaridade inesperado: {central.count(old_play)} ocorrencia(s)')
           central = central.replace(old_play, new_play, 1)
           central_path.write_text(central, encoding='utf-8')
 
@@ -75,21 +78,23 @@ jobs:
                         group = int(row["grupo"])
                         if group not in groups:
                             groups.append(group)
-'''
+          '''
           new_history = '''                elif selector == "Similaridade":
                     selection = db.method_similarity_day(*key(base), top_days=12)
                     from gph_similarity_rank import distinct_similarity_groups
                     groups = distinct_similarity_groups(selection, 5)
-'''
+          '''
+          old_history = old_history[:-10] if old_history.endswith('          ') else old_history
+          new_history = new_history[:-10] if new_history.endswith('          ') else new_history
           if history.count(old_history) != 1:
-              raise SystemExit(f'Bloco histórico Similaridade inesperado: {history.count(old_history)} ocorrência(s)')
+              raise SystemExit(f'Bloco historico Similaridade inesperado: {history.count(old_history)} ocorrencia(s)')
           history = history.replace(old_history, new_history, 1)
           history_path.write_text(history, encoding='utf-8')
 
           version_path = Path('source/gph_version.py')
           version = version_path.read_text(encoding='utf-8')
           if 'APP_VERSION = "0.48.20"' not in version:
-              raise SystemExit('Versão-base esperada 0.48.20 não encontrada')
+              raise SystemExit('Versao-base esperada 0.48.20 nao encontrada')
           version_path.write_text(version.replace('APP_VERSION = "0.48.20"', 'APP_VERSION = "0.48.21"', 1), encoding='utf-8')
 
           publish_path = Path('.github/workflows/publicar-atualizacao.yml')
@@ -108,13 +113,13 @@ jobs:
           python -m py_compile gph_central.py gph_history_lab.py gph_similarity_rank.py gph_version.py
           python -m unittest discover -s tests -v
 
-      - name: Validar regressão especificamente
+      - name: Validar regressao especificamente
         shell: bash
         run: |
           cd source
           python -m unittest tests.test_similarity_distinct_groups -v
 
-      - name: Limpar diagnóstico e gravar correção
+      - name: Limpar diagnostico e gravar correcao
         shell: bash
         run: |
           rm -f _temp_similarity_extract_v04821.txt _temp_similarity_method_v04821.txt
