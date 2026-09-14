@@ -1,4 +1,4 @@
-name: TEMP extrai Similaridade v0.48.21
+name: TEMP aplica correção Similaridade v0.48.21
 
 on:
   push:
@@ -11,32 +11,116 @@ permissions:
   contents: write
 
 jobs:
-  inspect:
+  fix-and-test:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
         with:
           ref: fix-similaridade-top5-v04821
-      - name: Extrair somente funções-alvo
+          fetch-depth: 0
+
+      - name: Aplicar correção v0.48.21
         shell: bash
         run: |
           python - <<'PY'
-          import ast
           from pathlib import Path
 
-          p=Path('source/gph_central.py')
-          src=p.read_text(encoding='utf-8')
-          tree=ast.parse(src)
-          wanted={'method_similarity_day','play_generate'}
-          out=[]
-          for node in ast.walk(tree):
-              if isinstance(node,(ast.FunctionDef,ast.AsyncFunctionDef)) and node.name in wanted:
-                  seg=ast.get_source_segment(src,node) or ''
-                  out.append(f'===== {node.name} L{node.lineno}-{node.end_lineno} =====\n{seg}')
-          Path('_temp_similarity_method_v04821.txt').write_text('\n\n'.join(out),encoding='utf-8')
+          central_path = Path('source/gph_central.py')
+          central = central_path.read_text(encoding='utf-8')
+          old_play = '''                    similarity = self.db.method_similarity_day(
+                        latest["data"],
+                        latest["sorteio"],
+                        latest["hora"],
+                    )
+
+                    groups = []
+                    for row in similarity["selected"]:
+                        g = int(row["grupo"])
+                        if g not in groups:
+                            groups.append(g)
+
+                    groups = groups[:requested_animals]
+                    selector = "Sombra Similaridade do Dia"
+'''
+          new_play = '''                    similarity = self.db.method_similarity_day(
+                        latest["data"],
+                        latest["sorteio"],
+                        latest["hora"],
+                    )
+
+                    # A previsão posicional permite repetir o mesmo bicho em
+                    # mais de um prêmio. Para a geração, completa o pedido com
+                    # os próximos grupos mais fortes até atingir a quantidade
+                    # de bichos distintos solicitada.
+                    from gph_similarity_rank import distinct_similarity_groups
+                    groups = distinct_similarity_groups(similarity, requested_animals)
+                    if len(groups) < requested_animals:
+                        raise ValueError(
+                            f"A Similaridade encontrou apenas {len(groups)} bicho(s) distinto(s) "
+                            f"com evidência para um pedido de {requested_animals}."
+                        )
+                    selector = "Sombra Similaridade do Dia"
+'''
+          if central.count(old_play) != 1:
+              raise SystemExit(f'Bloco de geração Similaridade inesperado: {central.count(old_play)} ocorrência(s)')
+          central = central.replace(old_play, new_play, 1)
+          central_path.write_text(central, encoding='utf-8')
+
+          history_path = Path('source/gph_history_lab.py')
+          history = history_path.read_text(encoding='utf-8')
+          old_history = '''                elif selector == "Similaridade":
+                    selection = db.method_similarity_day(*key(base), top_days=12)
+                    groups = []
+                    for row in selection.get("selected", []):
+                        group = int(row["grupo"])
+                        if group not in groups:
+                            groups.append(group)
+'''
+          new_history = '''                elif selector == "Similaridade":
+                    selection = db.method_similarity_day(*key(base), top_days=12)
+                    from gph_similarity_rank import distinct_similarity_groups
+                    groups = distinct_similarity_groups(selection, 5)
+'''
+          if history.count(old_history) != 1:
+              raise SystemExit(f'Bloco histórico Similaridade inesperado: {history.count(old_history)} ocorrência(s)')
+          history = history.replace(old_history, new_history, 1)
+          history_path.write_text(history, encoding='utf-8')
+
+          version_path = Path('source/gph_version.py')
+          version = version_path.read_text(encoding='utf-8')
+          if 'APP_VERSION = "0.48.20"' not in version:
+              raise SystemExit('Versão-base esperada 0.48.20 não encontrada')
+          version_path.write_text(version.replace('APP_VERSION = "0.48.20"', 'APP_VERSION = "0.48.21"', 1), encoding='utf-8')
+
+          publish_path = Path('.github/workflows/publicar-atualizacao.yml')
+          publish = publish_path.read_text(encoding='utf-8')
+          needle = 'gph_updater.py gph_history_lab.py gph_history_ui.py CRIAR_PACOTE_ATUALIZACAO.py'
+          replacement = 'gph_updater.py gph_similarity_rank.py gph_history_lab.py gph_history_ui.py CRIAR_PACOTE_ATUALIZACAO.py'
+          if needle in publish and 'gph_similarity_rank.py gph_history_lab.py' not in publish:
+              publish = publish.replace(needle, replacement, 1)
+              publish_path.write_text(publish, encoding='utf-8')
           PY
+
+      - name: Validar sintaxe e testes
+        shell: bash
+        run: |
+          cd source
+          python -m py_compile gph_central.py gph_history_lab.py gph_similarity_rank.py gph_version.py
+          python -m unittest discover -s tests -v
+
+      - name: Validar regressão especificamente
+        shell: bash
+        run: |
+          cd source
+          python -m unittest tests.test_similarity_distinct_groups -v
+
+      - name: Limpar diagnóstico e gravar correção
+        shell: bash
+        run: |
+          rm -f _temp_similarity_extract_v04821.txt _temp_similarity_method_v04821.txt
+          rm -f .github/workflows/_temp_inspect_similarity_v04821.yml
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add _temp_similarity_method_v04821.txt
-          git commit -m "TEMP extrai funções da Similaridade v0.48.21"
+          git add -A
+          git commit -m "v0.48.21: corrige Top 5 distinto da Similaridade"
           git push origin HEAD:fix-similaridade-top5-v04821
