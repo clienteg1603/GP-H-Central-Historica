@@ -19975,13 +19975,16 @@ class App(tk.Tk):
                         latest["hora"],
                     )
 
-                    groups = []
-                    for row in similarity["selected"]:
-                        g = int(row["grupo"])
-                        if g not in groups:
-                            groups.append(g)
-
-                    groups = groups[:requested_animals]
+                    # A previsao posicional pode repetir o mesmo bicho em mais de um premio.
+                    # Na geracao, completa com os proximos grupos mais fortes ate atingir
+                    # a quantidade de bichos distintos pedida pelo usuario.
+                    from gph_similarity_rank import distinct_similarity_groups
+                    groups = distinct_similarity_groups(similarity, requested_animals)
+                    if len(groups) < requested_animals:
+                        raise ValueError(
+                            f"A Similaridade encontrou apenas {len(groups)} bicho(s) distinto(s) "
+                            f"com evidencia para um pedido de {requested_animals}."
+                        )
                     selector = "Sombra Similaridade do Dia"
 
             else:
