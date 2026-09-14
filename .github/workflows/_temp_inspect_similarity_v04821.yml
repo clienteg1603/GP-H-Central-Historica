@@ -17,39 +17,26 @@ jobs:
       - uses: actions/checkout@v4
         with:
           ref: fix-similaridade-top5-v04821
-      - name: Extrair método e chamadores para arquivo temporário
+      - name: Extrair somente funções-alvo
         shell: bash
         run: |
           python - <<'PY'
           import ast
           from pathlib import Path
 
+          p=Path('source/gph_central.py')
+          src=p.read_text(encoding='utf-8')
+          tree=ast.parse(src)
+          wanted={'method_similarity_day','play_generate'}
           out=[]
-          files=['source/gph_central.py','source/gph_round_advisor.py','source/gph_ui_play.py','source/gph_ui_analysis.py']
-          for filename in files:
-              p=Path(filename)
-              if not p.exists():
-                  continue
-              src=p.read_text(encoding='utf-8')
-              try:
-                  tree=ast.parse(src)
-              except SyntaxError as exc:
-                  out.append(f'PARSE ERROR {filename}: {exc}')
-                  continue
-              for node in ast.walk(tree):
-                  if not isinstance(node,(ast.FunctionDef,ast.AsyncFunctionDef)):
-                      continue
+          for node in ast.walk(tree):
+              if isinstance(node,(ast.FunctionDef,ast.AsyncFunctionDef)) and node.name in wanted:
                   seg=ast.get_source_segment(src,node) or ''
-                  lname=node.name.lower()
-                  if (node.name in {'method_similarity_day','play_generate','play_controls_changed','show_methods_page','show_play_page','method_preview'}
-                      or 'method_similarity_day(' in seg
-                      or 'similaridade' in seg.lower()
-                      or ('top' in lname and 'similar' in seg.lower())):
-                      out.append(f'\n===== {filename}:{node.name} L{node.lineno}-{node.end_lineno} =====\n{seg[:50000]}')
-          Path('_temp_similarity_extract_v04821.txt').write_text('\n'.join(out),encoding='utf-8')
+                  out.append(f'===== {node.name} L{node.lineno}-{node.end_lineno} =====\n{seg}')
+          Path('_temp_similarity_method_v04821.txt').write_text('\n\n'.join(out),encoding='utf-8')
           PY
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add _temp_similarity_extract_v04821.txt
-          git commit -m "TEMP extrai implementação da Similaridade v0.48.21"
+          git add _temp_similarity_method_v04821.txt
+          git commit -m "TEMP extrai funções da Similaridade v0.48.21"
           git push origin HEAD:fix-similaridade-top5-v04821
