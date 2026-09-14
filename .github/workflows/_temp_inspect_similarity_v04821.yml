@@ -23,73 +23,66 @@ jobs:
         shell: bash
         run: |
           python - <<'PY'
+          import ast
           from pathlib import Path
+
+          def function_bounds(text, name):
+              tree = ast.parse(text)
+              nodes = [n for n in ast.walk(tree) if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef)) and n.name == name]
+              if len(nodes) != 1:
+                  raise SystemExit(f'Funcao {name} encontrada {len(nodes)} vez(es)')
+              node = nodes[0]
+              return node.lineno - 1, node.end_lineno
 
           central_path = Path('source/gph_central.py')
           central = central_path.read_text(encoding='utf-8')
-          old_play = '''                    similarity = self.db.method_similarity_day(
-                        latest["data"],
-                        latest["sorteio"],
-                        latest["hora"],
-                    )
-
-                    groups = []
-                    for row in similarity["selected"]:
-                        g = int(row["grupo"])
-                        if g not in groups:
-                            groups.append(g)
-
-                    groups = groups[:requested_animals]
-                    selector = "Sombra Similaridade do Dia"
-          '''
-          new_play = '''                    similarity = self.db.method_similarity_day(
-                        latest["data"],
-                        latest["sorteio"],
-                        latest["hora"],
-                    )
-
-                    # A previsão posicional permite repetir o mesmo bicho em
-                    # mais de um prêmio. Para a geração, completa o pedido com
-                    # os próximos grupos mais fortes até atingir a quantidade
-                    # de bichos distintos solicitada.
-                    from gph_similarity_rank import distinct_similarity_groups
-                    groups = distinct_similarity_groups(similarity, requested_animals)
-                    if len(groups) < requested_animals:
-                        raise ValueError(
-                            f"A Similaridade encontrou apenas {len(groups)} bicho(s) distinto(s) "
-                            f"com evidência para um pedido de {requested_animals}."
-                        )
-                    selector = "Sombra Similaridade do Dia"
-          '''
-          # Remove a indentacao extra usada apenas para manter o YAML valido.
-          old_play = old_play[:-10] if old_play.endswith('          ') else old_play
-          new_play = new_play[:-10] if new_play.endswith('          ') else new_play
-          if central.count(old_play) != 1:
-              raise SystemExit(f'Bloco de geracao Similaridade inesperado: {central.count(old_play)} ocorrencia(s)')
-          central = central.replace(old_play, new_play, 1)
-          central_path.write_text(central, encoding='utf-8')
+          lines = central.splitlines(keepends=True)
+          start, end = function_bounds(central, 'play_generate')
+          sim_call = next((i for i in range(start, end) if 'similarity = self.db.method_similarity_day(' in lines[i]), None)
+          if sim_call is None:
+              raise SystemExit('Chamada de Similaridade nao encontrada em play_generate')
+          groups_start = next((i for i in range(sim_call, end) if lines[i].strip() == 'groups = []'), None)
+          selector_line = next((i for i in range(groups_start or sim_call, end) if lines[i].strip() == 'selector = "Sombra Similaridade do Dia"'), None)
+          if groups_start is None or selector_line is None or selector_line <= groups_start:
+              raise SystemExit('Bloco de grupos da Similaridade nao localizado com seguranca')
+          indent = lines[groups_start][:len(lines[groups_start]) - len(lines[groups_start].lstrip())]
+          replacement = [
+              indent + '# A previsao posicional pode repetir o mesmo bicho em mais de um premio.\n',
+              indent + '# Na geracao, complete com os proximos grupos mais fortes ate atingir\n',
+              indent + '# a quantidade de bichos distintos pedida pelo usuario.\n',
+              indent + 'from gph_similarity_rank import distinct_similarity_groups\n',
+              indent + 'groups = distinct_similarity_groups(similarity, requested_animals)\n',
+              indent + 'if len(groups) < requested_animals:\n',
+              indent + '    raise ValueError(\n',
+              indent + '        f"A Similaridade encontrou apenas {len(groups)} bicho(s) distinto(s) "\n',
+              indent + '        f"com evidencia para um pedido de {requested_animals}."\n',
+              indent + '    )\n',
+              indent + 'selector = "Sombra Similaridade do Dia"\n',
+          ]
+          lines[groups_start:selector_line + 1] = replacement
+          central_path.write_text(''.join(lines), encoding='utf-8')
 
           history_path = Path('source/gph_history_lab.py')
           history = history_path.read_text(encoding='utf-8')
-          old_history = '''                elif selector == "Similaridade":
-                    selection = db.method_similarity_day(*key(base), top_days=12)
-                    groups = []
-                    for row in selection.get("selected", []):
-                        group = int(row["grupo"])
-                        if group not in groups:
-                            groups.append(group)
-          '''
-          new_history = '''                elif selector == "Similaridade":
-                    selection = db.method_similarity_day(*key(base), top_days=12)
-                    from gph_similarity_rank import distinct_similarity_groups
-                    groups = distinct_similarity_groups(selection, 5)
-          '''
-          old_history = old_history[:-10] if old_history.endswith('          ') else old_history
-          new_history = new_history[:-10] if new_history.endswith('          ') else new_history
-          if history.count(old_history) != 1:
-              raise SystemExit(f'Bloco historico Similaridade inesperado: {history.count(old_history)} ocorrencia(s)')
-          history = history.replace(old_history, new_history, 1)
-          history_path.write_text(history, encoding='utf-8')
+          hlines = history.splitlines(keepends=True)
+          hstart, hend = function_bounds(history, 'run_history')
+          branch = next((i for i in range(hstart, hend) if hlines[i].strip() == 'elif selector == "Similaridade":'), None)
+          if branch is None:
+              raise SystemExit('Ramo Similaridade nao encontrado em run_history')
+          selection_line = next((i for i in range(branch + 1, hend) if 'selection = db.method_similarity_day(' in hlines[i]), None)
+          groups_start = next((i for i in range((selection_line or branch) + 1, hend) if hlines[i].strip() == 'groups = []'), None)
+          if selection_line is None or groups_start is None:
+              raise SystemExit('Bloco historico da Similaridade nao localizado')
+          branch_indent = hlines[branch][:len(hlines[branch]) - len(hlines[branch].lstrip())]
+          next_branch = next((i for i in range(groups_start + 1, hend) if hlines[i].startswith(branch_indent) and hlines[i].strip().startswith('else:')), None)
+          if next_branch is None:
+              raise SystemExit('Fim do ramo Similaridade nao localizado')
+          child_indent = hlines[selection_line][:len(hlines[selection_line]) - len(hlines[selection_line].lstrip())]
+          hlines[groups_start:next_branch] = [
+              child_indent + 'from gph_similarity_rank import distinct_similarity_groups\n',
+              child_indent + 'groups = distinct_similarity_groups(selection, 5)\n',
+          ]
+          history_path.write_text(''.join(hlines), encoding='utf-8')
 
           version_path = Path('source/gph_version.py')
           version = version_path.read_text(encoding='utf-8')
