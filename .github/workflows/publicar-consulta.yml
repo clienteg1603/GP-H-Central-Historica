@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - main
+      - feat-consulta-atraso-cabeca-v0114
     paths:
       - "consulta/**"
       - ".github/workflows/publicar-consulta.yml"
