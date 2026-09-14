@@ -34,6 +34,7 @@ jobs:
         shell: pwsh
         run: |
           python -m py_compile consulta/gph_consulta.py
+          python consulta/test_atraso_cabeca_v0114.py
           $text = Get-Content consulta/gph_consulta.py -Raw
           $m = [regex]::Match($text, 'APP_VERSION\s*=\s*"([0-9]+\.[0-9]+\.[0-9]+)"')
           if (-not $m.Success) { throw "APP_VERSION não encontrado" }
