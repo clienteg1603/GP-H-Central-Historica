@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import sys
 import gph_meta_review
+import gph_meta_lab
 
 MIN_RANKING_SAMPLE = 8
 
@@ -104,8 +105,9 @@ def install_round_advisor_guard(advisor, app_version):
     advisor.MIN_RANKING_SAMPLE = MIN_RANKING_SAMPLE
     advisor._round_advisor_guard_v0484_installed = True
 
-    # Instala a revisão estrutural do Meta pela mesma extensão fina já carregada
-    # pelo bootstrap. A revisão só lê snapshots congelados e não altera o cérebro.
+    # Instala a revisão estrutural do Meta e, em seguida, o Meta Lab. Ambos
+    # somente leem snapshots congelados; o cérebro oficial permanece intacto.
     central_module = sys.modules.get("gph_central")
     if central_module is not None:
         gph_meta_review.install_meta_review(central_module)
+        gph_meta_lab.install_meta_lab(central_module)
