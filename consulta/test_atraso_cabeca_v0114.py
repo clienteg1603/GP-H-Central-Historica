@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import importlib.util
+import sys
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
@@ -9,6 +10,7 @@ SOURCE = HERE / "gph_consulta.py"
 spec = importlib.util.spec_from_file_location("gph_consulta_v0114", SOURCE)
 module = importlib.util.module_from_spec(spec)
 assert spec.loader is not None
+sys.modules[spec.name] = module
 spec.loader.exec_module(module)
 
 
