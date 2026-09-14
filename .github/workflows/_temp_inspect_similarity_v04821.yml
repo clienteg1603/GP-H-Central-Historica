@@ -1,4 +1,4 @@
-name: "TEMP aplica correcao Similaridade v0.48.21"
+name: "TEMP finaliza Similaridade v0.48.21"
 
 on:
   push:
@@ -11,7 +11,7 @@ permissions:
   contents: write
 
 jobs:
-  fix-and-test:
+  fix-test-push:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -19,112 +19,95 @@ jobs:
           ref: fix-similaridade-top5-v04821
           fetch-depth: 0
 
-      - name: Preparar Tk para a suite existente
-        shell: bash
+      - name: Preparar Tk
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y python3-tk
 
-      - name: Aplicar correcao v0.48.21
+      - name: Aplicar correcao
         shell: bash
         run: |
           python - <<'PY'
           import ast
           from pathlib import Path
 
-          def function_bounds(text, name):
+          def bounds(text, name):
               tree = ast.parse(text)
               nodes = [n for n in ast.walk(tree) if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef)) and n.name == name]
               if len(nodes) != 1:
-                  raise SystemExit(f'Funcao {name} encontrada {len(nodes)} vez(es)')
-              node = nodes[0]
-              return node.lineno - 1, node.end_lineno
+                  raise SystemExit(f'{name}: {len(nodes)} ocorrencia(s)')
+              return nodes[0].lineno - 1, nodes[0].end_lineno
 
           central_path = Path('source/gph_central.py')
           central = central_path.read_text(encoding='utf-8')
-          lines = central.splitlines(keepends=True)
-          start, end = function_bounds(central, 'play_generate')
-          sim_call = next((i for i in range(start, end) if 'similarity = self.db.method_similarity_day(' in lines[i]), None)
-          if sim_call is None:
-              raise SystemExit('Chamada de Similaridade nao encontrada em play_generate')
-          groups_start = next((i for i in range(sim_call, end) if lines[i].strip() == 'groups = []'), None)
-          selector_line = next((i for i in range(groups_start or sim_call, end) if lines[i].strip() == 'selector = "Sombra Similaridade do Dia"'), None)
-          if groups_start is None or selector_line is None or selector_line <= groups_start:
-              raise SystemExit('Bloco de grupos da Similaridade nao localizado com seguranca')
-          indent = lines[groups_start][:len(lines[groups_start]) - len(lines[groups_start].lstrip())]
-          replacement = [
-              indent + '# A previsao posicional pode repetir o mesmo bicho em mais de um premio.\n',
-              indent + '# Na geracao, complete com os proximos grupos mais fortes ate atingir\n',
-              indent + '# a quantidade de bichos distintos pedida pelo usuario.\n',
-              indent + 'from gph_similarity_rank import distinct_similarity_groups\n',
-              indent + 'groups = distinct_similarity_groups(similarity, requested_animals)\n',
-              indent + 'if len(groups) < requested_animals:\n',
-              indent + '    raise ValueError(\n',
-              indent + '        f"A Similaridade encontrou apenas {len(groups)} bicho(s) distinto(s) "\n',
-              indent + '        f"com evidencia para um pedido de {requested_animals}."\n',
-              indent + '    )\n',
-              indent + 'selector = "Sombra Similaridade do Dia"\n',
-          ]
-          lines[groups_start:selector_line + 1] = replacement
-          central_path.write_text(''.join(lines), encoding='utf-8')
+          if 'distinct_similarity_groups(similarity, requested_animals)' not in central:
+              lines = central.splitlines(keepends=True)
+              start, end = bounds(central, 'play_generate')
+              sim_call = next((i for i in range(start, end) if 'similarity = self.db.method_similarity_day(' in lines[i]), None)
+              groups_start = next((i for i in range(sim_call, end) if lines[i].strip() == 'groups = []'), None) if sim_call is not None else None
+              selector_line = next((i for i in range(groups_start, end) if lines[i].strip() == 'selector = "Sombra Similaridade do Dia"'), None) if groups_start is not None else None
+              if sim_call is None or groups_start is None or selector_line is None:
+                  raise SystemExit('Bloco Similaridade em play_generate nao localizado')
+              indent = lines[groups_start][:len(lines[groups_start]) - len(lines[groups_start].lstrip())]
+              lines[groups_start:selector_line + 1] = [
+                  indent + '# A previsao posicional pode repetir o mesmo bicho em mais de um premio.\n',
+                  indent + '# Na geracao, completa com os proximos grupos mais fortes ate atingir\n',
+                  indent + '# a quantidade de bichos distintos pedida pelo usuario.\n',
+                  indent + 'from gph_similarity_rank import distinct_similarity_groups\n',
+                  indent + 'groups = distinct_similarity_groups(similarity, requested_animals)\n',
+                  indent + 'if len(groups) < requested_animals:\n',
+                  indent + '    raise ValueError(\n',
+                  indent + '        f"A Similaridade encontrou apenas {len(groups)} bicho(s) distinto(s) "\n',
+                  indent + '        f"com evidencia para um pedido de {requested_animals}."\n',
+                  indent + '    )\n',
+                  indent + 'selector = "Sombra Similaridade do Dia"\n',
+              ]
+              central_path.write_text(''.join(lines), encoding='utf-8')
 
           history_path = Path('source/gph_history_lab.py')
           history = history_path.read_text(encoding='utf-8')
-          hlines = history.splitlines(keepends=True)
-          hstart, hend = function_bounds(history, 'run_history')
-          branch = next((i for i in range(hstart, hend) if hlines[i].strip() == 'elif selector == "Similaridade":'), None)
-          if branch is None:
-              raise SystemExit('Ramo Similaridade nao encontrado em run_history')
-          selection_line = next((i for i in range(branch + 1, hend) if 'selection = db.method_similarity_day(' in hlines[i]), None)
-          groups_start = next((i for i in range((selection_line or branch) + 1, hend) if hlines[i].strip() == 'groups = []'), None)
-          if selection_line is None or groups_start is None:
-              raise SystemExit('Bloco historico da Similaridade nao localizado')
-          branch_indent = hlines[branch][:len(hlines[branch]) - len(hlines[branch].lstrip())]
-          next_branch = next((i for i in range(groups_start + 1, hend) if hlines[i].startswith(branch_indent) and hlines[i].strip().startswith('else:')), None)
-          if next_branch is None:
-              raise SystemExit('Fim do ramo Similaridade nao localizado')
-          child_indent = hlines[selection_line][:len(hlines[selection_line]) - len(hlines[selection_line].lstrip())]
-          hlines[groups_start:next_branch] = [
-              child_indent + 'from gph_similarity_rank import distinct_similarity_groups\n',
-              child_indent + 'groups = distinct_similarity_groups(selection, 5)\n',
-          ]
-          history_path.write_text(''.join(hlines), encoding='utf-8')
+          if 'distinct_similarity_groups(selection, 5)' not in history:
+              hlines = history.splitlines(keepends=True)
+              start, end = bounds(history, 'run_history')
+              branch = next((i for i in range(start, end) if hlines[i].strip() == 'elif selector == "Similaridade":'), None)
+              selection_line = next((i for i in range(branch + 1, end) if 'selection = db.method_similarity_day(' in hlines[i]), None) if branch is not None else None
+              groups_start = next((i for i in range(selection_line + 1, end) if hlines[i].strip() == 'groups = []'), None) if selection_line is not None else None
+              if branch is None or selection_line is None or groups_start is None:
+                  raise SystemExit('Bloco Similaridade em run_history nao localizado')
+              branch_indent = hlines[branch][:len(hlines[branch]) - len(hlines[branch].lstrip())]
+              next_branch = next((i for i in range(groups_start + 1, end) if hlines[i].startswith(branch_indent) and hlines[i].strip().startswith('else:')), None)
+              if next_branch is None:
+                  raise SystemExit('Fim do ramo Similaridade em run_history nao localizado')
+              child_indent = hlines[selection_line][:len(hlines[selection_line]) - len(hlines[selection_line].lstrip())]
+              hlines[groups_start:next_branch] = [
+                  child_indent + 'from gph_similarity_rank import distinct_similarity_groups\n',
+                  child_indent + 'groups = distinct_similarity_groups(selection, 5)\n',
+              ]
+              history_path.write_text(''.join(hlines), encoding='utf-8')
 
           version_path = Path('source/gph_version.py')
           version = version_path.read_text(encoding='utf-8')
-          if 'APP_VERSION = "0.48.20"' not in version:
-              raise SystemExit('Versao-base esperada 0.48.20 nao encontrada')
-          version_path.write_text(version.replace('APP_VERSION = "0.48.20"', 'APP_VERSION = "0.48.21"', 1), encoding='utf-8')
-
-          publish_path = Path('.github/workflows/publicar-atualizacao.yml')
-          publish = publish_path.read_text(encoding='utf-8')
-          needle = 'gph_updater.py gph_history_lab.py gph_history_ui.py CRIAR_PACOTE_ATUALIZACAO.py'
-          replacement = 'gph_updater.py gph_similarity_rank.py gph_history_lab.py gph_history_ui.py CRIAR_PACOTE_ATUALIZACAO.py'
-          if needle in publish and 'gph_similarity_rank.py gph_history_lab.py' not in publish:
-              publish = publish.replace(needle, replacement, 1)
-              publish_path.write_text(publish, encoding='utf-8')
+          if 'APP_VERSION = "0.48.20"' in version:
+              version_path.write_text(version.replace('APP_VERSION = "0.48.20"', 'APP_VERSION = "0.48.21"', 1), encoding='utf-8')
+          elif 'APP_VERSION = "0.48.21"' not in version:
+              raise SystemExit('Versao-base inesperada')
           PY
 
-      - name: Validar sintaxe e testes
+      - name: Testar
         shell: bash
         run: |
           cd source
           python -m py_compile gph_central.py gph_history_lab.py gph_similarity_rank.py gph_version.py
           python -m unittest discover -s tests -v
-
-      - name: Validar regressao especificamente
-        shell: bash
-        run: |
-          cd source
           python -m unittest tests.test_similarity_distinct_groups -v
 
-      - name: Limpar diagnostico e gravar correcao
+      - name: Gravar correcao na branch
         shell: bash
         run: |
           rm -f _temp_similarity_extract_v04821.txt _temp_similarity_method_v04821.txt
-          rm -f .github/workflows/_temp_inspect_similarity_v04821.yml
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add -A
+          git add source/gph_central.py source/gph_history_lab.py source/gph_version.py
+          git add -u -- _temp_similarity_extract_v04821.txt _temp_similarity_method_v04821.txt || true
           git commit -m "v0.48.21: corrige Top 5 distinto da Similaridade"
           git push origin HEAD:fix-similaridade-top5-v04821
