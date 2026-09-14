@@ -1,0 +1,52 @@
+name: TEMP testar GP-H v0.48.22
+
+on:
+  push:
+    branches:
+      - fix-home-windowed-v04822
+    paths:
+      - "source/**"
+      - ".github/workflows/temp-testar-v04822.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  testar-v04822:
+    runs-on: windows-latest
+    steps:
+      - name: Baixar repositório
+        uses: actions/checkout@v4
+
+      - name: Preparar Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Validar Python
+        shell: pwsh
+        run: |
+          Set-Location "$env:GITHUB_WORKSPACE\source"
+          python -m py_compile gph_central.py gph_bootstrap.py gph_version.py gph_ui_windowed.py gph_ui_performance.py gph_ui_home.py
+
+      - name: Rodar suíte completa
+        shell: pwsh
+        run: |
+          Set-Location "$env:GITHUB_WORKSPACE\source"
+          python -m unittest discover -s tests -v
+          if ($LASTEXITCODE -ne 0) { throw "Suíte de testes falhou" }
+
+      - name: Instalar PyInstaller
+        shell: pwsh
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install pyinstaller
+
+      - name: Compilar Central sem console
+        shell: pwsh
+        run: |
+          Set-Location "$env:GITHUB_WORKSPACE\source"
+          python -m PyInstaller --clean --noconfirm "GP-H_Central.spec"
+          if (-not (Test-Path "dist\GP-H Central Historica.exe")) {
+            throw "Executável da Central não foi gerado"
+          }
