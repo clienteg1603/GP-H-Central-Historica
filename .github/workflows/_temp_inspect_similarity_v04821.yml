@@ -1,0 +1,54 @@
+name: TEMP inspeciona Similaridade v0.48.21
+
+on:
+  push:
+    branches:
+      - fix-similaridade-top5-v04821
+    paths:
+      - ".github/workflows/_temp_inspect_similarity_v04821.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix-similaridade-top5-v04821
+      - name: Inspecionar método e chamadores
+        shell: bash
+        run: |
+          python - <<'PY'
+          import ast
+          from pathlib import Path
+
+          path = Path('source/gph_central.py')
+          src = path.read_text(encoding='utf-8')
+          tree = ast.parse(src)
+          wanted = {
+              'method_similarity_day', 'play_generate', 'play_controls_changed',
+              'show_methods_page', 'show_play_page', 'method_preview',
+          }
+          for node in ast.walk(tree):
+              if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                  continue
+              seg = ast.get_source_segment(src, node) or ''
+              if node.name in wanted or 'method_similarity_day(' in seg or 'Similaridade' in seg:
+                  print(f'\n===== {node.name} L{node.lineno}-{node.end_lineno} =====')
+                  print(seg if len(seg) < 30000 else seg[:30000])
+
+          for extra in ('source/gph_round_advisor.py','source/gph_ui_play.py','source/gph_ui_analysis.py'):
+              p=Path(extra)
+              if not p.exists():
+                  continue
+              text=p.read_text(encoding='utf-8')
+              t=ast.parse(text)
+              for node in ast.walk(t):
+                  if isinstance(node,(ast.FunctionDef,ast.AsyncFunctionDef)):
+                      seg=ast.get_source_segment(text,node) or ''
+                      if 'Similaridade' in seg or 'method_similarity_day(' in seg:
+                          print(f'\n===== {extra}:{node.name} L{node.lineno}-{node.end_lineno} =====')
+                          print(seg if len(seg) < 30000 else seg[:30000])
+          PY
