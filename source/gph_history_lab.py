@@ -465,11 +465,8 @@ def run_history(db_class, db_path, options, progress=None, cancel=None):
                         raise ValueError("alvo sem grupos congelados prospectivamente")
                 elif selector == "Similaridade":
                     selection = db.method_similarity_day(*key(base), top_days=12)
-                    groups = []
-                    for row in selection.get("selected", []):
-                        group = int(row["grupo"])
-                        if group not in groups:
-                            groups.append(group)
+                    from gph_similarity_rank import distinct_similarity_groups
+                    groups = distinct_similarity_groups(selection, 5)
                 else:
                     selection = getattr(db, SELECTORS[selector])(*key(base), top_n=5)
                     groups = [int(r["grupo"]) for r in selection.get("selected", [])]
