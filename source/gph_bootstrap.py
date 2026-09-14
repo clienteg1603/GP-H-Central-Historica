@@ -19,6 +19,7 @@ from gph_ui_play import install_play_polish
 from gph_ui_decision import install_decision_polish
 from gph_ui_analysis import install_settings_polish, polish_results_page
 from gph_ui_final_audit import apply_final_audit
+from gph_ui_windowed import install_windowed_layout
 from gph_ui_performance import install_ui_performance
 from gph_version import APP_VERSION
 
@@ -67,6 +68,9 @@ install_play_polish(round_advisor, APP_VERSION)
 install_decision_polish(central)
 _install_results_polish()
 install_settings_polish(central)
+# v0.48.22: mantém a janela principal em modo normal na abertura e permite
+# que as linhas da Home cedam altura quando a tela não estiver maximizada.
+install_windowed_layout(central)
 # Instalada por último para envolver as extensões visuais já existentes sem
 # mudar sua lógica: apenas reagenda/cancela trabalho de apresentação repetido.
 install_ui_performance(central, globals())
