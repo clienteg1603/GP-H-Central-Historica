@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import ast
 import base64
 import gzip
 import hashlib
@@ -28,3 +29,36 @@ out = ROOT / "gph_consulta.py"
 out.write_bytes(source)
 print(f"Fonte restaurado: {out} ({len(source)} bytes)")
 print(f"SHA-256: {source_sha}")
+
+# Diagnóstico temporário: expõe somente os trechos necessários para localizar
+# a tela Início e a lógica de atrasos da Consulta sem alterar o fonte restaurado.
+text = source.decode("utf-8")
+lines = text.splitlines()
+print("\n=== APP_VERSION ===")
+for i, line in enumerate(lines):
+    if "APP_VERSION" in line:
+        print(f"{i+1}: {line}")
+
+print("\n=== FUNCOES RELEVANTES ===")
+tree = ast.parse(text)
+for node in ast.walk(tree):
+    if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+        name = node.name.lower()
+        if any(key in name for key in ("home", "inicio", "atras", "delay", "show_")):
+            print(f"{node.lineno}: def {node.name}")
+
+print("\n=== TRECHOS COM ATRASO/ATUAL ===")
+hits = [i for i, line in enumerate(lines) if "atras" in line.lower() or "delay" in line.lower()]
+printed = set()
+for i in hits:
+    start = max(0, i - 12)
+    end = min(len(lines), i + 20)
+    key = (start, end)
+    if key in printed:
+        continue
+    printed.add(key)
+    print(f"\n--- linhas {start+1}-{end} ---")
+    for j in range(start, end):
+        print(f"{j+1}: {lines[j]}")
+
+raise SystemExit("TEMP_DIAGNOSTICO_CONSULTA_V0114")
