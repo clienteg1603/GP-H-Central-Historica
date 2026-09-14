@@ -1,0 +1,52 @@
+name: TEMP testar Meta Lab v0.48.23
+
+on:
+  push:
+    branches:
+      - meta-lab-v04823
+    paths:
+      - "source/**"
+      - ".github/workflows/temp-testar-meta-lab-v04823.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  testar-meta-lab:
+    runs-on: windows-latest
+    steps:
+      - name: Baixar repositório
+        uses: actions/checkout@v4
+
+      - name: Preparar Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Validar Python
+        shell: pwsh
+        run: |
+          Set-Location "$env:GITHUB_WORKSPACE\source"
+          python -m py_compile gph_meta_lab.py gph_meta_review.py gph_round_advisor_guard.py gph_bootstrap.py gph_version.py
+
+      - name: Rodar suíte completa
+        shell: pwsh
+        run: |
+          Set-Location "$env:GITHUB_WORKSPACE\source"
+          python -m unittest discover -s tests -v
+          if ($LASTEXITCODE -ne 0) { throw "Suíte de testes falhou" }
+
+      - name: Instalar PyInstaller
+        shell: pwsh
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install pyinstaller
+
+      - name: Compilar Central sem console
+        shell: pwsh
+        run: |
+          Set-Location "$env:GITHUB_WORKSPACE\source"
+          python -m PyInstaller --clean --noconfirm "GP-H_Central.spec"
+          if (-not (Test-Path "dist\GP-H Central Historica.exe")) {
+            throw "Executável da Central não foi gerado"
+          }
