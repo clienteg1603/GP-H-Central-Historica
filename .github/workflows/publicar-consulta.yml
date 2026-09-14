@@ -4,7 +4,6 @@ on:
   push:
     branches:
       - main
-      - feat-consulta-atraso-cabeca-v0114
     paths:
       - "consulta/**"
       - ".github/workflows/publicar-consulta.yml"
@@ -42,11 +41,6 @@ jobs:
           "CONSULTA_VERSION=$($m.Groups[1].Value)" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
 
       - name: Instalar PyInstaller
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.13"
-
-      - name: Instalar PyInstaller
         shell: pwsh
         run: |
           python -m pip install --upgrade pip
@@ -81,7 +75,6 @@ jobs:
           "CONSULTA_TAG=consulta-v$env:CONSULTA_VERSION" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
 
       - name: Publicar Release da Consulta
-        if: github.ref == 'refs/heads/main'
         shell: pwsh
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -89,9 +82,9 @@ jobs:
           gh release view "$env:CONSULTA_TAG" --repo "$env:GITHUB_REPOSITORY" *> $null
           if ($LASTEXITCODE -eq 0) {
             gh release upload "$env:CONSULTA_TAG" "$env:CONSULTA_ZIP" --clobber --repo "$env:GITHUB_REPOSITORY"
-            gh release edit "$env:CONSULTA_TAG" --title "GP-H Consulta Histórica v$env:CONSULTA_VERSION" --notes "GP-H Consulta Histórica v$env:CONSULTA_VERSION. Executável Windows sem necessidade de Python e sem console." --repo "$env:GITHUB_REPOSITORY"
+            gh release edit "$env:CONSULTA_TAG" --title "GP-H Consulta Histórica v$env:CONSULTA_VERSION" --notes "Primeira distribuição Windows compilada da Consulta Histórica. Não exige Python e não abre console." --repo "$env:GITHUB_REPOSITORY"
           } else {
-            gh release create "$env:CONSULTA_TAG" "$env:CONSULTA_ZIP" --repo "$env:GITHUB_REPOSITORY" --title "GP-H Consulta Histórica v$env:CONSULTA_VERSION" --notes "GP-H Consulta Histórica v$env:CONSULTA_VERSION. Executável Windows sem necessidade de Python e sem console."
+            gh release create "$env:CONSULTA_TAG" "$env:CONSULTA_ZIP" --repo "$env:GITHUB_REPOSITORY" --title "GP-H Consulta Histórica v$env:CONSULTA_VERSION" --notes "Primeira distribuição Windows compilada da Consulta Histórica. Não exige Python e não abre console."
           }
 
       - name: Disponibilizar artefato
