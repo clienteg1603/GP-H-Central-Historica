@@ -19,6 +19,12 @@ jobs:
           ref: fix-similaridade-top5-v04821
           fetch-depth: 0
 
+      - name: Preparar Tk para a suite existente
+        shell: bash
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y python3-tk
+
       - name: Aplicar correcao v0.48.21
         shell: bash
         run: |
