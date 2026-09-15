@@ -63,9 +63,10 @@ def _install_results_polish():
 
 central._is_newer_version = _is_newer_version
 install_round_target_hotfix(central)
-# v0.48.27: a dezena principal que saiu na extração-base imediatamente anterior
-# fica obrigatoriamente bloqueada na próxima geração numérica, em qualquer
-# seletor que use a Lei GP-H (Meta, Reset, Puxada, Similaridade, Seca etc.).
+# v0.48.28: o congelamento passa a ser rotativo por bicho. A dezena da
+# aparição mais recente fica fora da próxima geração; quando o mesmo bicho
+# reaparece em outra dezena, a anterior é liberada e a nova assume a trava.
+# A regra é comum a Meta, Reset, Puxada, Similaridade, Seca e demais seletores.
 install_centena_freeze_guard(central)
 # v0.48.24: toda auditoria de resultados e um watchdog silencioso garantem
 # que a próxima rodada operacional receba Meta congelado antes do resultado.
