@@ -10,6 +10,7 @@ import multiprocessing as mp
 import gph_central as central
 import gph_round_advisor as round_advisor
 from gph_bugfix_round_targets import install_round_target_hotfix
+from gph_meta_freeze_guard import install_meta_freeze_guard
 from gph_profile_recovery import install_profile_recovery
 from gph_round_advisor import install_round_advisor
 from gph_round_advisor_guard import install_round_advisor_guard
@@ -59,6 +60,9 @@ def _install_results_polish():
 
 central._is_newer_version = _is_newer_version
 install_round_target_hotfix(central)
+# v0.48.24: toda auditoria de resultados e um watchdog silencioso garantem
+# que a próxima rodada operacional receba Meta congelado antes do resultado.
+install_meta_freeze_guard(central)
 prepare_ui_foundation(central)
 install_navigation_polish(central)
 install_profile_recovery(central)
