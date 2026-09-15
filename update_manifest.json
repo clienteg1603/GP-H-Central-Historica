@@ -4,11 +4,11 @@
   "server_name": "GitHub GP-H",
   "channels": {
     "test": {
-      "version": "0.48.25",
-      "url": "https://github.com/clienteg1603/GP-H-Central-Historica/releases/download/v0.48.25-test/GP-H_update_v0.48.25.zip",
-      "sha256": "2f8015615da1c06d548d971aa73dafe4543d6a1e2d2757d16ca96db014daf5d5",
+      "version": "0.48.26",
+      "url": "https://github.com/clienteg1603/GP-H-Central-Historica/releases/download/v0.48.26-test/GP-H_update_v0.48.26.zip",
+      "sha256": "3e35e1b6041634690840c065aeb0ffbbd5aaa8416689ea44591f1cde0b7e2db3",
       "notes": "Atualização de teste automática do GP-H Central Histórica",
-      "published_at": "2026-09-15T19:04:25+00:00",
+      "published_at": "2026-09-15T19:42:11+00:00",
       "mirrors": []
     },
     "stable": {
@@ -20,5 +20,5 @@
       "mirrors": []
     }
   },
-  "updated_at": "2026-09-15T19:04:25+00:00"
+  "updated_at": "2026-09-15T19:42:11+00:00"
 }
