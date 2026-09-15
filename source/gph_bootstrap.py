@@ -18,6 +18,7 @@ from gph_ui_foundation import apply_ui_foundation, prepare_ui_foundation
 from gph_ui_navigation import install_navigation_polish
 from gph_ui_play import install_play_polish
 from gph_ui_decision import install_decision_polish
+from gph_ui_decision_steps import install_decision_steps
 from gph_ui_analysis import install_settings_polish, polish_results_page
 from gph_ui_final_audit import apply_final_audit
 from gph_ui_windowed import install_windowed_layout
@@ -70,6 +71,8 @@ install_round_advisor(central)
 install_round_advisor_guard(round_advisor, APP_VERSION)
 install_play_polish(round_advisor, APP_VERSION)
 install_decision_polish(central)
+# v0.48.25: organiza Decisão em 4 etapas e simplifica apenas o Resumo.
+install_decision_steps(central)
 _install_results_polish()
 install_settings_polish(central)
 # v0.48.22: mantém a janela principal em modo normal na abertura e permite
