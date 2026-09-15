@@ -134,9 +134,7 @@ class MetaFreezeGuardTests(unittest.TestCase):
                 self.scheduled.append((delay, callback))
                 return "id"
 
-        class Central:
-            Database = DB
-            App = App
+        Central = type("Central", (), {"Database": DB, "App": App})
 
         guard.install_meta_freeze_guard(Central)
         db = DB({"data": "2026-09-15", "sorteio": "CORUJA", "hora": "21:00"})
